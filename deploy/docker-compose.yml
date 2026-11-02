@@ -211,7 +211,7 @@ services:
   # cloudflared/config.yml. Any reverse proxy that forwards to :8080 works
   # just as well.
   cloudflared:
-    image: cloudflare/cloudflared:2026.10.4
+    image: cloudflare/cloudflared:2026.10.7
     profiles: ["tunnel"]
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
