@@ -1,0 +1,25 @@
+{
+  "name": "@mustra/mustra",
+  "version": "0.0.2",
+  "description": "Placeholder reserving the @mustra scope for mustra \u2014 an open-source fleet management and endpoint operations platform. See https://mustra.dev",
+  "homepage": "https://mustra.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mustra-dev/mustra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mustra-dev/mustra/issues"
+  },
+  "author": "mustra-dev",
+  "license": "AGPL-3.0-only",
+  "keywords": [
+    "fleet-management",
+    "endpoint-management",
+    "patch-management",
+    "device-management",
+    "mustra"
+  ],
+  "files": [
+    "README.md"
+  ]
+}

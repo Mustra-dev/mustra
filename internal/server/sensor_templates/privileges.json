@@ -1,0 +1,37 @@
+{
+  "notes": "Reports the script process identity and selected OS protection information. Does not enable Windows token privileges or reproduce all built-in protection checks.",
+  "commands": {
+    "linux": "# Standalone example: Reports the script process identity and selected OS protection information. Does not enable Windows token privileges or reproduce all built-in protection checks.\nset -e\nid\ncat /proc/self/status\n",
+    "darwin": "# Standalone example: Reports the script process identity and selected OS protection information. Does not enable Windows token privileges or reproduce all built-in protection checks.\nset -e\nid\ncsrutil status\nprofiles status -type enrollment\n",
+    "windows": "# Standalone example: Reports the script process identity and selected OS protection information. Does not enable Windows token privileges or reproduce all built-in protection checks.\n$ErrorActionPreference = \"Stop\"\nwhoami /all\nif ($LASTEXITCODE -ne 0) { throw \"whoami failed with exit code $LASTEXITCODE\" }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

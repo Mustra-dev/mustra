@@ -1,0 +1,121 @@
+# mustra
+
+Open-source, self-hosted fleet management and endpoint operations for
+Linux, macOS and Windows. Put a lightweight Go agent on every device, ask
+the whole fleet a question in one line, act on the machines that answer,
+and keep a record of what was done.
+
+![Interact: one query across the fleet, answered from inventory](docs/images/interact.png)
+
+- **Self-hosted, and nothing phones home.** One Docker Compose stack
+  (Postgres and NATS) on your own hardware. Agents only connect outbound
+  to your server and accept no inbound connections. No telemetry, no
+  licence check.
+- **Free, under the AGPL-3.0.** Every feature, with no paid tier.
+
+## ✨ What it does
+
+- 🔍 **Interact:** `get os from all machines with online equals true`.
+  Identical answers collapse into counted rows, so a query stays readable
+  at any fleet size.
+- 📦 **Deploy and Patch:** install, update and remove software, or run
+  commands, in rollout rings that halt when a ring fails. Schedules,
+  maintenance windows, and playbooks that patch, wait for the reboot,
+  verify, then tell the user.
+- 🛡️ **Comply and Enforce:** CIS benchmarks from Wazuh's published SCA
+  policies (Wazuh itself isn't needed). Desired-state settings start in
+  report mode, and a check mustra can't evaluate reports `unknown`, never
+  `pass`.
+- 🧪 **Vulnerabilities:** OSV matches, ranked by CISA's Known Exploited
+  Vulnerabilities catalog and EPSS rather than by CVSS alone.
+- 🚨 **Threat response:** IOC matching, an activity recorder with rules,
+  file integrity monitoring, sensitive-data discovery, and a live process
+  tree.
+- 🖲️ **Direct Connect and Jump Gate:** interactive commands on an
+  endpoint, each one logged before it's sent, with just-in-time access
+  behind an approver.
+- 📜 **Inventory:** software usage and cost, certificates fleet-wide,
+  hardware, users, and devices on the network that mustra doesn't manage.
+- 🔐 **Access control and audit:** OIDC SSO, SCIM, RBAC, two-person
+  approvals, and one audit log you can stream to your SIEM.
+- 🪟 **For the people at the keyboard:** a Self Service app, notices,
+  restart prompts they can postpone a limited number of times, and
+  surveys.
+
+[docs/CONCEPTS.md](docs/CONCEPTS.md) explains each module and why it works
+the way it does.
+
+| | |
+| --- | --- |
+| ![Home](docs/images/home.png) | ![Vulnerabilities](docs/images/vulnerabilities.png) |
+| ![Deploy](docs/images/deploy.png) | ![Patch](docs/images/patch.png) |
+
+## 🚀 Quick start
+
+You need one Linux or macOS host with Docker and `openssl`.
+
+```sh
+git clone https://github.com/mustra-dev/mustra.git && cd mustra
+make quickstart
+```
+
+This generates secrets and certificates, builds the images, and waits
+until the console answers. The first build takes a few minutes.
+
+1. Open `http://<host>:8080/` and create the administrator account. There
+   is no default password, and the setup page closes once the account
+   exists.
+2. Go to **Client Management → Manual Install** and copy the one-line
+   install command for each platform:
+
+   ```sh
+   curl -fsSL http://<host>:8080/install.sh | sudo bash   # Linux, macOS
+   irm http://<host>:8080/install.ps1 | iex                # Windows, elevated
+   ```
+
+   The endpoint appears within seconds. To reach many hosts at once, use
+   **Network Scan & Push**.
+
+On macOS, give the agent **Full Disk Access**
+([why, and how to do it with an MDM](docs/guides/install-agents.md)).
+To serve the console over HTTPS, see [deploy/README.md](deploy/README.md).
+
+**What leaves your network:** nothing goes to the mustra maintainers. By
+default, the server sends package names and versions to
+[OSV](https://osv.dev) (never hostnames or anything else about your fleet)
+and downloads public vulnerability feeds. [PRIVACY.md](PRIVACY.md) lists
+every connection.
+
+## 📚 Docs
+
+- [Concepts](docs/CONCEPTS.md): what each module does
+- [Architecture](docs/ARCHITECTURE.md): how it's built, and why
+- [Development](docs/DEVELOPMENT.md): run it from source, with no container rebuilds (`make help` lists every target)
+- [Roadmap](docs/ROADMAP.md): what has shipped and what is planned
+- Step-by-step guides: under **Help** in the console, and in [docs/guides](docs/guides)
+
+## 💬 Getting help
+
+- **A bug or an idea:** [open an issue](https://github.com/mustra-dev/mustra/issues/new/choose).
+  Issues are public, so leave out hostnames, IP addresses and usernames.
+- **A question, or something you'd rather not post publicly:** email
+  **support@mustra.dev**.
+
+## 🔒 Security
+
+mustra runs commands as root or SYSTEM on every endpoint it manages, so
+report vulnerabilities **privately**: email **security@mustra.dev**, or
+[open a private report](https://github.com/mustra-dev/mustra/security/advisories/new).
+See [SECURITY.md](SECURITY.md). Release images are signed with cosign and
+ship with SHA256SUMS and an SBOM.
+
+## 📄 License
+
+[AGPL-3.0](LICENSE). Self-hosting, modifying and commercial use are all
+allowed. The AGPL's obligations apply if you offer mustra to others as a
+service. mustra comes with **no warranty**, and you may use it only on
+devices you're authorized to manage. See the [Terms of Use](TERMS.md) and
+[Privacy](PRIVACY.md).
+
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) asks for a
+`Signed-off-by` line on each commit.

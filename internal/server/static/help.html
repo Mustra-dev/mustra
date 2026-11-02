@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .help-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .help-index { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding: 14px 10px; }
+  .help-search { width: 100%; margin-bottom: 12px; }
+  .help-group { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 14px 8px 4px; }
+  .help-group:first-of-type { margin-top: 0; }
+  .help-index a { display: block; padding: 6px 8px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.35; }
+  .help-index a:hover { background: var(--surface-2); }
+  .help-index a[aria-current="page"] { background: var(--accent-bg, var(--surface-2)); color: var(--accent); font-weight: 600; }
+  .help-doc { padding: 28px 32px 36px; }
+  .help-doc .eyebrow { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 4px; }
+  .help-doc h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .help-doc .lede { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin: 0 0 20px; max-width: 70ch; }
+  .help-body { font-size: 14px; line-height: 1.65; max-width: 72ch; }
+  .help-body h2 { font-size: 17px; margin: 28px 0 8px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .help-body h2:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+  .help-body h3 { font-size: 14.5px; margin: 20px 0 6px; }
+  .help-body h4 { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 16px 0 4px; }
+  .help-body p { margin: 0 0 12px; }
+  .help-body ul, .help-body ol { margin: 0 0 14px; padding-left: 22px; }
+  .help-body li { margin-bottom: 6px; }
+  .help-body ol > li::marker { color: var(--accent); font-weight: 700; }
+  .help-body code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); border-radius: 4px; padding: 1px 5px; }
+  .help-body pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 0 0 14px; }
+  .help-body pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  .help-body a { color: var(--accent); }
+  .help-body .callout { border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 0 0 14px; }
+  .help-body .table-wrap { overflow-x: auto; margin: 0 0 14px; }
+  .help-body table { border-collapse: collapse; font-size: 13px; width: 100%; }
+  .help-body th, .help-body td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  .help-body th { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+  .help-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .help-card { display: block; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); text-decoration: none; background: var(--surface); }
+  .help-card:hover { border-color: var(--accent); }
+  .help-card strong { display: block; font-size: 13.5px; margin-bottom: 4px; }
+  .help-card span { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+  .help-cards-group { font-size: 13px; font-weight: 600; margin: 22px 0 10px; }
+  .help-cards-group:first-child { margin-top: 0; }
+  .help-pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
+  .help-pager a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 900px) {
+    .help-layout { grid-template-columns: 1fr; }
+    .help-index { position: static; max-height: none; }
+    .help-doc { padding: 20px 18px 28px; }
+  }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="help-page-head"></div>
+      <div class="help-layout">
+        <nav class="panel help-index" aria-label="Guides">
+          <input type="search" class="help-search" id="help-search" placeholder="Search guides" aria-label="Search guides">
+          <div id="help-index">loading…</div>
+        </nav>
+        <article class="panel help-doc" id="help-doc" aria-live="polite"></article>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let guides = [];
+const cache = new Map();
+
+document.addEventListener("mustra:user", async () => {
+  renderPageHead("help-page-head", "/help", { title: "Help", sub: "Step-by-step guides for every part of mustra.", icon: "book" });
+  const resp = await fetch("/api/help");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  guides = (await resp.json()).guides || [];
+  renderIndex();
+  show();
+});
+window.addEventListener("hashchange", show);
+document.getElementById("help-search").addEventListener("input", renderIndex);
+
+function grouped(list) {
+  const groups = [];
+  for (const g of list) {
+    let grp = groups.find(x => x.name === g.group);
+    if (!grp) groups.push(grp = { name: g.group, items: [] });
+    grp.items.push(g);
+  }
+  return groups;
+}
+
+function renderIndex() {
+  const q = document.getElementById("help-search").value.trim().toLowerCase();
+  const list = q ? guides.filter(g => (g.title + " " + g.summary + " " + g.group).toLowerCase().includes(q)) : guides;
+  const current = location.hash.slice(1);
+  document.getElementById("help-index").innerHTML = list.length === 0 ? '<div class="empty">No guide matches.</div>'
+    : grouped(list).map(grp => `<div class="help-group">${escapeHtml(grp.name)}</div>` + grp.items.map(g =>
+      `<a href="#${escapeHtml(g.slug)}"${g.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(g.title)}</a>`).join("")).join("");
+}
+
+async function show() {
+  const slug = location.hash.slice(1);
+  const doc = document.getElementById("help-doc");
+  renderIndex();
+  if (!slug) {
+    doc.innerHTML = `<div class="eyebrow">Help</div><h1>Start here</h1>
+      <p class="lede">Each guide walks through one part of the console: what it is for, what you need first, and the steps to get something done. New to mustra? Begin with <a href="#getting-started">Getting started</a>.</p>
+      ${grouped(guides).map(grp => `<div class="help-cards-group">${escapeHtml(grp.name)}</div><div class="help-cards">${grp.items.map(g =>
+        `<a class="help-card" href="#${escapeHtml(g.slug)}"><strong>${escapeHtml(g.title)}</strong><span>${escapeHtml(g.summary)}</span></a>`).join("")}</div>`).join("")}`;
+    document.title = "Help — mustra";
+    return;
+  }
+  let g = cache.get(slug);
+  if (!g) {
+    const resp = await fetch(`/api/help/${encodeURIComponent(slug)}`);
+    if (!resp.ok) { doc.innerHTML = `<div class="empty">No guide called “${escapeHtml(slug)}”. <a href="#">See all guides</a>.</div>`; return; }
+    g = await resp.json();
+    cache.set(slug, g);
+  }
+  const i = guides.findIndex(x => x.slug === slug);
+  const prev = guides[i - 1], next = guides[i + 1];
+  doc.innerHTML = `<div class="eyebrow">${escapeHtml(g.group)}</div><h1>${escapeHtml(g.title)}</h1>
+    <p class="lede">${escapeHtml(g.summary)}</p>
+    <div class="help-body">${/* safe-html: rendered server-side from the embedded guides; all text escaped, fixed tags only */ g.html}</div>
+    <div class="help-pager"><span>${prev ? `<a href="#${escapeHtml(prev.slug)}">← ${escapeHtml(prev.title)}</a>` : ""}</span><span>${next ? `<a href="#${escapeHtml(next.slug)}">${escapeHtml(next.title)} →</a>` : ""}</span></div>`;
+  document.title = `${g.title} — Help — mustra`;
+  window.scrollTo({ top: 0 });
+}
+</script>
+</body>
+</html>

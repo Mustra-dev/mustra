@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+{{if .Providers}}<style>
+{{- /* Each identity provider's brand colour. A rule here rather than a
+       style attribute: the console's CSP refuses those (#143), and this
+       element carries the page's nonce. */ -}}
+{{range $i, $p := .Providers}}
+.sso-button[data-idp="{{$i}}"] { --idp-accent: {{$p.Accent}}; }{{end}}
+</style>{{end}}
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand">
+        {{if .LogoURL}}<img class="brand-logo-img" src="{{.LogoURL}}" alt="">{{else}}<svg class="brand-mark" viewBox="0 0 100 100" fill="none" role="img" aria-label="mustra"><path d="M20 76V24l30 36 30-36v52" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}} mustra
+      </div>
+{{if .MFA}}{{with .MFA}}
+      {{if .RecoveryCodes}}
+      <h1 class="mfa-title">Save your recovery codes</h1>
+      <p class="mfa-lede">Two-step sign-in is on. If you lose your phone, each of these signs you in once in place of a code. They are shown only now.</p>
+      <ol class="mfa-codes" id="mfa-codes" aria-label="Recovery codes">{{range .RecoveryCodes}}<li><code>{{.}}</code></li>{{end}}</ol>
+      <div class="mfa-actions">
+        <button class="tiny" type="button" id="mfa-copy">Copy</button>
+        <button class="tiny" type="button" id="mfa-download">Download .txt</button>
+        <span class="mfa-copied" id="mfa-copied" role="status"></span>
+      </div>
+      <a class="sso-button mfa-continue" href="{{.Next}}">I’ve saved them — continue</a>
+      <script>
+      (function () {
+        var codes = Array.prototype.map.call(document.querySelectorAll("#mfa-codes code"), function (c) { return c.textContent; });
+        var said = document.getElementById("mfa-copied");
+        document.getElementById("mfa-copy").addEventListener("click", function () {
+          navigator.clipboard.writeText(codes.join("\n")).then(function () { said.textContent = "Copied"; setTimeout(function () { said.textContent = ""; }, 2000); });
+        });
+        document.getElementById("mfa-download").addEventListener("click", function () {
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob(["mustra recovery codes for " + location.host + "\n\n" + codes.join("\n") + "\n"], { type: "text/plain" }));
+          a.download = "mustra-recovery-codes.txt"; a.click(); URL.revokeObjectURL(a.href);
+        });
+      })();
+      </script>
+      {{else}}
+      <h1 class="mfa-title">{{if .Enroll}}Set up two-step sign-in{{else}}Two-step sign-in{{end}}</h1>
+      <p class="mfa-lede">{{if .Enroll}}Your administrator requires a code from an authenticator app for <b>{{.Username}}</b>.{{else}}Enter the code from your authenticator app for <b>{{.Username}}</b>.{{end}}</p>
+      {{if $.Error}}<div class="form-error" role="alert">{{$.Error}}</div>{{end}}
+      {{if .Enroll}}
+      <ol class="mfa-steps">
+        <li><span>Scan this with an authenticator app (1Password, Google Authenticator, Microsoft Authenticator…).</span>
+          <div class="mfa-qr">{{.QR}}</div>
+          <details class="mfa-manual"><summary>Can’t scan it? Enter the key instead</summary>
+            <code class="mfa-secret">{{.Secret}}</code>
+            <p>Time-based, 6 digits, every 30 seconds.</p>
+          </details>
+        </li>
+        <li><span>Enter the 6-digit code it shows.</span></li>
+      </ol>
+      {{end}}
+      <form method="POST" action="/login/code" class="mfa-form">
+        <div class="field">
+          <label for="code">{{if .Enroll}}Code from the app{{else}}Code{{end}}</label>
+          <input id="code" name="code" class="mfa-code" type="text" {{if .Enroll}}inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"{{else}}inputmode="text" maxlength="24"{{end}} autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required autofocus aria-describedby="code-hint">
+          <p class="mfa-hint" id="code-hint">{{if .Enroll}}A new code appears every 30 seconds.{{else}}Lost your phone? Enter one of your recovery codes here instead.{{end}}</p>
+        </div>
+        <button class="secondary" type="submit">{{if .Enroll}}Turn on and sign in{{else}}Verify{{end}}</button>
+      </form>
+      <a class="mfa-back" href="/login">Use a different account</a>
+      {{end}}
+{{end}}{{else}}
+      <p class="tagline">sign in to the fleet console</p>
+
+      {{if .Error}}<div class="form-error">{{.Error}}</div>{{end}}
+      {{if .Created}}<div class="form-ok" role="status">Account <strong>{{.Created}}</strong> created. Sign in with the password you chose.</div>{{end}}
+
+      {{if .SSOAvailable}}
+        {{range $i, $p := .Providers}}
+          <a class="sso-button" data-idp="{{$i}}" href="/login/sso/{{.ID}}?next={{$.Next}}">
+            <span class="idp-mark">{{.SVG}}</span>
+            <span>Sign in with {{.Label}}</span>
+          </a>
+        {{end}}
+
+      <div class="divider">or</div>
+
+      <details class="backdoor">
+        <summary>Sign in with a local account</summary>
+        {{template "localform" .}}
+      </details>
+      {{else}}
+        {{template "localform" .}}
+      {{end}}
+{{end}}
+    </div>
+  </div>
+</body>
+</html>
+{{define "localform"}}
+        <form method="POST" action="/login/local">
+          <input type="hidden" name="next" value="{{.Next}}">
+          <div class="field">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" autocomplete="username" required {{if .Created}}value="{{.Created}}"{{else}}autofocus{{end}}>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required {{if .Created}}autofocus{{end}}>
+          </div>
+          <button class="{{if .SSOAvailable}}secondary{{else}}primary{{end}}" type="submit">Sign in</button>
+        </form>
+{{end}}

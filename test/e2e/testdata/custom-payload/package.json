@@ -1,0 +1,16 @@
+{
+  "name": "mustra-hello (custom payload test)",
+  "kind": "software",
+  "version": "",
+  "category": "Test",
+  "commands": {
+    "linux": {
+      "install": "sh ./mustra-hello.sh && /usr/local/bin/mustra-hello",
+      "remove": "rm -rf /usr/local/bin/mustra-hello /etc/mustra-hello && echo removed"
+    }
+  },
+  "detect": {
+    "app_name": "mustra-hello"
+  },
+  "command_timeout_seconds": 60
+}

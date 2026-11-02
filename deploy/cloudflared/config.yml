@@ -1,0 +1,22 @@
+# Cloudflare Tunnel ingress for the console. Optional: started only with
+# `docker compose --profile tunnel up -d`.
+#
+# This file is a template. Before starting the tunnel profile:
+#
+#   1. `cloudflared tunnel create <name>` prints a tunnel ID (a UUID) and
+#      writes ~/.cloudflared/<tunnel-id>.json. Put that ID in `tunnel:`.
+#   2. `cloudflared tunnel route dns <name> <hostname>` points a DNS name at
+#      the tunnel. Put that hostname in `hostname:` below; it is the public
+#      console URL, the same one given to `init.sh --public-hostname` (or set
+#      by hand in .env as MUSTRA_OIDC_REDIRECT_URL's host).
+#   3. Copy ~/.cloudflared/<tunnel-id>.json to creds.json next to this file.
+#      creds.json is the tunnel's secret and is gitignored; never commit it.
+#
+# The tunnel will not serve anything while the placeholders are still here.
+tunnel: 00000000-0000-0000-0000-000000000000 # replace with your tunnel ID
+credentials-file: /etc/cloudflared/creds.json
+
+ingress:
+  - hostname: console.example.com # replace with your public console hostname
+    service: http://server:8080
+  - service: http_status:404

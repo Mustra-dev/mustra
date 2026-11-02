@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; line-height: 1.5; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  button.tiny.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .state-pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; background: var(--surface-2); color: var(--text-muted); }
+  .state-pending { background: color-mix(in srgb, var(--viz-warning) 20%, transparent); color: var(--warn); }
+  .state-ok { background: var(--ok-bg); color: var(--ok); } .state-bad { background: var(--off-bg); color: var(--off); }
+  .state-approved { background: var(--ok-bg); color: var(--ok); }
+  .state-denied, .state-failed, .state-expired { background: var(--off-bg); color: var(--off); }
+  .scope-note { border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                padding: 10px 13px; font-size: 12.5px; line-height: 1.55; margin-bottom: 14px; }
+  .kind-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; }
+  .kind-block h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <div id="ac-page-head"></div>
+
+    <div class="module-section" id="section-approvals" hidden>
+      <div class="stat-tiles" id="ap-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Approvals</h2><div class="u-d-flex u-gap-8 u-ai-center">
+          <select id="ap-filter" aria-label="Show approvals in state"><option value="pending">pending</option><option value="">every state</option><option value="approved">approved</option><option value="denied">denied</option><option value="expired">expired</option><option value="failed">failed</option></select>
+          <button class="tiny" id="ap-refresh">Refresh</button></div></div>
+        <p class="hint">
+          An operation a policy parked. It has not run: approving replays exactly what was asked for, under the identity of
+          whoever asked, so the audit trail and every later check name the requester. You cannot approve your own — an
+          approval whose only requirement is being allowed to do the thing yourself is not an approval. A request nobody
+          decides within eight hours expires, because an approval of yesterday's fleet is not an approval of today's.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Requested</th><th>By</th><th>What</th><th>Devices</th><th>Policy</th><th>State</th><th>Outcome</th><th>Action</th></tr></thead>
+            <tbody id="ap-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Your scope</h2><span class="scan-status" id="scope-status"></span></div>
+        <p class="hint">What your roles let you act on, and what each module is capped at regardless of who you are.</p>
+        <div id="scope-body" class="hint">loading…</div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-jump" hidden>
+      <div class="stat-tiles" id="jg-tiles"></div>
+      <div class="panel" id="rd-panel">
+        <div class="panel-header"><h2>Remote desktop</h2><span class="status-pill" id="rd-status">—</span></div>
+        <p class="hint">
+          RDP to Windows, Screen Sharing (VNC) to Macs and SSH to Linux, from a button on each endpoint's page, through
+          the same checks as a shell session: management rights, the shell action group and the Jump Gate policies
+          below (a reason, an approval, a time limit). Every connection is in the audit log. Off until it is set up.
+          <b>Shadowing</b> a Windows session (watching or sharing control of the signed-in user's own session, which Windows
+          asks them to allow) needs no provider: it is always offered under Jump on a Windows endpoint's page, through the
+          same checks, as a command for your own Remote Desktop client.
+        </p>
+        <div id="rd-setup" class="hint" hidden>
+          <b>To turn it on, pick a provider:</b>
+          <ul class="u-m-6-0-0-18 u-p-0">
+            <li><b>Guacamole</b> (built in, browser-only — works from a phone or iPad): start it with mustra's stack,
+              <code>docker compose --profile remote up -d guacd guacamole</code>, with
+              <code>MUSTRA_GUACAMOLE_JSON_SECRET</code> set in <code>deploy/.env</code> to the output of
+              <code>openssl rand -hex 16</code>. Then choose Guacamole below and paste the same secret. Mustra serves it at
+              <code>/guacamole/</code>; it needs no hostname of its own and opens only connections Mustra signs.</li>
+            <li><b>BeyondTrust</b> (Privileged Remote Access or Remote Support): enter your site, e.g.
+              <code>https://access.example.com</code>. The buttons open a Jump session in the BeyondTrust console, which
+              records it and can inject vaulted credentials. Check the generated link against your site's client
+              scripting API documentation.</li>
+            <li><b>Custom</b>: a URL template for any other gateway or client, with <code>{ip}</code>,
+              <code>{hostname}</code>, <code>{protocol}</code> (rdp, vnc, ssh) and <code>{port}</code>, e.g.
+              <code>rdp://full%20address=s:{ip}</code>.</li>
+          </ul>
+          The endpoints themselves must accept the connection: Remote Desktop enabled on Windows, Screen Sharing on
+          macOS, and an SSH server on Linux.
+        </div>
+        <div class="form-grid" id="rd-form">
+          <div class="field"><label for="rd-provider">Provider</label>
+            <select id="rd-provider"><option value="">Off</option><option value="guacamole">Guacamole (built in)</option><option value="beyondtrust">BeyondTrust</option><option value="custom">Custom URL template</option></select></div>
+          <div class="field" data-rd="guacamole"><label for="rd-guac-url">Guacamole address (from the mustra server)</label>
+            <input id="rd-guac-url" placeholder="http://guacamole:8080/guacamole"></div>
+          <div class="field" data-rd="guacamole"><label for="rd-guac-key">JSON secret (32 hex characters)</label>
+            <input id="rd-guac-key" type="password" autocomplete="off" placeholder="openssl rand -hex 16"></div>
+          <div class="field" data-rd="guacamole"><label for="rd-jit">Sign in with a temporary account</label>
+            <select id="rd-jit"><option value="">Off — type a user name and password</option><option value="offer">Offered — the person connecting chooses</option><option value="always">Always</option></select>
+            <span class="hint">The endpoint's agent creates a local administrator for the session alone and removes it when the session ends; Guacamole signs in with it, and nobody sees the password. Agent 0.57.40 or newer.</span></div>
+          <div class="field" data-rd="guacamole"><label for="rd-recording">Record sessions</label>
+            <select id="rd-recording"><option value="on">On — screen, and text for SSH</option><option value="off">Off</option></select>
+            <span class="hint">Recordings are listed under Sessions → Remote desktop.</span></div>
+          <div class="field" data-rd="beyondtrust"><label for="rd-bt-site">BeyondTrust site</label>
+            <input id="rd-bt-site" placeholder="https://access.example.com"></div>
+          <div class="field" data-rd="custom"><label for="rd-custom">URL template</label>
+            <input id="rd-custom" placeholder="https://gateway.example.com/connect?host={ip}&amp;proto={protocol}"></div>
+        </div>
+        <div class="save-row"><button class="primary" id="rd-save">Save</button><span class="save-status" id="rd-save-status"></span></div>
+        <p class="hint" id="rd-readonly" hidden>Changing remote desktop access needs the <b>Manage integrations</b> permission.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Access requests</h2><div class="u-d-flex u-gap-8 u-ai-center">
+          <select id="jg-filter" aria-label="Show access grants in state"><option value="pending">pending</option><option value="approved">approved</option><option value="">every state</option><option value="denied">denied</option><option value="expired">expired</option><option value="revoked">revoked</option></select>
+          <button class="tiny" id="jg-refresh">Refresh</button></div></div>
+        <p class="hint">
+          Just-in-time access to one endpoint, for a stated reason, for a fixed number of minutes. Approving starts the
+          clock at the moment of the decision rather than of the request — a window that began while nobody was looking is
+          not just-in-time. An approver may shorten a window but never extend it past its policy. Revoking ends any session
+          using it immediately, rather than waiting for a clock it has just been taken off. You cannot approve your own.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Asked</th><th>Who</th><th>Endpoint</th><th>Reason</th><th>Policy</th><th>Window</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="jg-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Jump policies</h2><span class="scan-status" id="jp-status"></span></div>
+        <p class="hint">
+          What reaching an endpoint costs: a reason, somebody else agreeing, a time limit. The highest-priority enabled
+          policy covering an endpoint wins; an endpoint no policy covers costs nothing beyond the permission and management
+          rights that already applied. A chat webhook for requests is set under
+          <a href="/admin#settings">Administration → Settings</a>.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Policy</th><th>Endpoints</th><th>Reason</th><th>Approval</th><th>Window</th><th>Priority</th><th>Enabled</th><th>Action</th></tr></thead>
+            <tbody id="jp-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="jp-editor-title">New jump policy</h2>
+        <div class="form-grid">
+          <div class="field"><label for="jp-name">Name</label><input id="jp-name" placeholder="Domain controllers"></div>
+          <div class="field"><label for="jp-groups">Endpoints (computer groups)</label><select id="jp-groups" multiple size="5"></select>
+            <span class="u-fs-meta u-c-text-muted">None = every endpoint.</span></div>
+          <div class="field"><label for="jp-reason">Require a reason</label><select id="jp-reason"><option value="true">yes</option><option value="false">no</option></select></div>
+          <div class="field"><label for="jp-approval">Require approval</label><select id="jp-approval"><option value="true">yes</option><option value="false">no — reason and clock only</option></select></div>
+          <div class="field"><label for="jp-minutes">Window (minutes, max 480)</label><input id="jp-minutes" type="number" min="1" max="480" value="30"></div>
+          <div class="field"><label for="jp-priority">Priority (higher wins)</label><input id="jp-priority" type="number" value="0"></div>
+          <div class="field"><label for="jp-enabled">Enabled</label><select id="jp-enabled"><option value="true">yes</option><option value="false">no</option></select></div>
+        </div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="jp-save">Save policy</button><button class="tiny" id="jp-cancel">Cancel</button></div>
+        <div class="hint u-mt-8" id="jp-note" hidden></div>
+        <div class="hint u-mt-8" id="jp-error"></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-sessions" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Recorded sessions</h2><div class="u-d-flex u-gap-8 u-ai-center">
+          <input class="search-input u-w-220" id="tx-q" aria-label="Search transcripts" placeholder="endpoint, operator or reason">
+          <button class="tiny" id="tx-refresh">Refresh</button></div></div>
+        <p class="hint">
+          Every Direct Connect session, with what was run in it. mustra records the command <b>before</b> it is sent, so one
+          that hangs or kills the agent still leaves a trace. Reading a transcript takes <code>sessions.audit</code> or
+          <code>deploy.manage</code> — an auditor reviews what was run on an endpoint without being able to run anything on
+          it — and opening one is itself recorded in the audit log.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Opened</th><th>Operator</th><th>Endpoint</th><th>Reason</th><th>Approved by</th><th>Commands</th><th>Ended</th><th>Action</th></tr></thead>
+            <tbody id="tx-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Remote desktop</h2><div class="u-d-flex u-gap-8 u-ai-center">
+          <input class="search-input u-w-220" id="rs-q" aria-label="Search remote desktop sessions" placeholder="endpoint, operator or reason">
+          <button class="tiny" id="rs-refresh">Refresh</button></div></div>
+        <p class="hint">
+          Every Guacamole session (RDP, VNC, SSH): who opened it, the temporary account it signed in with and whether the
+          endpoint has confirmed removing it, and the recording. A recording downloads as a Guacamole <code>.guac</code>
+          file, which <code>guacenc</code> turns into a video; an SSH session also has its text. Downloading one is recorded
+          in the audit log.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Opened</th><th>Operator</th><th>Endpoint</th><th>Protocol</th><th>Reason</th><th>Temporary account</th><th>Ended</th><th>Recording</th></tr></thead>
+            <tbody id="rs-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-content" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Content sets</h2><span class="scan-status" id="cs-status"></span></div>
+        <p class="hint">
+          A named collection of packages, dashboards and saved queries. Roles reference them: a role holding no
+          content set may use everything, so adding one takes nothing away until you attach it to a role under
+          <a href="/admin#roles">Administration → Roles</a>. This is what a role may use; management rights are what it may
+          use it <i>on</i>. Sensors work a little differently: they are restricted only once one of a role's sets lists
+          sensors, and then the role may query, filter on and view exactly those. Hostname, OS, IP and the other identity
+          fields stay readable, since every answer needs to say whose it is.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Sensors</th><th>Packages</th><th>Dashboards</th><th>Queries</th><th>By</th><th>Action</th></tr></thead>
+            <tbody id="cs-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="cs-editor-title">New content set</h2>
+        <div class="form-grid">
+          <div class="field"><label for="c-name">Name</label><input id="c-name" placeholder="Helpdesk content"></div>
+          <div class="field"><label for="c-desc">Description</label><input id="c-desc" placeholder="optional"></div>
+        </div>
+        <div id="c-kinds"></div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="c-save">Save content set</button><button class="tiny" id="c-cancel">Cancel</button></div>
+        <div class="hint u-mt-8" id="c-error"></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-actiongroups" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Action groups</h2><span class="scan-status" id="ag-status"></span></div>
+        <div class="scope-note">
+          An action group is a ceiling on a module, not a permission on a person: it says which endpoints may receive
+          actions from Deploy, Patches, Playbooks, Direct Connect, Enforce or Reveal <b>at all</b>. An administrator is
+          subject to it too, which is the whole point — it is how a domain controller stays out of reach of a module
+          regardless of who is signed in. A module with no action group, or a disabled one, can reach the whole fleet.
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Module</th><th>Computer groups</th><th>Endpoints it can reach</th><th>Enabled</th><th>By</th><th>Action</th></tr></thead>
+            <tbody id="ag-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Set a module's ceiling</h2>
+        <div class="form-grid">
+          <div class="field"><label for="g-module">Module</label><select id="g-module"></select></div>
+          <div class="field"><label for="g-groups">Computer groups</label><select id="g-groups" multiple size="5"></select></div>
+          <div class="field"><label for="g-enabled">Enabled</label><select id="g-enabled"><option value="true">yes</option><option value="false">no — the whole fleet</option></select></div>
+        </div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="g-save">Save action group</button></div>
+        <div class="hint u-mt-8" id="g-error"></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-policies" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Approval policies</h2><span class="scan-status" id="pol-status"></span></div>
+        <p class="hint">
+          Which operations wait for a second person. A policy matches on module, optionally on the computer groups the
+          operation touches, and optionally on how many endpoints it targets — so "any deploy that reaches a domain
+          controller" and "any patch run over fifty machines" are both expressible. Only Deploy, Patches and Playbooks can
+          be gated: those are the operations mustra can park and resume exactly as asked. Deciding takes
+          <code>approvals.decide</code>.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Policy</th><th>Module</th><th>Touching groups</th><th>At least</th><th>Enabled</th><th>Action</th></tr></thead>
+            <tbody id="pol-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="pol-editor-title">New approval policy</h2>
+        <div class="form-grid">
+          <div class="field"><label for="p-name">Name</label><input id="p-name" placeholder="Anything touching a domain controller"></div>
+          <div class="field"><label for="p-module">Module</label><select id="p-module"></select></div>
+          <div class="field"><label for="p-groups">Only when it touches these groups</label><select id="p-groups" multiple size="5"></select>
+            <span class="u-fs-meta u-c-text-muted">None = any endpoint.</span></div>
+          <div class="field"><label for="p-min">Only when it targets at least</label><input id="p-min" type="number" min="0" value="0"><span class="u-fs-meta u-c-text-muted">0 = any number.</span></div>
+          <div class="field"><label for="p-enabled">Enabled</label><select id="p-enabled"><option value="true">yes</option><option value="false">no</option></select></div>
+        </div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="p-save">Save policy</button><button class="tiny" id="p-cancel">Cancel</button></div>
+        <div class="hint u-mt-8" id="p-error"></div>
+      </div>
+    </div>
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+let acGroups = [], acGroupsLoaded = false, contentSets = [], contentAvailable = {}, contentKinds = [], actionGroups = [], modules = [];
+let policies = [], policyModules = [], requests = [], canDecide = false, me = "";
+let editingCS = null, editingPol = null;
+
+document.addEventListener("mustra:user", (e) => {
+  initModuleSections([
+    { hash: "approvals", label: "Approvals" },
+    { hash: "jump", label: "Jump Gate" },
+    { hash: "sessions", label: "Sessions" },
+    { hash: "content", label: "Content Sets" },
+    { hash: "actiongroups", label: "Action Groups" },
+    { hash: "policies", label: "Approval Policies" },
+  ]);
+  renderPageHead("ac-page-head", "/access", { title: "Access",
+    sub: "What a role may act on, what a module may reach, and what waits for a second person." });
+  // No quick links on the Administration pages: they repeated the section
+  // list beside them, and the cross-links are in the rail's popout.
+  wire();
+  loadGroups().then(() => { loadApprovals(); loadContentSets(); loadActionGroups(); loadPolicies(); loadJump(); loadJumpPolicies(); });
+  loadRemote(!!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("integrations.manage"))));
+  loadScope();
+  loadTranscripts();
+  loadRemoteSessions();
+});
+
+// --- Remote desktop (remote_api.go) ---
+async function loadRemote(admin) {
+  const r = await fetch("/api/remote/config"); if (!r.ok) return;
+  const c = await r.json();
+  statusPill(document.getElementById("rd-status"), c.enabled ? "active" : "disabled",
+    { active: "on — " + ({ guacamole: "Guacamole", beyondtrust: "BeyondTrust", custom: "custom URL" }[c.provider] || c.provider), disabled: "off" });
+  document.getElementById("rd-setup").hidden = !!c.enabled;
+  document.getElementById("rd-provider").value = c.provider || "";
+  document.getElementById("rd-guac-url").value = c.guacamole_url || "";
+  document.getElementById("rd-guac-key").placeholder = c.guacamole_key_set ? "a secret is set — enter one to replace it" : "openssl rand -hex 16";
+  document.getElementById("rd-bt-site").value = c.beyondtrust_site || "";
+  document.getElementById("rd-custom").value = c.custom_url || "";
+  document.getElementById("rd-jit").value = c.jit || "";
+  document.getElementById("rd-recording").value = c.recording === false ? "off" : "on";
+  document.getElementById("rd-readonly").hidden = admin;
+  document.getElementById("rd-save").disabled = !admin;
+  document.querySelectorAll("#rd-form input, #rd-form select").forEach(el => { el.disabled = !admin; });
+  showRemoteFields();
+}
+function showRemoteFields() {
+  const p = document.getElementById("rd-provider").value;
+  document.querySelectorAll("#rd-form [data-rd]").forEach(el => { el.hidden = el.dataset.rd !== p; });
+}
+document.getElementById("rd-provider").addEventListener("change", showRemoteFields);
+document.getElementById("rd-save").addEventListener("click", async () => {
+  const st = document.getElementById("rd-save-status"); st.textContent = "saving…";
+  const body = { provider: document.getElementById("rd-provider").value,
+    guacamole_url: document.getElementById("rd-guac-url").value, beyondtrust_site: document.getElementById("rd-bt-site").value,
+    custom_url: document.getElementById("rd-custom").value };
+  if (body.provider === "guacamole") {
+    body.jit = document.getElementById("rd-jit").value;
+    body.recording = document.getElementById("rd-recording").value === "on";
+  }
+  const key = document.getElementById("rd-guac-key").value.trim();
+  if (key) body.guacamole_key = key;
+  const r = await fetch("/api/admin/remote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  st.textContent = r.ok ? "saved" : "failed: " + await r.text();
+  if (r.ok) { document.getElementById("rd-guac-key").value = ""; loadRemote(true); setTimeout(() => { st.textContent = ""; }, 2000); }
+});
+
+async function loadGroups() {
+  const r = await fetch("/api/groups"); if (!r.ok) return;
+  acGroups = (await r.json()).groups || [];
+  acGroupsLoaded = true;
+  const opts = acGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("");
+  document.getElementById("g-groups").innerHTML = opts;
+  document.getElementById("p-groups").innerHTML = opts;
+}
+const gName = id => (acGroups.find(g => g.id === id) || {}).name || id;
+// Group IDs a saved record still names but no group has any more. Only
+// once the list has loaded: an empty list would make every ID look gone.
+const isGoneGroup = id => acGroupsLoaded && !acGroups.some(g => g.id === id);
+const goneGroups = ids => (ids || []).filter(isGoneGroup);
+
+// ---- approvals ----------------------------------------------------------
+async function loadApprovals() {
+  const state = document.getElementById("ap-filter").value;
+  const r = await fetch(`/api/approvals?state=${encodeURIComponent(state)}`);
+  if (!r.ok) { document.getElementById("ap-body").innerHTML = '<tr><td class="empty" colspan="8">could not load</td></tr>'; return; }
+  const d = await r.json();
+  requests = d.requests || []; canDecide = !!d.can_decide; me = d.me || "";
+  document.getElementById("ap-tiles").innerHTML = [
+    { label: "Waiting on a decision", value: d.pending || 0, cls: (d.pending || 0) ? "bad" : "ok" },
+    { label: "You may decide", value: canDecide ? "yes" : "no", cls: canDecide ? "ok" : "" },
+    { label: "Shown", value: requests.length },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+  const body = document.getElementById("ap-body");
+  if (!requests.length) { body.innerHTML = `<tr><td class="empty" colspan="8">nothing ${escapeHtml(state || "recorded")}</td></tr>`; return; }
+  body.innerHTML = requests.map(a => {
+    const mine = a.requested_by === me;
+    const decidable = canDecide && a.state === "pending" && !mine;
+    return `<tr>
+      <td title="${escapeHtml(a.requested_at)}">${escapeHtml(fmtAgo(a.requested_at))}</td>
+      <td>${escapeHtml(a.requested_by)}${mine ? ' <span class="state-pill">you</span>' : ""}</td>
+      <td class="u-ws-normal">${escapeHtml(a.summary)}</td>
+      <td>${escapeHtml(a.device_count)}</td>
+      <td>${escapeHtml(a.policy_name || "—")}</td>
+      <td><span class="state-pill state-${escapeHtml(a.state)}">${escapeHtml(a.state)}</span>${a.decided_by ? `<div class="hint u-m-2-0-0">by ${escapeHtml(a.decided_by)}</div>` : ""}</td>
+      <td class="u-ws-normal u-maxw-260 u-fs-meta u-c-text-muted">${escapeHtml((a.outcome || "").slice(0, 160) || (a.decision_note || "—"))}</td>
+      <td class="u-ws-nowrap">${decidable
+        ? `<button class="tiny go" data-approve="${escapeHtml(a.id)}">Approve</button> <button class="tiny danger" data-deny="${escapeHtml(a.id)}">Deny</button>`
+        : (a.state === "pending" && mine ? '<span class="hint">someone else decides</span>' : "")}</td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => decide(b.dataset.approve, "approve")));
+  body.querySelectorAll("[data-deny]").forEach(b => b.addEventListener("click", () => decide(b.dataset.deny, "deny")));
+}
+async function decide(id, decision) {
+  const a = requests.find(x => x.id === id);
+  const note = prompt(`${decision === "approve" ? "Approve" : "Deny"}: ${a.summary}\n\nNote (optional):`, "");
+  if (note === null) return;
+  const r = await fetch(`/api/approvals/${encodeURIComponent(id)}/decide`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, note }) });
+  if (!r.ok) { alert(await r.text()); return; }
+  setTimeout(loadApprovals, 1200);
+}
+async function loadScope() {
+  const r = await fetch("/api/access/me"); if (!r.ok) return;
+  const d = await r.json();
+  const ceil = Object.entries(d.action_group_endpoints || {});
+  document.getElementById("scope-status").textContent = d.unrestricted ? "whole fleet" : `${d.endpoints || 0} of ${d.total_endpoints || 0} endpoints`;
+  document.getElementById("scope-body").innerHTML = `
+    <p><b>Management rights:</b> ${d.unrestricted
+      ? `the whole fleet (${escapeHtml(d.total_endpoints || 0)} endpoints) — none of your roles is scoped to computer groups.`
+      : `${escapeHtml(d.endpoints || 0)} of ${escapeHtml(d.total_endpoints || 0)} endpoints: ${escapeHtml((d.hostnames || []).slice(0, 12).join(", "))}${(d.hostnames || []).length > 12 ? ` and ${d.hostnames.length - 12} more` : ""}.`}</p>
+    <p><b>Content:</b> ${d.content_unrestricted ? "everything — none of your roles is limited to content sets." : `${escapeHtml((d.content_sets || []).length)} content set(s).`}</p>
+    <p><b>Module ceilings:</b> ${ceil.length ? ceil.map(([m, n]) => `${escapeHtml(m)} → ${escapeHtml(n)} endpoint(s)`).join("; ") : "none set; every module can reach the whole fleet."}</p>`;
+}
+
+// ---- content sets -------------------------------------------------------
+async function loadContentSets() {
+  const r = await fetch("/api/content-sets");
+  if (!r.ok) { document.getElementById("cs-body").innerHTML = '<tr><td class="empty" colspan="7">needs settings.manage</td></tr>'; return; }
+  const d = await r.json();
+  contentSets = d.content_sets || []; contentAvailable = d.available || {}; contentKinds = d.kinds || [];
+  document.getElementById("cs-status").textContent = contentSets.length ? `${contentSets.length} set(s)` : "";
+  document.getElementById("cs-body").innerHTML = contentSets.length ? contentSets.map(c => `<tr>
+    <td><b>${escapeHtml(c.name)}</b>${c.description ? `<div class="hint u-m-2-0-0">${escapeHtml(c.description)}</div>` : ""}</td>
+    ${contentKinds.map(k => `<td>${escapeHtml(((c.contents || {})[k] || []).length)}</td>`).join("")}
+    <td>${escapeHtml(c.created_by)}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-cedit="${escapeHtml(c.id)}">Edit</button> <button class="tiny danger" data-cdel="${escapeHtml(c.id)}">Delete</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="7">No content sets. Every role may use all content.</td></tr>';
+  document.querySelectorAll("[data-cedit]").forEach(b => b.addEventListener("click", () => editContentSet(contentSets.find(c => c.id === b.dataset.cedit))));
+  document.querySelectorAll("[data-cdel]").forEach(b => b.addEventListener("click", async () => {
+    const c = contentSets.find(x => x.id === b.dataset.cdel);
+    if (!confirm(`Delete "${c.name}"? Roles holding only this set go back to using everything.`)) return;
+    await fetch(`/api/content-sets/${encodeURIComponent(c.id)}`, { method: "DELETE" }); loadContentSets();
+  }));
+  renderKindPickers(null);
+}
+function renderKindPickers(c) {
+  const labels = { sensors: "Sensors", packages: "Packages", dashboards: "Dashboards", questions: "Saved queries" };
+  document.getElementById("c-kinds").innerHTML = contentKinds.map(k => `
+    <div class="kind-block"><h4>${escapeHtml(labels[k] || k)}</h4>
+      <select data-kind="${escapeHtml(k)}" aria-label="${escapeHtml(labels[k] || k)}" multiple size="5" class="u-w-100p">
+        ${(contentAvailable[k] || []).map(x => `<option value="${escapeHtml(x.id)}" ${c && ((c.contents || {})[k] || []).includes(x.id) ? "selected" : ""}>${escapeHtml(x.name)}</option>`).join("")}
+      </select></div>`).join("");
+}
+function editContentSet(c) {
+  editingCS = c ? c.id : null;
+  document.getElementById("cs-editor-title").textContent = c ? `Edit ${c.name}` : "New content set";
+  document.getElementById("c-name").value = c ? c.name : "";
+  document.getElementById("c-desc").value = c ? c.description : "";
+  document.getElementById("c-error").textContent = "";
+  renderKindPickers(c);
+  document.getElementById("cs-editor-title").scrollIntoView({ behavior: "smooth" });
+}
+
+// ---- action groups ------------------------------------------------------
+async function loadActionGroups() {
+  const r = await fetch("/api/action-groups");
+  if (!r.ok) { document.getElementById("ag-body").innerHTML = '<tr><td class="empty" colspan="6">needs settings.manage</td></tr>'; return; }
+  const d = await r.json();
+  actionGroups = d.action_groups || []; modules = d.modules || [];
+  const resolved = d.resolved || {}, total = d.total_endpoints || 0;
+  document.getElementById("g-module").innerHTML = modules.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+  document.getElementById("ag-status").textContent = `${actionGroups.filter(a => a.enabled && a.group_ids.length).length} of ${modules.length} module(s) capped`;
+  document.getElementById("ag-body").innerHTML = modules.map(m => {
+    const a = actionGroups.find(x => x.module === m);
+    const capped = a && a.enabled && a.group_ids.length;
+    return `<tr>
+      <td><b>${escapeHtml(m)}</b></td>
+      <td>${capped ? a.group_ids.map(gName).map(escapeHtml).join(", ") : '<span class="hint">whole fleet</span>'}</td>
+      <td>${capped ? `${escapeHtml(resolved[m] || 0)} of ${escapeHtml(total)}` : escapeHtml(total)}</td>
+      <td>${capped ? '<span class="state-pill state-approved">capped</span>' : "—"}</td>
+      <td>${a ? escapeHtml(a.updated_by || "") : ""}</td>
+      <td class="u-ws-nowrap">${capped ? `<button class="tiny danger" data-gdel="${escapeHtml(m)}">Remove cap</button>` : ""}</td></tr>`;
+  }).join("");
+  document.querySelectorAll("[data-gdel]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm(`Remove the ${b.dataset.gdel} ceiling? That module will reach the whole fleet again.`)) return;
+    await fetch(`/api/action-groups/${encodeURIComponent(b.dataset.gdel)}`, { method: "DELETE" }); loadActionGroups();
+  }));
+}
+
+// ---- approval policies --------------------------------------------------
+async function loadPolicies() {
+  const r = await fetch("/api/approval-policies");
+  if (!r.ok) { document.getElementById("pol-body").innerHTML = '<tr><td class="empty" colspan="6">needs settings.manage</td></tr>'; return; }
+  const d = await r.json();
+  policies = d.policies || []; policyModules = d.modules || [];
+  document.getElementById("p-module").innerHTML = policyModules.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+  document.getElementById("pol-status").textContent = policies.length ? `${policies.filter(p => p.enabled).length} enabled of ${policies.length}` : "";
+  document.getElementById("pol-body").innerHTML = policies.length ? policies.map(p => `<tr${sx(p.enabled ? "" : "opacity:.55")}>
+    <td><b>${escapeHtml(p.name)}</b></td><td>${escapeHtml(p.module)}</td>
+    <td>${(p.group_ids || []).length ? p.group_ids.map(gName).map(escapeHtml).join(", ") : '<span class="hint">any endpoint</span>'}</td>
+    <td>${p.min_devices ? escapeHtml(p.min_devices) : '<span class="hint">any</span>'}</td><td>${p.enabled ? "yes" : "no"}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-pedit="${escapeHtml(p.id)}">Edit</button> <button class="tiny danger" data-pdel="${escapeHtml(p.id)}">Delete</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="6">No policies. Nothing waits for approval.</td></tr>';
+  document.querySelectorAll("[data-pedit]").forEach(b => b.addEventListener("click", () => editPolicy(policies.find(p => p.id === b.dataset.pedit))));
+  document.querySelectorAll("[data-pdel]").forEach(b => b.addEventListener("click", async () => {
+    const p = policies.find(x => x.id === b.dataset.pdel);
+    if (!confirm(`Delete "${p.name}"? Those operations stop waiting for approval.`)) return;
+    await fetch(`/api/approval-policies/${encodeURIComponent(p.id)}`, { method: "DELETE" }); loadPolicies();
+  }));
+}
+function editPolicy(p) {
+  editingPol = p ? p.id : null;
+  document.getElementById("pol-editor-title").textContent = p ? `Edit ${p.name}` : "New approval policy";
+  document.getElementById("p-name").value = p ? p.name : "";
+  if (p) document.getElementById("p-module").value = p.module;
+  Array.from(document.getElementById("p-groups").options).forEach(o => { o.selected = !!(p && (p.group_ids || []).includes(o.value)); });
+  document.getElementById("p-min").value = p ? p.min_devices : 0;
+  document.getElementById("p-enabled").value = p ? String(!!p.enabled) : "true";
+  document.getElementById("p-error").textContent = "";
+}
+
+function wire() {
+  document.getElementById("ap-refresh").addEventListener("click", loadApprovals);
+  document.getElementById("jg-refresh").addEventListener("click", loadJump);
+  document.getElementById("jg-filter").addEventListener("change", loadJump);
+  document.getElementById("tx-refresh").addEventListener("click", loadTranscripts);
+  document.getElementById("tx-q").addEventListener("input", renderTranscripts);
+  document.getElementById("rs-refresh").addEventListener("click", loadRemoteSessions);
+  document.getElementById("rs-q").addEventListener("input", renderRemoteSessions);
+  document.getElementById("jp-cancel").addEventListener("click", () => editJumpPolicy(null));
+  document.getElementById("jp-save").addEventListener("click", async () => {
+    const body = { name: document.getElementById("jp-name").value,
+      group_ids: Array.from(document.getElementById("jp-groups").selectedOptions).map(o => o.value),
+      require_reason: document.getElementById("jp-reason").value === "true",
+      require_approval: document.getElementById("jp-approval").value === "true",
+      max_minutes: parseInt(document.getElementById("jp-minutes").value, 10) || 30,
+      priority: parseInt(document.getElementById("jp-priority").value, 10) || 0,
+      enabled: document.getElementById("jp-enabled").value === "true" };
+    // An empty list means every endpoint. A scoped policy must not become
+    // that because its groups were deleted or all deselected, unasked.
+    const was = editingJP && jumpPolicies.find(p => p.id === editingJP);
+    if (was && (was.group_ids || []).length && !body.group_ids.length &&
+        !confirm(`Save "${body.name}" with no computer groups? It will then cover every endpoint.`)) return;
+    const r = await fetch(editingJP ? `/api/jump/policies/${encodeURIComponent(editingJP)}` : "/api/jump/policies",
+      { method: editingJP ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) {
+      const msg = (await r.text()).trim();
+      // A group deleted since this page loaded is still in the list above.
+      document.getElementById("jp-error").textContent = msg.startsWith("unknown group ")
+        ? `${msg}: that computer group no longer exists. Reload the page to refresh the group list, then choose the endpoints again.`
+        : msg;
+      return;
+    }
+    editJumpPolicy(null); loadJumpPolicies();
+  });
+  document.getElementById("ap-filter").addEventListener("change", loadApprovals);
+  document.getElementById("c-cancel").addEventListener("click", () => editContentSet(null));
+  document.getElementById("c-save").addEventListener("click", async () => {
+    const contents = {};
+    document.querySelectorAll("#c-kinds select[data-kind]").forEach(sel => {
+      contents[sel.dataset.kind] = Array.from(sel.selectedOptions).map(o => o.value);
+    });
+    const body = { name: document.getElementById("c-name").value, description: document.getElementById("c-desc").value, contents };
+    const r = await fetch(editingCS ? `/api/content-sets/${encodeURIComponent(editingCS)}` : "/api/content-sets",
+      { method: editingCS ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) { document.getElementById("c-error").textContent = await r.text(); return; }
+    editContentSet(null); loadContentSets();
+  });
+  document.getElementById("g-save").addEventListener("click", async () => {
+    const body = { module: document.getElementById("g-module").value,
+      group_ids: Array.from(document.getElementById("g-groups").selectedOptions).map(o => o.value),
+      enabled: document.getElementById("g-enabled").value === "true" };
+    const r = await fetch("/api/action-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) { document.getElementById("g-error").textContent = await r.text(); return; }
+    document.getElementById("g-error").textContent = "";
+    loadActionGroups();
+  });
+  document.getElementById("p-cancel").addEventListener("click", () => editPolicy(null));
+  document.getElementById("p-save").addEventListener("click", async () => {
+    const body = { name: document.getElementById("p-name").value, module: document.getElementById("p-module").value,
+      group_ids: Array.from(document.getElementById("p-groups").selectedOptions).map(o => o.value),
+      min_devices: parseInt(document.getElementById("p-min").value, 10) || 0,
+      enabled: document.getElementById("p-enabled").value === "true" };
+    const r = await fetch(editingPol ? `/api/approval-policies/${encodeURIComponent(editingPol)}` : "/api/approval-policies",
+      { method: editingPol ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) { document.getElementById("p-error").textContent = await r.text(); return; }
+    editPolicy(null); loadPolicies();
+  });
+}
+
+// ---- Jump Gate ----------------------------------------------------------
+let grants = [], canApprove = false, jumpPolicies = [], editingJP = null, transcripts = [];
+async function loadJump() {
+  const state = document.getElementById("jg-filter").value;
+  const r = await fetch(`/api/jump/grants?state=${encodeURIComponent(state)}`);
+  if (!r.ok) { document.getElementById("jg-body").innerHTML = '<tr><td class="empty" colspan="8">could not load</td></tr>'; return; }
+  const d = await r.json();
+  grants = d.grants || []; canApprove = !!d.can_approve;
+  const active = grants.filter(g => g.state === "approved" && g.expires_at && new Date(g.expires_at) > new Date()).length;
+  document.getElementById("jg-tiles").innerHTML = [
+    { label: "Waiting on a decision", value: d.pending || 0, cls: (d.pending || 0) ? "bad" : "ok" },
+    { label: "Access open now", value: active, cls: active ? "off" : "ok" },
+    { label: "You may approve", value: canApprove ? "yes" : "no", cls: canApprove ? "ok" : "" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+  const body = document.getElementById("jg-body");
+  if (!grants.length) { body.innerHTML = `<tr><td class="empty" colspan="8">nothing ${escapeHtml(state || "recorded")}</td></tr>`; return; }
+  body.innerHTML = grants.map(g => {
+    const mine = g.requested_by === (d.me || "");
+    const live = g.state === "approved" && g.expires_at && new Date(g.expires_at) > new Date();
+    let act = "";
+    if (canApprove && g.state === "pending" && !mine) act = `<button class="tiny go" data-jga="${escapeHtml(g.id)}">Approve</button> <button class="tiny danger" data-jgd="${escapeHtml(g.id)}">Deny</button>`;
+    else if (canApprove && live) act = `<button class="tiny danger" data-jgr="${escapeHtml(g.id)}">Revoke</button>`;
+    else if (g.state === "pending" && mine) act = '<span class="hint">someone else decides</span>';
+    return `<tr>
+      <td title="${escapeHtml(g.requested_at)}">${escapeHtml(fmtAgo(g.requested_at))}</td>
+      <td>${escapeHtml(g.requested_by)}${mine ? ' <span class="state-pill">you</span>' : ""}</td>
+      <td>${escapeHtml(g.hostname || g.agent_id)}</td>
+      <td class="u-ws-normal u-maxw-240">${escapeHtml(g.reason || "—")}</td>
+      <td>${escapeHtml(g.policy_name || "—")}</td>
+      <td>${escapeHtml(g.max_minutes)}m${live ? ` <span class="hint">ends ${escapeHtml(fmtAgo(g.expires_at))}</span>` : ""}</td>
+      <td><span class="state-pill state-${escapeHtml(g.state === "approved" && !live ? "expired" : g.state)}">${escapeHtml(live ? "open" : g.state)}</span>${g.decided_by ? `<div class="hint u-m-2-0-0">by ${escapeHtml(g.decided_by)}</div>` : ""}</td>
+      <td class="u-ws-nowrap">${act}</td></tr>`;
+  }).join("");
+  body.querySelectorAll("[data-jga]").forEach(b => b.addEventListener("click", () => decideJump(b.dataset.jga, "approve")));
+  body.querySelectorAll("[data-jgd]").forEach(b => b.addEventListener("click", () => decideJump(b.dataset.jgd, "deny")));
+  body.querySelectorAll("[data-jgr]").forEach(b => b.addEventListener("click", async () => {
+    const g = grants.find(x => x.id === b.dataset.jgr);
+    if (!confirm(`Revoke ${g.requested_by}'s access to ${g.hostname}? Any session using it closes now.`)) return;
+    const r = await fetch(`/api/jump/grants/${encodeURIComponent(g.id)}/revoke`, { method: "POST" });
+    if (!r.ok) { alert(await r.text()); return; }
+    loadJump();
+  }));
+}
+async function decideJump(id, decision) {
+  const g = grants.find(x => x.id === id);
+  let minutes = g.max_minutes;
+  if (decision === "approve") {
+    const v = prompt(`Approve ${g.requested_by} on ${g.hostname}.\n\nReason given: ${g.reason || "(none)"}\n\nMinutes (max ${g.max_minutes}):`, String(g.max_minutes));
+    if (v === null) return;
+    minutes = parseInt(v, 10) || g.max_minutes;
+  }
+  const note = prompt(`Note (optional):`, "");
+  if (note === null) return;
+  const r = await fetch(`/api/jump/grants/${encodeURIComponent(id)}/decide`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, note, minutes }) });
+  if (!r.ok) { alert(await r.text()); return; }
+  loadJump();
+}
+async function loadJumpPolicies() {
+  const r = await fetch("/api/jump/policies");
+  if (!r.ok) { document.getElementById("jp-body").innerHTML = '<tr><td class="empty" colspan="8">needs settings.manage</td></tr>'; return; }
+  const d = await r.json();
+  jumpPolicies = d.policies || [];
+  document.getElementById("jp-groups").innerHTML = acGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("");
+  document.getElementById("jp-status").textContent = (jumpPolicies.length ? `${jumpPolicies.filter(p => p.enabled).length} enabled of ${jumpPolicies.length}` : "") + (d.webhook_set ? " · chat webhook set" : "");
+  document.getElementById("jp-body").innerHTML = jumpPolicies.length ? jumpPolicies.map(p => `<tr${sx(p.enabled ? "" : "opacity:.55")}>
+    <td><b>${escapeHtml(p.name)}</b></td>
+    <td>${(p.group_ids || []).length ? p.group_ids.map(id => isGoneGroup(id)
+      ? `<span class="hint" title="${escapeHtml(id)}">deleted group</span>` : escapeHtml(gName(id))).join(", ") : '<span class="hint">every endpoint</span>'}</td>
+    <td>${p.require_reason ? "required" : "—"}</td><td>${p.require_approval ? "required" : "—"}</td>
+    <td>${escapeHtml(p.max_minutes)}m</td><td>${escapeHtml(p.priority)}</td><td>${p.enabled ? "yes" : "no"}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-jpe="${escapeHtml(p.id)}">Edit</button> <button class="tiny danger" data-jpd="${escapeHtml(p.id)}">Delete</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="8">No jump policies. Direct Connect needs only its permission and your management rights.</td></tr>';
+  document.querySelectorAll("[data-jpe]").forEach(b => b.addEventListener("click", () => editJumpPolicy(jumpPolicies.find(p => p.id === b.dataset.jpe))));
+  document.querySelectorAll("[data-jpd]").forEach(b => b.addEventListener("click", async () => {
+    const p = jumpPolicies.find(x => x.id === b.dataset.jpd);
+    if (!confirm(`Delete "${p.name}"? Those endpoints stop needing a reason or approval.`)) return;
+    await fetch(`/api/jump/policies/${encodeURIComponent(p.id)}`, { method: "DELETE" }); loadJumpPolicies();
+  }));
+}
+function editJumpPolicy(p) {
+  editingJP = p ? p.id : null;
+  document.getElementById("jp-editor-title").textContent = p ? `Edit ${p.name}` : "New jump policy";
+  document.getElementById("jp-name").value = p ? p.name : "";
+  Array.from(document.getElementById("jp-groups").options).forEach(o => { o.selected = !!(p && (p.group_ids || []).includes(o.value)); });
+  document.getElementById("jp-reason").value = p ? String(!!p.require_reason) : "true";
+  document.getElementById("jp-approval").value = p ? String(!!p.require_approval) : "true";
+  document.getElementById("jp-minutes").value = p ? p.max_minutes : 30;
+  document.getElementById("jp-priority").value = p ? p.priority : 0;
+  document.getElementById("jp-enabled").value = p ? String(!!p.enabled) : "true";
+  // The list can't show a deleted group, so saving drops it. Say so before
+  // the save does, most of all when it would leave the policy unscoped.
+  const gone = p ? goneGroups(p.group_ids) : [];
+  const left = p ? (p.group_ids || []).length - gone.length : 0;
+  document.getElementById("jp-error").textContent = "";
+  document.getElementById("jp-note").hidden = !gone.length;
+  document.getElementById("jp-note").textContent = gone.length
+    ? `This policy names ${gone.length} computer group(s) that no longer exist (${gone.join(", ")}). Saving drops them` +
+      (left ? "." : ", and with no groups chosen it covers every endpoint.")
+    : "";
+}
+
+// ---- recorded sessions ---------------------------------------------------
+async function loadTranscripts() {
+  const r = await fetch("/api/sessions");
+  if (!r.ok) { document.getElementById("tx-body").innerHTML = '<tr><td class="empty" colspan="8">needs sessions.audit or deploy.manage</td></tr>'; return; }
+  transcripts = (await r.json()).sessions || [];
+  renderTranscripts();
+}
+function renderTranscripts() {
+  const q = document.getElementById("tx-q").value.trim().toLowerCase();
+  const rows = transcripts.filter(t => !q || (t.hostname || "").toLowerCase().includes(q)
+    || (t.opened_by || "").toLowerCase().includes(q) || (t.reason || "").toLowerCase().includes(q));
+  const body = document.getElementById("tx-body");
+  if (!rows.length) { body.innerHTML = '<tr><td class="empty" colspan="8">no recorded sessions</td></tr>'; return; }
+  body.innerHTML = rows.map(t => `<tr>
+    <td title="${escapeHtml(t.opened_at)}">${escapeHtml(fmtAgo(t.opened_at))}</td>
+    <td>${escapeHtml(t.opened_by)}</td><td>${escapeHtml(t.hostname || t.agent_id)}</td>
+    <td class="u-ws-normal u-maxw-220">${escapeHtml(t.reason || "—")}</td>
+    <td>${escapeHtml(t.approved_by || "—")}</td><td>${escapeHtml(t.command_count)}</td>
+    <td>${t.closed_at ? escapeHtml(fmtAgo(t.closed_at)) : '<span class="state-pill state-pending">open</span>'}</td>
+    <td><button class="tiny" data-tx="${escapeHtml(t.id)}">Transcript</button></td></tr>`).join("");
+  body.querySelectorAll("[data-tx]").forEach(b => b.addEventListener("click", () => openTranscript(b.dataset.tx)));
+}
+// ---- remote desktop sessions (remote_jit.go) ------------------------------
+let remoteSessions = [];
+async function loadRemoteSessions() {
+  const r = await fetch("/api/remote/sessions");
+  if (!r.ok) { document.getElementById("rs-body").innerHTML = '<tr><td class="empty" colspan="8">needs sessions.audit or deploy.manage</td></tr>'; return; }
+  remoteSessions = await r.json() || [];
+  renderRemoteSessions();
+}
+function renderRemoteSessions() {
+  const q = document.getElementById("rs-q").value.trim().toLowerCase();
+  const rows = remoteSessions.filter(t => !q || (t.hostname || "").toLowerCase().includes(q)
+    || (t.username || "").toLowerCase().includes(q) || (t.reason || "").toLowerCase().includes(q));
+  const body = document.getElementById("rs-body");
+  if (!rows.length) { body.innerHTML = '<tr><td class="empty" colspan="8">no remote desktop sessions</td></tr>'; return; }
+  const jit = t => {
+    if (!t.jit_username) return "—";
+    const name = `<code>${escapeHtml(t.jit_username)}</code> `;
+    if (t.jit_state === "removed") return name + `<span class="state-pill state-ok" title="${escapeHtml(fmtTime(t.jit_removed_at))}">removed</span>`;
+    if (!t.ended_at) return name + '<span class="state-pill state-pending">in use</span>';
+    return name + `<span class="state-pill state-bad" title="${escapeHtml(t.jit_error || "")}">removing${t.jit_attempts ? ` (${escapeHtml(t.jit_attempts)} failed)` : ""}</span>`;
+  };
+  const rec = t => {
+    const base = `/api/remote/sessions/${encodeURIComponent(t.id)}/recording`;
+    const links = [];
+    if (t.has_screen) links.push(`<a class="tiny" href="${base}?kind=screen">Screen</a>`);
+    if (t.has_typescript) links.push(`<a class="tiny" href="${base}?kind=typescript">Text</a>`);
+    return links.join(" ") || (t.recording ? '<span class="hint">not found</span>' : "—");
+  };
+  body.innerHTML = rows.map(t => `<tr>
+    <td title="${escapeHtml(t.opened_at)}">${escapeHtml(fmtAgo(t.opened_at))}</td>
+    <td>${escapeHtml(t.username)}</td><td>${escapeHtml(t.hostname || t.agent_id)}</td><td>${escapeHtml((t.protocol || "").toUpperCase())}</td>
+    <td class="u-ws-normal u-maxw-220">${escapeHtml(t.reason || "—")}</td>
+    <td>${jit(t)}</td>
+    <td>${t.ended_at ? `<span title="${escapeHtml(fmtTime(t.ended_at))}">${escapeHtml(fmtAgo(t.ended_at))}${t.end_reason ? " · " + escapeHtml(t.end_reason) : ""}</span>` : '<span class="state-pill state-pending">open</span>'}</td>
+    <td>${rec(t)}</td></tr>`).join("");
+}
+
+async function openTranscript(id) {
+  const r = await fetch(`/api/sessions/${encodeURIComponent(id)}`);
+  if (!r.ok) { alert(await r.text()); return; }
+  const t = await r.json();
+  const cmds = t.commands || [];
+  openModal(`${t.hostname || t.agent_id} — ${t.opened_by}`, `
+    <p class="hint">
+      Opened ${escapeHtml(fmtTime(t.opened_at))}${t.closed_at ? `, ended ${escapeHtml(fmtTime(t.closed_at))}` : ", still open"}
+      · ${escapeHtml(cmds.length)} command(s)${t.approved_by ? ` · approved by ${escapeHtml(t.approved_by)}` : ""}${t.expires_at ? ` · window ended ${escapeHtml(fmtTime(t.expires_at))}` : ""}
+    </p>
+    ${t.reason ? `<p class="hint"><b>Reason given:</b> ${escapeHtml(t.reason)}</p>` : ""}
+    <div class="u-maxh-56vh u-ov-auto">
+      ${cmds.length ? cmds.map(c => `
+        <div${sx(`border-left:3px solid ${c.exit_code === 0 ? "var(--ok)" : "var(--off)"};padding:6px 10px;margin-bottom:8px;background:var(--surface-2);border-radius:0 var(--radius-md) var(--radius-md) 0`)}>
+          <div class="u-ff-mono u-fs-12"><span class="u-c-text-muted">$</span> ${escapeHtml(c.command)}</div>
+          <div class="hint u-m-3-0-0">${escapeHtml(fmtAgo(c.ran_at))} · exit ${escapeHtml(c.exit_code)}${c.ran_by && c.ran_by !== t.opened_by ? ` · ran by ${escapeHtml(c.ran_by)}` : ""}</div>
+          ${c.output ? `<pre class="u-m-6-0-0 u-fs-meta u-ws-pre u-maxh-200 u-ov-auto">${escapeHtml(c.output.slice(0, 4000))}</pre>` : ""}
+        </div>`).join("") : '<p class="hint">This session ran no commands.</p>'}
+    </div>`);
+}
+</script>
+</body>
+</html>

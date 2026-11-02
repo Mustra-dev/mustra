@@ -1,0 +1,200 @@
+# On a version tag: publish the control-plane image to GHCR and attach the
+# agent binaries to a GitHub release, so `docker compose pull` works without
+# a Go toolchain and an endpoint can be pointed at a checksummed binary.
+#
+#   git tag v0.38.0 && git push origin v0.38.0
+#
+# The agent version defaults to the tag. To ship a server-only release that
+# does not tell every endpoint it is out of date, set MUSTRA_AGENT_VERSION
+# as a repository variable to the last tag in which the agent changed.
+#
+# What a release proves about itself. Agents install as root, so a checksum
+# file published next to the binaries it describes is not enough: anyone
+# able to replace one could replace both. Each release therefore also has:
+# - SHA256SUMS for the agent binaries (integrity of a download);
+# - a GitHub build-provenance attestation (Sigstore-signed, SLSA) for every
+#   binary and both images, binding each digest to this workflow, commit
+#   and tag:  gh attestation verify <file> --repo <owner>/<repo>
+#   GitHub refuses attestations on a user-owned private repository, so
+#   those steps run only once the repository is public; until then a
+#   release still ships signatures, checksums and SBOMs.
+# - a keyless cosign signature on both images, issued to this workflow's
+#   OIDC identity:
+#     cosign verify ghcr.io/<owner>/<repo>:<version> \
+#       --certificate-identity-regexp '^https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/v' \
+#       --certificate-oidc-issuer https://token.actions.githubusercontent.com
+# - BuildKit SBOM and max-mode provenance attached to each image, and an
+#   SPDX SBOM of the source tree attached to the release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  # Never cancel a release half way: a pushed image without its signature
+  # or release is worse than a queued run.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: [self-hosted, Linux, X64, mustra-linux]
+    timeout-minutes: 90
+    permissions:
+      contents: write # create the release and upload assets
+      packages: write # push to GHCR
+      id-token: write # keyless cosign and attestation signing (Sigstore OIDC)
+      attestations: write # store build-provenance attestations
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      SCRIPT_TOOLS_IMAGE: ghcr.io/${{ github.repository }}-script-tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # One runner builds six agents, two servers and two multi-arch images.
+      # On the hosted image from October 2026 that ran out of disk during the
+      # second image (v0.94.0, twice), so remove toolchains this job never
+      # uses before starting. Only deletions of preinstalled software.
+      - name: Free disk space
+        if: runner.environment == 'github-hosted'
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/powershell
+          sudo docker image prune -af > /dev/null
+          df -h /
+      - uses: ./.github/actions/build-binaries
+        with:
+          version: ${{ github.ref_name }}
+          agent-version: ${{ vars.MUSTRA_AGENT_VERSION || github.ref_name }}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # Both images run arm64 steps (apk upgrade, script-tools installs).
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      # Every build names this job's own builder. setup-buildx also makes it
+      # the "current" builder, which self-hosted runners on one machine share:
+      # a build that relied on it once ran on a parallel job's builder and
+      # died when that job removed it (v0.95.2).
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        id: buildx
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # actions/attest reads registry credentials only from
+      # $HOME/.docker/config.json and ignores DOCKER_CONFIG, which each
+      # self-hosted runner sets to its own directory. Its image attestation
+      # steps run with HOME set to wherever this login was written.
+      - run: echo "DOCKER_LOGIN_HOME=$(dirname "${DOCKER_CONFIG:-$HOME/.docker}")" >> "$GITHUB_ENV"
+
+      # `latest` only for a plain vX.Y.Z tag: a pre-release (v1.2.0-rc.1)
+      # must not become what `docker compose pull` fetches by default.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: bin
+          file: deploy/Dockerfile.image
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=runtime-image
+          cache-to: type=gha,mode=max,scope=runtime-image
+
+      # The server image is pushed; its build cache and the Go cache have
+      # served their purpose (the binaries are in bin/), and the space is
+      # what the script-tools image needs.
+      # Hosted only: a self-hosted runner manages its own disk.
+      - name: Free the first build's space
+        if: runner.environment == 'github-hosted'
+        run: |
+          docker buildx prune -af > /dev/null
+          go clean -cache || true
+          df -h /
+      - id: script-tools-meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.SCRIPT_TOOLS_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - id: script-tools-image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: deploy/Dockerfile.script-tools
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.script-tools-meta.outputs.tags }}
+          labels: ${{ steps.script-tools-meta.outputs.labels }}
+          cache-from: type=gha,scope=script-tools-image
+          cache-to: type=gha,mode=max,scope=script-tools-image
+
+      # Sign by digest, never by tag: a tag can be moved after signing.
+      - name: Sign images (keyless)
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          SCRIPT_TOOLS_DIGEST: ${{ steps.script-tools-image.outputs.digest }}
+        run: |
+          cosign sign --yes "${IMAGE}@${IMAGE_DIGEST}"
+          cosign sign --yes "${SCRIPT_TOOLS_IMAGE}@${SCRIPT_TOOLS_DIGEST}"
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        env:
+          HOME: ${{ env.DOCKER_LOGIN_HOME }}
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        env:
+          HOME: ${{ env.DOCKER_LOGIN_HOME }}
+        with:
+          subject-name: ${{ env.SCRIPT_TOOLS_IMAGE }}
+          subject-digest: ${{ steps.script-tools-image.outputs.digest }}
+          push-to-registry: true
+
+      - run: cd bin/agents && sha256sum * > SHA256SUMS
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          # Everything published from bin/agents: agents, tray, the Python
+          # runtimes package.py adds, and SHA256SUMS itself.
+          subject-path: bin/agents/*
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: .
+          format: spdx-json
+          output-file: bin/mustra-${{ github.ref_name }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            bin/agents/*
+            bin/mustra-${{ github.ref_name }}.spdx.json
+          generate_release_notes: true

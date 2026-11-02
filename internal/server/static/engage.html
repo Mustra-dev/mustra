@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engage — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; line-height: 1.6; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .form-grid textarea { min-height: 62px; resize: vertical; }
+  .sec-head { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 16px 0 6px; }
+  .q-row { display: grid; grid-template-columns: 120px minmax(0,2fr) minmax(0,2fr) auto auto;
+    gap: 8px; align-items: center; margin-bottom: 6px; }
+  .q-row input[type=text], .q-row select {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); font: inherit; min-width: 0; font-size: 12.5px; }
+  .q-row .req-box { display: flex; align-items: center; gap: 5px; font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; }
+  /* On a phone the five-column row left the question and its options a
+     few pixels each: give each its own line, with required and Remove
+     sharing the last. */
+  @media (max-width: 760px) {
+    .q-row { grid-template-columns: minmax(0, 1fr) auto; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+    .q-row > select, .q-row > input[type=text] { grid-column: 1 / -1; }
+  }
+  .sv-score { font-size: 30px; font-weight: 700; line-height: 1; }
+  .sv-score .unit { font-size: 15px; font-weight: 500; color: var(--text-muted); }
+  .sv-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .sv-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--surface-2); }
+  .sv-card .k { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 6px; }
+  .sv-bar { height: 7px; border-radius: 999px; background: var(--surface); overflow: hidden; margin-top: 8px; }
+  .sv-bar > i { display: block; height: 100%; background: var(--viz-progress); }
+  .qbreak { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; }
+  .qbreak h4 { margin: 0 0 8px; font-size: 13px; }
+  .qbreak .tally { display: flex; flex-wrap: wrap; gap: 6px; }
+  .qbreak .tally span { font-size: var(--fs-meta); padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); }
+  .qbreak blockquote { margin: 6px 0 0; padding: 7px 11px; border-left: 2px solid var(--border);
+    font-size: 12.5px; color: var(--text-muted); white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div id="engage-page-head"></div>
+    <div id="engage-quick-links"></div>
+
+    <div class="module-section" id="section-surveys" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Surveys</h2><span class="scan-status" id="sv-status"></span></div>
+        <p class="hint">
+          A survey rides the same channel as a notification — the Self Service window, with a toast as the nudge —
+          and stores a different kind of answer. The sentiment score is the average of the scoreable answers,
+          nothing cleverer: ratings map 1–5 onto 0–100, and a choice counts only where you have said which options
+          are the good ones. <b>Free text is never scored</b>, because inferring a mood from prose by counting words
+          produces a number nobody can check.
+          <br><br>
+          Under <b id="sv-min">5</b> answers no score is given. A low response rate is said out loud rather than
+          hidden behind the number, because the people who answer an unprompted survey are rarely the indifferent
+          ones. <b>“No thanks” is recorded as its own answer</b> — it is the only thing separating a question nobody
+          wanted from one nobody was asked — and it is counted, never scored.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Survey</th><th>Sentiment</th><th>Replies</th><th>Response rate</th><th>Questions</th><th>Action</th></tr></thead>
+            <tbody id="sv-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="sv-detail-panel" hidden>
+        <div class="panel-header"><h2 id="sv-detail-title">Results</h2><button class="ghost" id="sv-detail-close">Close</button></div>
+        <div class="sv-cards" id="sv-detail-cards"></div>
+        <div id="sv-detail-questions"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2 id="sv-form-title">New survey</h2><span class="scan-status" id="sv-save-status"></span></div>
+        <div class="form-grid">
+          <div><label for="f-name">Name (yours)</label><input id="f-name" type="text" placeholder="Post-migration check-in"></div>
+          <div><label for="f-title">Title (what they see)</label><input id="f-title" type="text" placeholder="How did last week's migration go?"></div>
+          <div><label for="f-deadline">Stops being asked after</label><input id="f-deadline" type="datetime-local"></div>
+        </div>
+        <div class="form-grid">
+          <div class="u-gc-full"><label for="f-intro">Intro</label><textarea id="f-intro" placeholder="Two minutes, and it decides what we do next."></textarea></div>
+        </div>
+        <label class="u-d-flex u-ai-center u-gap-7 u-fs-12_5 u-mb-10">
+          <input type="checkbox" id="f-anon"> Anonymous — the endpoint strips the name and hostname before sending
+        </label>
+        <div class="sec-head">Questions</div>
+        <p class="hint">
+          A rating is scored. A choice is scored only if you mark the positive options (comma-separated, matching the
+          options exactly). Text is collected and shown, never scored.
+        </p>
+        <div id="q-rows"></div>
+        <button class="ghost" id="q-add" type="button">Add a question</button>
+        <div class="btn-bar u-mt-14">
+          <button class="primary" id="f-save">Save survey</button>
+          <button class="ghost" id="f-reset">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-send" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Ask the fleet</h2><span class="scan-status" id="s-result"></span></div>
+        <p class="hint">
+          Offline endpoints are skipped rather than queued, for the same reason a notice is: a question that surfaces
+          whenever the laptop next wakes is asking about something the person has stopped thinking about. Only the
+          endpoints that actually accepted the survey count towards the response rate.
+        </p>
+        <div class="form-grid">
+          <div><label for="s-survey">Survey</label><select id="s-survey"></select></div>
+          <div><label for="s-group">Computer group</label><select id="s-group"><option value="">Every online endpoint</option></select></div>
+          <div><label for="s-agent">Or one endpoint</label><select id="s-agent"><option value="">—</option></select></div>
+        </div>
+        <button class="primary" id="s-send">Ask</button>
+      </div>
+    </div>
+
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+let surveys = [];
+let agents = [];
+let groups = [];
+let editingID = null;
+let qRows = [];
+
+document.addEventListener("mustra:user", () => {
+  initModuleSections([
+    { hash: "surveys", label: "Surveys" },
+    { hash: "send", label: "Send" },
+  ]);
+  renderPageHead("engage-page-head", "/engage", { title: "Engage",
+    sub: "Ask the people who use the fleet how it is going — and score it honestly." });
+  renderQuickLinks("engage-quick-links", "/engage", null, [
+    { label: "Notify", href: "/eun", icon: "alert" },
+    { label: "Deployments", href: "/patches#deployments", icon: "list" },
+  ]);
+  document.getElementById("q-add").addEventListener("click", () => { qRows.push(blankQ()); renderQRows(); });
+  document.getElementById("f-save").addEventListener("click", saveSurvey);
+  document.getElementById("f-reset").addEventListener("click", resetForm);
+  document.getElementById("s-send").addEventListener("click", sendSurvey);
+  document.getElementById("sv-detail-close").addEventListener("click", () => {
+    document.getElementById("sv-detail-panel").hidden = true;
+  });
+  resetForm();
+  load();
+  loadTargets();
+});
+
+function blankQ() { return { id: "", kind: "rating", text: "", options: "", positive: "", required: false }; }
+
+function renderQRows() {
+  const host = document.getElementById("q-rows");
+  host.innerHTML = "";
+  qRows.forEach((q, i) => {
+    const row = document.createElement("div");
+    row.className = "q-row";
+    row.innerHTML = `
+      <select data-k="kind" aria-label="Question type">
+        <option value="rating">Rating 1–5</option>
+        <option value="choice">Choice</option>
+        <option value="text">Free text</option>
+      </select>
+      <input type="text" data-k="text" placeholder="What are you asking?" aria-label="Question">
+      <input type="text" data-k="options" placeholder="Options, comma-separated" aria-label="Answer options, comma-separated">
+      <label class="req-box"><input type="checkbox" data-k="required"> required</label>
+      <button class="ghost" data-k="del" type="button">Remove</button>`;
+    row.querySelector('[data-k="kind"]').value = q.kind;
+    row.querySelector('[data-k="text"]').value = q.text;
+    const opts = row.querySelector('[data-k="options"]');
+    opts.value = q.kind === "choice" ? q.options : "";
+    opts.disabled = q.kind !== "choice";
+    if (q.kind !== "choice") opts.placeholder = "—";
+    row.querySelector('[data-k="required"]').checked = !!q.required;
+    row.querySelector('[data-k="kind"]').addEventListener("change", e => { q.kind = e.target.value; renderQRows(); });
+    row.querySelector('[data-k="text"]').addEventListener("input", e => { q.text = e.target.value; });
+    opts.addEventListener("input", e => { q.options = e.target.value; });
+    row.querySelector('[data-k="required"]').addEventListener("change", e => { q.required = e.target.checked; });
+    row.querySelector('[data-k="del"]').addEventListener("click", () => { qRows.splice(i, 1); renderQRows(); });
+    host.appendChild(row);
+    if (q.kind === "choice") {
+      const pos = document.createElement("div");
+      pos.className = "q-row";
+      pos.style.gridTemplateColumns = "120px 1fr";
+      pos.innerHTML = `<label class="req-box">positive options</label><input type="text" placeholder="Leave empty to collect without scoring">`;
+      const inp = pos.querySelector("input");
+      inp.value = q.positive;
+      inp.addEventListener("input", e => { q.positive = e.target.value; });
+      host.appendChild(pos);
+    }
+  });
+  if (!qRows.length) host.innerHTML = '<p class="hint u-m-0">No questions yet.</p>';
+}
+
+function resetForm() {
+  editingID = null;
+  qRows = [blankQ()];
+  ["f-name", "f-title", "f-intro", "f-deadline"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("f-anon").checked = false;
+  document.getElementById("sv-form-title").textContent = "New survey";
+  document.getElementById("sv-save-status").textContent = "";
+  renderQRows();
+}
+
+function splitList(s) {
+  return (s || "").split(",").map(x => x.trim()).filter(Boolean);
+}
+
+async function saveSurvey() {
+  const status = document.getElementById("sv-save-status");
+  const body = {
+    name: document.getElementById("f-name").value.trim(),
+    title: document.getElementById("f-title").value.trim(),
+    intro: document.getElementById("f-intro").value.trim(),
+    anonymous: document.getElementById("f-anon").checked,
+    questions: qRows.map((q, i) => {
+      const out = { id: q.id || ("q" + (i + 1)), kind: q.kind, text: q.text.trim(), required: !!q.required };
+      if (q.kind === "choice") { out.options = splitList(q.options); out.positive = splitList(q.positive); }
+      return out;
+    }),
+  };
+  const dl = document.getElementById("f-deadline").value;
+  if (dl) body.deadline_at = new Date(dl).toISOString();
+  status.textContent = "saving…";
+  const resp = await fetch(editingID ? `/api/surveys/${editingID}` : "/api/surveys", {
+    method: editingID ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = '<span class="u-c-ok">saved</span>';
+  resetForm();
+  load();
+}
+
+function bandPill(s) {
+  const thin = (s.band || "").endsWith("_thin");
+  const base = (s.band || "").replace("_thin", "");
+  if (s.sentiment == null) return '<span class="state-pill state-not_applicable">no score yet</span>';
+  const cls = base === "good" ? "state-installed" : base === "mixed" ? "state-update_eligible" : "state-not_applicable";
+  return `<span class="state-pill ${cls}">${escapeHtml(s.sentiment)} ${escapeHtml(base)}${thin ? " · thin" : ""}</span>`;
+}
+
+async function load() {
+  const r = await fetch("/api/surveys");
+  if (!r.ok) { document.getElementById("sv-body").innerHTML = '<tr><td class="empty" colspan="6">could not load</td></tr>'; return; }
+  const d = await r.json();
+  surveys = d.surveys || [];
+  document.getElementById("sv-min").textContent = d.min_responses;
+  document.getElementById("sv-status").textContent =
+    `${surveys.length} survey(s) · ${surveys.filter(s => s.sentiment != null).length} scoreable`;
+  document.getElementById("sv-body").innerHTML = surveys.length ? surveys.map(s => `<tr>
+    <td><b>${escapeHtml(s.name)}</b><div class="hint u-m-2-0-0">${escapeHtml(s.title)}${s.anonymous ? " · anonymous" : ""}</div></td>
+    <td>${bandPill(s)}<div class="hint u-m-3-0-0 u-maxw-340 u-ws-normal">${escapeHtml(s.reason)}</div></td>
+    <td>${escapeHtml(s.counts.answered)}${s.counts.declined ? ` <span class="hint">+${escapeHtml(s.counts.declined)} declined</span>` : ""}</td>
+    <td>${s.response_rate == null ? "—" : `${Math.round(s.response_rate * 100)}% <span class="hint">of ${escapeHtml(s.counts.sent)} ${s.rate_basis === "replies" ? "· replies" : ""}</span>`}</td>
+    <td>${escapeHtml((s.questions || []).length)}</td>
+    <td class="u-ws-nowrap">
+      <button class="ghost" data-act="view" data-id="${escapeHtml(s.id)}">Results</button>
+      <button class="ghost" data-act="edit" data-id="${escapeHtml(s.id)}">Edit</button>
+      <button class="ghost" data-act="del" data-id="${escapeHtml(s.id)}">Delete</button>
+    </td></tr>`).join("") : '<tr><td class="empty" colspan="6">no surveys yet</td></tr>';
+  document.querySelectorAll('#sv-body button[data-act]').forEach(b =>
+    b.addEventListener("click", () => rowAction(b.dataset.act, b.dataset.id)));
+  const sel = document.getElementById("s-survey");
+  sel.innerHTML = surveys.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join("");
+}
+
+async function rowAction(act, id) {
+  const s = surveys.find(x => x.id === id);
+  if (act === "del") {
+    if (!s || !confirm(`Delete "${s.name}"? Its answers go with it.`)) return;
+    await fetch(`/api/surveys/${encodeURIComponent(id)}`, { method: "DELETE" });
+    load();
+    return;
+  }
+  if (act === "edit") {
+    if (!s) return;
+    editingID = s.id;
+    document.getElementById("f-name").value = s.name;
+    document.getElementById("f-title").value = s.title;
+    document.getElementById("f-intro").value = s.intro || "";
+    document.getElementById("f-anon").checked = !!s.anonymous;
+    document.getElementById("f-deadline").value = s.deadline_at ? s.deadline_at.slice(0, 16) : "";
+    qRows = (s.questions || []).map(q => ({
+      id: q.id, kind: q.kind, text: q.text, required: !!q.required,
+      options: (q.options || []).join(", "), positive: (q.positive || []).join(", "),
+    }));
+    if (!qRows.length) qRows = [blankQ()];
+    document.getElementById("sv-form-title").textContent = "Editing " + s.name;
+    renderQRows();
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    return;
+  }
+  const r = await fetch(`/api/surveys/${encodeURIComponent(id)}`);
+  if (!r.ok) return;
+  renderDetail(await r.json());
+}
+
+function renderDetail(d) {
+  const s = d.summary;
+  document.getElementById("sv-detail-panel").hidden = false;
+  document.getElementById("sv-detail-title").textContent = "Results — " + s.name;
+  const rate = s.response_rate == null ? 0 : Math.round(s.response_rate * 100);
+  document.getElementById("sv-detail-cards").innerHTML = `
+    <div class="sv-card"><div class="k">Sentiment</div>
+      <div class="sv-score">${s.sentiment == null ? '<span class="unit">no score</span>' : `${escapeHtml(s.sentiment)}<span class="unit">/100</span>`}</div>
+      <div class="hint u-m-6-0-0 u-ws-normal">${escapeHtml(s.reason)}</div></div>
+    <div class="sv-card"><div class="k">Response rate</div>
+      <div class="sv-score">${rate}<span class="unit">%</span></div>
+      <div class="sv-bar"><i${sx(`width:${Math.min(rate, 100)}%`)}></i></div>
+      <div class="hint u-m-6-0-0 u-ws-normal">${s.rate_basis === "replies"
+        ? `${escapeHtml(s.counts.answered + s.counts.declined)} replies from ${escapeHtml(s.counts.sent)} asked — anonymous answers cannot be attributed, so this counts replies, not machines, and can pass 100%`
+        : `${escapeHtml(s.counts.responded)} of ${escapeHtml(s.counts.sent)} endpoints asked have replied`}</div></div>
+    <div class="sv-card"><div class="k">Declined</div>
+      <div class="sv-score">${escapeHtml(s.counts.declined)}</div>
+      <div class="hint u-m-6-0-0 u-ws-normal">Counted, never scored. Not answering is not the same as being unhappy.</div></div>
+    <div class="sv-card"><div class="k">Scored answers</div>
+      <div class="sv-score">${escapeHtml(s.scored_answers)}</div>
+      <div class="hint u-m-6-0-0 u-ws-normal">Free text is collected and shown, never turned into a number.</div></div>`;
+  document.getElementById("sv-detail-questions").innerHTML = (s.per_question || []).map(q => `
+    <div class="qbreak">
+      <h4>${escapeHtml(q.text)} <span class="hint">· ${escapeHtml(q.kind)} · ${escapeHtml(q.answers)} answer(s)</span></h4>
+      ${q.average != null ? `<div class="u-fs-13 u-mb-7">average <b>${q.average.toFixed(2)}</b> of 5</div>` : ""}
+      ${q.counts ? `<div class="tally">${Object.entries(q.counts).sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => `<span>${escapeHtml(k)} · ${escapeHtml(n)}</span>`).join("")}</div>` : ""}
+      ${(q.samples || []).map(t => `<blockquote>${escapeHtml(t)}</blockquote>`).join("")}
+    </div>`).join("") || '<p class="hint">Nothing has come back yet.</p>';
+}
+
+async function loadTargets() {
+  try {
+    const [ar, gr] = await Promise.all([fetch("/api/agents"), fetch("/api/groups")]);
+    if (ar.ok) {
+      const d = await ar.json();
+      agents = (d.agents || d || []).filter(a => a.online);
+      document.getElementById("s-agent").innerHTML = '<option value="">—</option>' +
+        agents.map(a => `<option value="${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)}</option>`).join("");
+    }
+    if (gr.ok) {
+      const d = await gr.json();
+      groups = d.groups || d || [];
+      document.getElementById("s-group").innerHTML = '<option value="">Every online endpoint</option>' +
+        groups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("");
+    }
+  } catch (e) { /* the page is still usable without the pickers */ }
+}
+
+async function sendSurvey() {
+  const result = document.getElementById("s-result");
+  const id = document.getElementById("s-survey").value;
+  if (!id) { result.textContent = "write a survey first"; return; }
+  const agent = document.getElementById("s-agent").value;
+  const group = document.getElementById("s-group").value;
+  const s = surveys.find(x => x.id === id);
+  const who = agent ? "that endpoint" : group ? "that group" : "every online endpoint";
+  if (!confirm(`Ask "${s ? s.name : id}" of ${who}?`)) return;
+  result.textContent = "sending…";
+  const resp = await fetch(`/api/surveys/${encodeURIComponent(id)}/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_ids: agent ? [agent] : [], group_id: agent ? "" : group }),
+  });
+  if (!resp.ok) { result.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  const out = await resp.json();
+  result.innerHTML = `<span class="u-c-ok">${escapeHtml(out.message)} — deployment ${escapeHtml(out.run_id)}</span>`;
+  setTimeout(load, 1500);
+}
+</script>
+</body>
+</html>

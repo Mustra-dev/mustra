@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reveal — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+  .pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
+  .pill.confirmed { background: var(--off-bg); color: var(--off); }
+  .pill.unconfirmed { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.muted { background: var(--surface-2); color: var(--text-muted); }
+  .pill.running { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .snippet { font-family: var(--mono); font-size: var(--fs-meta); color: var(--text-muted); white-space: normal; max-width: 420px; word-break: break-all; }
+  .path { font-family: var(--mono); font-size: var(--fs-meta); word-break: break-all; max-width: 380px; white-space: normal; }
+  .rule-row { cursor: pointer; } .rule-row:hover { background: var(--surface-2); }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px 16px; }
+  .editor .wide { grid-column: 1 / -1; }
+  .editor textarea { width: 100%; min-height: 64px; font-family: var(--mono); font-size: var(--fs-meta); }
+  .editor input[type=text], .editor input[type=number] { width: 100%; }
+  .checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 12px; }
+  .checks label { font-size: 12px; display: flex; gap: 6px; align-items: flex-start; }
+  .checks label small { color: var(--text-muted); }
+  .custom-row { display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; margin-bottom: 6px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--off); }
+  .rank { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 12.5px; align-items: center; }
+  .rank .bar { grid-column: 1 / -1; margin-bottom: 4px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 10px; }
+  .filters .field { margin: 0; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-overview" hidden>
+      <div id="reveal-page-head"></div>
+      <div id="reveal-quick-links"></div>
+      <div class="stat-tiles" id="reveal-tiles"></div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-header"><h2>Confirmed findings by pattern</h2></div><div class="rank" id="by-pattern"></div></div>
+        <div class="panel"><div class="panel-header"><h2>Endpoints with the most confirmed files</h2></div><div class="rank" id="by-endpoint"></div></div>
+      </div>
+      <div class="panel u-mt-14">
+        <div class="panel-header"><h2>How this works</h2></div>
+        <p class="hint u-m-0">A rule names patterns, roots and endpoints. The agent walks the files on the endpoint, runs the patterns there, and confirms matches with validators — the Luhn check for card numbers, the Social Security Administration's rules for SSNs, mod-97 for IBANs — so a version string with sixteen digits is not a finding. What comes back is the path, the size, the modification time and a masked snippet. The file's contents never leave the machine. Office documents (docx, xlsx, pptx, odt, ods) are read; PDFs and binaries are not.</p>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-rules" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Rules</h2><span class="scan-status" id="rules-status"></span></div>
+        <div class="actions u-m-0-0-10">
+          <button class="primary" id="rule-new">New rule</button>
+          <select id="rule-template" aria-label="Start from a template"><option value="">Start from a template…</option></select>
+        </div>
+        <div class="table-scroll"><table><thead><tr><th>Rule</th><th>Patterns</th><th>Targets</th><th>Every</th><th>State</th><th class="num">Confirmed files</th><th>Action</th></tr></thead><tbody id="rules-body"></tbody></table></div>
+      </div>
+      <div class="panel" id="rule-editor" hidden>
+        <div class="panel-header"><h2 id="rule-editor-title">Rule</h2><span class="scan-status" id="rule-editor-status"></span></div>
+        <div class="editor">
+          <div class="field"><label for="rl-name">Name</label><input type="text" id="rl-name"></div>
+          <div class="field"><label for="rl-interval">Scan every (hours)</label><input type="number" id="rl-interval" min="1" max="720" value="24"></div>
+          <div class="field wide"><label for="rl-desc">Description</label><input type="text" id="rl-desc"></div>
+          <div class="field wide"><label>Patterns</label><div class="checks" id="rl-patterns"></div></div>
+          <div class="field wide"><label>Custom patterns (RE2 syntax; no lookahead)</label><div id="rl-custom"></div><button class="tiny" id="rl-custom-add">Add custom pattern</button></div>
+          <div class="field"><label for="rl-roots-linux">Roots — Linux (one per line)</label><textarea id="rl-roots-linux"></textarea></div>
+          <div class="field"><label for="rl-roots-darwin">Roots — macOS</label><textarea id="rl-roots-darwin"></textarea></div>
+          <div class="field"><label for="rl-roots-windows">Roots — Windows</label><textarea id="rl-roots-windows"></textarea></div>
+          <div class="field"><label for="rl-ext">Extensions (comma-separated; blank = the built-in text set)</label><input type="text" id="rl-ext" placeholder="txt, csv, xlsx, docx, log"></div>
+          <div class="field"><label for="rl-exclude">Exclude directory names or path prefixes (comma-separated)</label><input type="text" id="rl-exclude" placeholder="node_modules, .git, /var/www/cache"></div>
+          <div class="field"><label for="rl-size">Largest file to read (MB)</label><input type="number" id="rl-size" min="1" max="8" value="5"></div>
+          <div class="field"><label for="rl-days">Only files modified within (days; 0 = any)</label><input type="number" id="rl-days" min="0" value="0"></div>
+          <div class="field"><label for="rl-min">Matches per file before it counts</label><input type="number" id="rl-min" min="1" value="1"></div>
+          <div class="field wide"><label for="rl-pairs">Require two patterns near each other (one per line: <code>patternA patternB distance</code>)</label>
+            <textarea id="rl-pairs" placeholder="card_number expiry_date 120"></textarea>
+            <small class="hint u-d-block u-mt-4">Leave blank for none. With pairs set, a file is reported only if one listed pair matched within that many characters — which is what separates a card number beside an expiry date from any sixteen digits. Distance is measured between the nearest edges, so order does not matter.</small></div>
+          <div class="field"><label for="rl-groups">Targets</label><select id="rl-groups" multiple size="5" aria-label="Computer groups"></select><small class="hint u-d-block u-mt-4">Nothing selected means every endpoint.</small></div>
+          <div class="field"><label>Options</label>
+            <label class="dep-check"><input type="checkbox" id="rl-enabled" checked> Enabled — runs on its schedule</label>
+            <label class="dep-check"><input type="checkbox" id="rl-snippets" checked> Return a masked snippet per finding</label>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="rl-save">Save rule</button>
+          <button id="rl-run">Save and scan now</button>
+          <button id="rl-cancel">Close</button>
+          <button class="danger" id="rl-delete" hidden>Delete rule</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-rulesets" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Rule sets</h2><div class="u-d-flex u-gap-8"><button class="tiny go" id="rs-new">New rule set</button></div></div>
+        <p class="hint">
+          A regime as you actually work in it: a few rules aimed at a few groups, turned on or off as one thing. Saving a set
+          writes its targeting and its enabled state onto the rules it names, so the Rules tab never disagrees with it —
+          there is still one answer to where a rule runs. Deleting a set disables the rules it turned on, because a scan
+          nobody remembers asking for is worse than no scan.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Regime</th><th>Rules</th><th>Targets</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="rs-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel" id="rs-editor" hidden>
+        <h2 id="rs-editor-title">New rule set</h2>
+        <div class="form-grid">
+          <div class="field"><label for="rs-name">Name</label><input type="text" id="rs-name" placeholder="Cardholder data"></div>
+          <div class="field"><label for="rs-regime">Regime</label><input type="text" id="rs-regime" list="rs-regimes" placeholder="PCI-DSS"><datalist id="rs-regimes"></datalist></div>
+          <div class="field wide"><label for="rs-desc">Description</label><input type="text" id="rs-desc"></div>
+          <div class="field"><label for="rs-rules">Rules in this set</label><select id="rs-rules" multiple size="6"></select></div>
+          <div class="field"><label for="rs-groups">Targets</label><select id="rs-groups" multiple size="6"></select>
+            <small class="hint u-d-block u-mt-4">Nothing selected means every endpoint.</small></div>
+          <div class="field"><label>State</label>
+            <label class="dep-check"><input type="checkbox" id="rs-enabled"> Enabled — its rules run on their schedules</label></div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="rs-save">Save rule set</button>
+          <button id="rs-cancel">Close</button>
+          <button class="danger" id="rs-delete" hidden>Delete rule set</button>
+        </div>
+        <p class="hint" id="rs-msg"></p>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-results" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Results</h2><span class="scan-status" id="results-status"></span></div>
+        <div class="filters">
+          <div class="field"><label for="rf-rule">Rule</label><select id="rf-rule"><option value="">all</option></select></div>
+          <div class="field"><label for="rf-pattern">Pattern</label><select id="rf-pattern"><option value="">all</option></select></div>
+          <div class="field"><label for="rf-endpoint">Endpoint</label><input type="text" id="rf-endpoint" placeholder="hostname contains"></div>
+          <div class="field"><label class="dep-check u-mt-18"><input type="checkbox" id="rf-confirmed" checked> Confirmed only</label></div>
+          <div class="field"><button class="tiny" id="rf-export">Export CSV</button></div>
+        </div>
+        <div class="table-scroll"><table><thead><tr><th>Endpoint</th><th>File</th><th>Pattern</th><th class="num">Confirmed</th><th class="num">Matched</th><th>Snippet</th><th>Modified</th><th>Seen</th></tr></thead><tbody id="results-body"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-search" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Quick search</h2><span class="scan-status" id="search-status"></span></div>
+        <p class="hint">One string or expression, sent now to the endpoints you pick. It runs as a throwaway rule that is kept for a day. Case-insensitive unless you tick regular expression.</p>
+        <div class="editor">
+          <div class="field wide"><label for="qs-query">Search for</label><input type="text" id="qs-query" placeholder="an account number, a project codename, a hostname…"></div>
+          <div class="field"><label>Options</label>
+            <label class="dep-check"><input type="checkbox" id="qs-regex"> Regular expression</label></div>
+          <div class="field"><label for="qs-ext">Extensions (blank = text set)</label><input type="text" id="qs-ext"></div>
+          <div class="field"><label for="qs-roots">Roots (comma-separated; blank = home directories, /etc, web roots)</label><input type="text" id="qs-roots"></div>
+          <div class="field"><label for="qs-agents">Endpoints</label><select id="qs-agents" multiple size="6" aria-label="Endpoints"></select><small class="hint u-d-block u-mt-4">Nothing selected means every online endpoint.</small></div>
+        </div>
+        <div class="actions"><button class="primary" id="qs-go">Search</button></div>
+        <div id="qs-progress" class="u-mt-12"></div>
+        <div class="table-scroll u-mt-10"><table><thead><tr><th>Endpoint</th><th>File</th><th class="num">Hits</th><th>Snippet</th></tr></thead><tbody id="qs-body"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-scans" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Scans</h2><span class="scan-status" id="scans-status"></span></div>
+        <p class="hint">What each endpoint last did for each rule. Truncated means the scan hit its budget — 200,000 files or fifteen minutes — and did not see everything; its older findings are kept rather than retired.</p>
+        <div class="table-scroll"><table><thead><tr><th>Rule</th><th>Endpoint</th><th>State</th><th class="num">Seen</th><th class="num">Scanned</th><th class="num">Matched</th><th class="num">Skipped</th><th>Dispatched</th><th>Took</th><th>Note</th></tr></thead><tbody id="scans-body"></tbody></table></div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let patterns = [], rules = [], groups = [], agents = [], templates = [], patternNames = {};
+let editing = null;
+
+document.addEventListener("mustra:user", async (e) => {
+  initModuleSections([
+    { hash: "overview", label: "Overview" },
+    { hash: "rules", label: "Rules" },
+    { hash: "rulesets", label: "Rule Sets" },
+    { hash: "results", label: "Results" },
+    { hash: "search", label: "Quick Search" },
+    { hash: "scans", label: "Scans" },
+  ]);
+  renderPageHead("reveal-page-head", "/reveal", { title: "Reveal" });
+  renderQuickLinks("reveal-quick-links", "/reveal", e.detail);
+  const [p, g, a, t] = await Promise.all([
+    fetch("/api/reveal/patterns").then(r => r.ok ? r.json() : { patterns: [] }),
+    fetch("/api/groups").then(r => r.ok ? r.json() : { groups: [] }).catch(() => ({ groups: [] })),
+    fetch("/api/agents").then(r => r.ok ? r.json() : { agents: [] }),
+    fetch("/api/reveal/templates").then(r => r.ok ? r.json() : { templates: [] }),
+  ]);
+  patterns = p.patterns || []; groups = g.groups || []; agents = a.agents || a || []; templates = t.templates || [];
+  patterns.forEach(x => patternNames[x.id] = x.name);
+  document.getElementById("rl-patterns").innerHTML = patterns.map(x => `<label><input type="checkbox" value="${escapeHtml(x.id)}"> <span>${escapeHtml(x.name)}<br><small class="mono">${escapeHtml(x.regex)}${x.validate ? " · " + escapeHtml(x.validate) : ""}</small></span></label>`).join("");
+  document.getElementById("rl-groups").innerHTML = groups.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join("");
+  document.getElementById("qs-agents").innerHTML = agents.filter(x => x.online).sort((x, y) => x.hostname.localeCompare(y.hostname)).map(x => `<option value="${escapeHtml(x.agent_id)}">${escapeHtml(x.hostname)} · ${escapeHtml(x.os)}</option>`).join("");
+  document.getElementById("rule-template").innerHTML = '<option value="">Start from a template…</option>' + templates.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join("");
+  document.getElementById("rf-pattern").innerHTML = '<option value="">all</option>' + patterns.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join("");
+  loadOverview(); loadRules(); loadResults(); loadScans(); loadRuleSets();
+});
+
+async function loadOverview() {
+  const resp = await fetch("/api/reveal/overview");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const d = await resp.json(), s = d.summary || {};
+  patternNames = Object.assign(patternNames, d.pattern_names || {});
+  document.getElementById("reveal-tiles").innerHTML = [
+    { label: "Endpoints with confirmed data", value: s.endpoints_with_confirmed || 0, cls: s.endpoints_with_confirmed ? "bad" : "ok" },
+    { label: "Only unconfirmed matches", value: s.endpoints_with_unconfirmed || 0 },
+    { label: "Confirmed files", value: s.confirmed_files || 0, cls: s.confirmed_files ? "bad" : "" },
+    { label: "Endpoints scanned", value: `${s.endpoints_scanned || 0} / ${d.endpoints || 0}` },
+    { label: "Scans running", value: s.endpoints_running || 0 },
+    { label: "Rules enabled", value: `${d.rules_enabled || 0} / ${d.rules || 0}` },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+  const rank = (el, m, name) => {
+    const entries = Object.entries(m || {}).sort((a, b) => b[1] - a[1]);
+    const max = entries.length ? entries[0][1] : 1;
+    el.innerHTML = entries.length ? entries.map(([k, v]) => `<span>${escapeHtml(name(k))}</span><span class="num">${escapeHtml(v)}</span><div class="bar"><i${sx(`width:${Math.round(100 * v / max)}%`)}></i></div>`).join("") : '<span class="empty">nothing confirmed yet</span>';
+  };
+  rank(document.getElementById("by-pattern"), s.by_pattern, k => patternNames[k] || k);
+  rank(document.getElementById("by-endpoint"), s.by_endpoint, k => k);
+}
+
+// ---- rules ----
+
+async function loadRules() {
+  const resp = await fetch("/api/reveal/rules");
+  if (!resp.ok) return;
+  rules = ((await resp.json()).rules || []).filter(r => r.kind !== "quick");
+  const scansResp = await fetch("/api/reveal/scans");
+  const scans = scansResp.ok ? ((await scansResp.json()).scans || []) : [];
+  const resultsResp = await fetch("/api/reveal/results?confirmed=1");
+  const confirmed = resultsResp.ok ? ((await resultsResp.json()).matches || []) : [];
+  const confirmedByRule = {};
+  confirmed.forEach(m => { const k = m.rule_id + "|" + m.agent_id + "|" + m.path; confirmedByRule[m.rule_id] = (confirmedByRule[m.rule_id] || new Set()).add(k); });
+  document.getElementById("rules-status").textContent = rules.length ? `${rules.length}` : "";
+  document.getElementById("rf-rule").innerHTML = '<option value="">all</option>' + rules.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`).join("");
+  const body = document.getElementById("rules-body");
+  body.innerHTML = rules.length === 0
+    ? '<tr><td class="empty" colspan="7">no rules yet — start from a template above</td></tr>'
+    : rules.map(r => {
+      const mine = scans.filter(s => s.rule_id === r.id);
+      const running = mine.filter(s => !s.finished_at).length, done = mine.filter(s => s.finished_at).length;
+      const targets = r.group_ids.length ? r.group_ids.map(id => (groups.find(g => g.id === id) || {}).name || id).join(", ") : "every endpoint";
+      const pats = [...r.pattern_ids.map(id => patternNames[id] || id), ...r.custom_patterns.map(c => c.name)].join(", ");
+      return `<tr class="rule-row" data-id="${escapeHtml(r.id)}">
+        <td><strong>${escapeHtml(r.name)}</strong><br><small class="u-c-text-muted">${escapeHtml(r.description || "")}</small></td>
+        <td class="u-ws-normal u-maxw-260">${escapeHtml(pats)}</td>
+        <td class="u-ws-normal u-maxw-200">${escapeHtml(targets)}</td>
+        <td>${escapeHtml(r.interval_hours)}h</td>
+        <td>${r.enabled ? '<span class="pill ok">enabled</span>' : '<span class="pill muted">disabled</span>'} ${running ? `<span class="pill running">${escapeHtml(running)} running</span>` : ""} ${done ? `<span class="pill muted">${escapeHtml(done)} scanned</span>` : ""}</td>
+        <td class="num">${escapeHtml((confirmedByRule[r.id] || new Set()).size)}</td>
+        <td class="row-actions"><button class="tiny go" data-run="${escapeHtml(r.id)}">scan now</button></td>
+      </tr>`;
+    }).join("");
+  body.querySelectorAll(".rule-row").forEach(tr => tr.addEventListener("click", ev => { if (ev.target.tagName === "BUTTON") return; openRule(rules.find(r => r.id === tr.dataset.id)); }));
+  body.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", () => runRule(b.dataset.run)));
+}
+
+document.getElementById("rule-new").addEventListener("click", () => openRule({ id: "", name: "", description: "", enabled: true, group_ids: [], roots: { linux: ["/home"], darwin: ["/Users"], windows: ["C:\\Users"] }, exclude: [], extensions: [], max_size_bytes: 5 << 20, modified_within_days: 0, pattern_ids: [], custom_patterns: [], min_matches: 1, interval_hours: 24, snippets: true }));
+document.getElementById("rule-template").addEventListener("change", e => { const t = templates.find(x => x.id === e.target.value); if (t) openRule({ ...t, id: "" }); e.target.value = ""; });
+
+function openRule(r) {
+  editing = r;
+  document.getElementById("rule-editor").hidden = false;
+  document.getElementById("rule-editor-title").textContent = r.id ? "Edit rule" : "New rule";
+  document.getElementById("rl-name").value = r.name || "";
+  document.getElementById("rl-desc").value = r.description || "";
+  document.getElementById("rl-interval").value = r.interval_hours || 24;
+  document.querySelectorAll("#rl-patterns input").forEach(c => c.checked = (r.pattern_ids || []).includes(c.value));
+  document.getElementById("rl-custom").innerHTML = "";
+  (r.custom_patterns || []).forEach(addCustomRow);
+  for (const os of ["linux", "darwin", "windows"]) document.getElementById("rl-roots-" + os).value = ((r.roots || {})[os] || []).join("\n");
+  document.getElementById("rl-ext").value = (r.extensions || []).join(", ");
+  document.getElementById("rl-exclude").value = (r.exclude || []).join(", ");
+  document.getElementById("rl-size").value = Math.max(1, Math.round((r.max_size_bytes || 5 << 20) / (1 << 20)));
+  document.getElementById("rl-days").value = r.modified_within_days || 0;
+  document.getElementById("rl-min").value = r.min_matches || 1;
+  document.getElementById("rl-pairs").value = (r.require_pairs || [])
+    .map(p => `${p.a} ${p.b} ${p.within || 200}`).join("\n");
+  document.querySelectorAll("#rl-groups option").forEach(o => o.selected = (r.group_ids || []).includes(o.value));
+  document.getElementById("rl-enabled").checked = r.enabled !== false;
+  document.getElementById("rl-snippets").checked = r.snippets !== false;
+  document.getElementById("rl-delete").hidden = !r.id;
+  document.getElementById("rule-editor-status").textContent = "";
+  document.getElementById("rule-editor").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function addCustomRow(c = { name: "", regex: "" }) {
+  const row = document.createElement("div"); row.className = "custom-row";
+  row.innerHTML = `<input type="text" placeholder="name" value="${escapeHtml(c.name || "")}"><input type="text" class="mono" placeholder="expression" value="${escapeHtml(c.regex || "")}"><button class="tiny">remove</button>`;
+  row.querySelector("button").addEventListener("click", () => row.remove());
+  document.getElementById("rl-custom").append(row);
+}
+document.getElementById("rl-custom-add").addEventListener("click", () => addCustomRow());
+document.getElementById("rl-cancel").addEventListener("click", () => { document.getElementById("rule-editor").hidden = true; editing = null; });
+
+function readRule() {
+  const csv = id => document.getElementById(id).value.split(",").map(s => s.trim()).filter(Boolean);
+  const lines = id => document.getElementById(id).value.split("\n").map(s => s.trim()).filter(Boolean);
+  return {
+    id: editing ? editing.id : "", name: document.getElementById("rl-name").value.trim(), description: document.getElementById("rl-desc").value.trim(),
+    enabled: document.getElementById("rl-enabled").checked, snippets: document.getElementById("rl-snippets").checked,
+    group_ids: [...document.getElementById("rl-groups").selectedOptions].map(o => o.value),
+    roots: { linux: lines("rl-roots-linux"), darwin: lines("rl-roots-darwin"), windows: lines("rl-roots-windows") },
+    exclude: csv("rl-exclude"), extensions: csv("rl-ext"),
+    max_size_bytes: Number(document.getElementById("rl-size").value) * (1 << 20),
+    modified_within_days: Number(document.getElementById("rl-days").value) || 0,
+    pattern_ids: [...document.querySelectorAll("#rl-patterns input:checked")].map(c => c.value),
+    custom_patterns: [...document.querySelectorAll("#rl-custom .custom-row")].map(r => ({ name: r.children[0].value.trim(), regex: r.children[1].value.trim() })).filter(c => c.regex),
+    min_matches: Number(document.getElementById("rl-min").value) || 1,
+    require_pairs: document.getElementById("rl-pairs").value.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+      const [a, b, within] = l.split(/\s+/);
+      return { a: a || "", b: b || "", within: Number(within) || 200 };
+    }).filter(p => p.a && p.b),
+    interval_hours: Number(document.getElementById("rl-interval").value) || 24,
+  };
+}
+async function saveRule() {
+  const st = document.getElementById("rule-editor-status");
+  st.textContent = "saving…";
+  const resp = await fetch("/api/reveal/rules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(readRule()) });
+  if (!resp.ok) { st.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return null; }
+  const saved = await resp.json();
+  editing = saved;
+  document.getElementById("rl-delete").hidden = false;
+  st.innerHTML = '<span class="u-c-ok">saved</span>';
+  loadRules();
+  return saved;
+}
+document.getElementById("rl-save").addEventListener("click", saveRule);
+document.getElementById("rl-run").addEventListener("click", async () => { const r = await saveRule(); if (r) runRule(r.id); });
+document.getElementById("rl-delete").addEventListener("click", async () => {
+  if (!editing || !editing.id || !confirm(`Delete "${editing.name}" and everything it found?`)) return;
+  await fetch(`/api/reveal/rules/${encodeURIComponent(editing.id)}`, { method: "DELETE" });
+  document.getElementById("rule-editor").hidden = true; editing = null;
+  loadRules(); loadResults(); loadScans(); loadOverview();
+});
+async function runRule(id) {
+  const resp = await fetch(`/api/reveal/rules/${encodeURIComponent(id)}/run`, { method: "POST" });
+  const st = document.getElementById("rules-status");
+  if (!resp.ok) { st.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  const out = await resp.json();
+  st.textContent = `scan sent to ${out.dispatched} endpoint(s)${out.skipped ? `, ${out.skipped} skipped (offline, outside the rule's groups, no roots for that OS, already scanning, or refused the scan)` : ""}`;
+  setTimeout(() => { loadScans(); loadRules(); }, 3000);
+}
+
+// ---- results ----
+
+let lastResults = [];
+async function loadResults() {
+  const q = new URLSearchParams();
+  const rule = document.getElementById("rf-rule").value, pat = document.getElementById("rf-pattern").value;
+  if (rule) q.set("rule", rule); if (pat) q.set("pattern", pat);
+  if (document.getElementById("rf-confirmed").checked) q.set("confirmed", "1");
+  const resp = await fetch("/api/reveal/results?" + q);
+  if (!resp.ok) return;
+  let rows = (await resp.json()).matches || [];
+  const host = document.getElementById("rf-endpoint").value.trim().toLowerCase();
+  if (host) rows = rows.filter(m => (m.hostname || "").toLowerCase().includes(host));
+  lastResults = rows;
+  document.getElementById("results-status").textContent = rows.length ? `${rows.length} file(s)` : "";
+  const body = document.getElementById("results-body");
+  body.innerHTML = rows.length === 0 ? '<tr><td class="empty" colspan="8">nothing matched — or nothing has been scanned yet</td></tr>'
+    : rows.map(m => `<tr>
+        <td><a href="/endpoint/${encodeURIComponent(m.agent_id)}">${escapeHtml(m.hostname || m.agent_id)}</a></td>
+        <td class="path">${escapeHtml(m.path)}<br><small class="u-c-text-muted">${escapeHtml(fmtSize(m.size))}${m.rule_name ? " · " + escapeHtml(m.rule_name) : ""}</small></td>
+        <td>${escapeHtml(patternNames[m.pattern_id] || m.pattern_id)}</td>
+        <td class="num">${m.confirmed ? `<span class="pill confirmed">${escapeHtml(m.confirmed)}</span>` : '<span class="pill unconfirmed">0</span>'}</td>
+        <td class="num">${escapeHtml(m.count)}</td>
+        <td class="snippet">${escapeHtml(m.snippet || "")}</td>
+        <td>${m.modified ? escapeHtml(fmtAgo(m.modified)) : "—"}</td>
+        <td>${escapeHtml(fmtAgo(m.last_seen))}</td></tr>`).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "reveal-results" });
+  if (dt) dt.refresh();
+}
+function fmtSize(n) { if (!n) return "0 B"; if (n < 1024) return n + " B"; if (n < 1048576) return (n / 1024).toFixed(0) + " KB"; return (n / 1048576).toFixed(1) + " MB"; }
+["rf-rule", "rf-pattern", "rf-confirmed"].forEach(id => document.getElementById(id).addEventListener("change", loadResults));
+document.getElementById("rf-endpoint").addEventListener("input", loadResults);
+document.getElementById("rf-export").addEventListener("click", () => {
+  const head = ["hostname", "path", "pattern", "confirmed", "matched", "size", "modified", "last_seen", "snippet"];
+  const lines = [csvRow(head)].concat(lastResults.map(m => csvRow([m.hostname, m.path, m.pattern_id, m.confirmed, m.count, m.size, m.modified || "", m.last_seen, m.snippet || ""])));
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" })); a.download = "mustra-reveal.csv"; a.click(); URL.revokeObjectURL(a.href);
+});
+
+// ---- quick search ----
+
+let quickRule = null, quickTimer = null;
+document.getElementById("qs-go").addEventListener("click", async () => {
+  const st = document.getElementById("search-status");
+  const body = { query: document.getElementById("qs-query").value, regex: document.getElementById("qs-regex").checked,
+    agent_ids: [...document.getElementById("qs-agents").selectedOptions].map(o => o.value),
+    roots: document.getElementById("qs-roots").value.split(",").map(s => s.trim()).filter(Boolean),
+    extensions: document.getElementById("qs-ext").value.split(",").map(s => s.trim()).filter(Boolean) };
+  st.textContent = "sending…";
+  const resp = await fetch("/api/reveal/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { st.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  const out = await resp.json();
+  quickRule = out.rule_id;
+  st.textContent = `sent to ${out.dispatched} endpoint(s)`;
+  document.getElementById("qs-body").innerHTML = "";
+  if (quickTimer) clearInterval(quickTimer);
+  quickTimer = setInterval(pollQuick, 3000);
+  pollQuick();
+});
+async function pollQuick() {
+  if (!quickRule) return;
+  const [sr, rr] = await Promise.all([fetch(`/api/reveal/scans?rule=${encodeURIComponent(quickRule)}`), fetch(`/api/reveal/results?rule=${encodeURIComponent(quickRule)}`)]);
+  if (!sr.ok || !rr.ok) return;
+  const scans = (await sr.json()).scans || [], rows = (await rr.json()).matches || [];
+  const done = scans.filter(s => s.finished_at).length, failed = scans.filter(s => s.error).length;
+  document.getElementById("qs-progress").innerHTML = `${escapeHtml(done)} of ${escapeHtml(scans.length)} endpoint(s) reported${failed ? `, ${escapeHtml(failed)} could not run it` : ""} · ${escapeHtml(rows.length)} file(s) matched`;
+  document.getElementById("qs-body").innerHTML = rows.length === 0 ? `<tr><td class="empty" colspan="4">${done === scans.length && scans.length ? "nothing matched" : "waiting for endpoints…"}</td></tr>`
+    : rows.map(m => `<tr><td><a href="/endpoint/${encodeURIComponent(m.agent_id)}">${escapeHtml(m.hostname || m.agent_id)}</a></td><td class="path">${escapeHtml(m.path)}</td><td class="num">${escapeHtml(m.count)}</td><td class="snippet">${escapeHtml(m.snippet || "")}</td></tr>`).join("");
+  if (scans.length && done === scans.length) { clearInterval(quickTimer); quickTimer = null; }
+}
+
+// ---- scans ----
+
+async function loadScans() {
+  const resp = await fetch("/api/reveal/scans");
+  if (!resp.ok) return;
+  const scans = (await resp.json()).scans || [];
+  document.getElementById("scans-status").textContent = scans.length ? `${scans.length}` : "";
+  const ruleName = id => (rules.find(r => r.id === id) || {}).name || (id.startsWith("quick-") ? "quick search" : id);
+  const body = document.getElementById("scans-body");
+  body.innerHTML = scans.length === 0 ? '<tr><td class="empty" colspan="10">no scans yet</td></tr>'
+    : scans.map(s => {
+      const state = s.error ? '<span class="pill confirmed">failed</span>' : (!s.finished_at ? '<span class="pill running">running</span>' : (s.truncated ? '<span class="pill unconfirmed">truncated</span>' : '<span class="pill ok">done</span>'));
+      const took = s.started_at && s.finished_at ? Math.max(0, Math.round((new Date(s.finished_at) - new Date(s.started_at)) / 1000)) + "s" : "";
+      return `<tr><td>${escapeHtml(ruleName(s.rule_id))}</td><td><a href="/endpoint/${encodeURIComponent(s.agent_id)}">${escapeHtml(s.hostname || s.agent_id)}</a></td><td>${state}</td><td class="num">${escapeHtml(s.files_seen)}</td><td class="num">${escapeHtml(s.files_scanned)}</td><td class="num">${escapeHtml(s.files_matched)}</td><td class="num">${escapeHtml(s.skipped)}</td><td>${escapeHtml(fmtAgo(s.dispatched_at))}</td><td>${took}</td><td class="u-ws-normal u-maxw-280 u-fs-meta u-c-text-muted">${escapeHtml(s.error || "")}</td></tr>`;
+    }).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "reveal-scans" });
+  if (dt) dt.refresh();
+}
+setInterval(() => { if (document.hidden) return; if (location.hash === "#scans") loadScans(); if (location.hash === "#results") loadResults(); }, 15000);
+
+
+// ---- rule sets -----------------------------------------------------------
+let ruleSets = [], setRules = [], editingSet = null;
+async function loadRuleSets() {
+  const r = await fetch("/api/reveal/rule-sets");
+  if (!r.ok) { document.getElementById("rs-body").innerHTML = '<tr><td class="empty" colspan="6">could not load</td></tr>'; return; }
+  const d = await r.json();
+  ruleSets = d.rule_sets || []; setRules = d.rules || [];
+  document.getElementById("rs-regimes").innerHTML = (d.regimes || []).map(x => `<option value="${escapeHtml(x)}">`).join("");
+  document.getElementById("rs-rules").innerHTML = setRules.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join("");
+  const gs = document.getElementById("rl-groups");
+  document.getElementById("rs-groups").innerHTML = /* safe-html: a copy of options this page rendered escaped */ gs ? gs.innerHTML : "";
+  const ruleName = id => (setRules.find(x => x.id === id) || {}).name || id;
+  document.getElementById("rs-body").innerHTML = ruleSets.length ? ruleSets.map(x => `<tr${sx(x.enabled ? "" : "opacity:.6")}>
+    <td><b>${escapeHtml(x.name)}</b>${x.description ? `<div class="hint u-m-2-0-0">${escapeHtml(x.description)}</div>` : ""}</td>
+    <td>${escapeHtml(x.regime || "—")}</td>
+    <td class="u-ws-normal">${(x.rule_ids || []).map(ruleName).map(escapeHtml).join(", ")}</td>
+    <td>${escapeHtml((x.group_ids || []).length ? (x.group_ids || []).length + " group(s)" : "every endpoint")}</td>
+    <td>${x.enabled ? "enabled" : "off"}</td>
+    <td><button class="tiny" data-rsedit="${escapeHtml(x.id)}">Edit</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="6">No rule sets. Rules still run on their own schedules.</td></tr>';
+  document.querySelectorAll("[data-rsedit]").forEach(b => b.addEventListener("click", () => openRuleSet(ruleSets.find(x => x.id === b.dataset.rsedit))));
+}
+function openRuleSet(x) {
+  editingSet = x ? x.id : null;
+  document.getElementById("rs-editor").hidden = false;
+  document.getElementById("rs-editor-title").textContent = x ? `Edit ${x.name}` : "New rule set";
+  document.getElementById("rs-name").value = x ? x.name : "";
+  document.getElementById("rs-regime").value = x ? x.regime : "";
+  document.getElementById("rs-desc").value = x ? x.description : "";
+  document.getElementById("rs-enabled").checked = !!(x && x.enabled);
+  Array.from(document.getElementById("rs-rules").options).forEach(o => { o.selected = !!(x && (x.rule_ids || []).includes(o.value)); });
+  Array.from(document.getElementById("rs-groups").options).forEach(o => { o.selected = !!(x && (x.group_ids || []).includes(o.value)); });
+  document.getElementById("rs-delete").hidden = !x;
+  document.getElementById("rs-msg").textContent = "";
+}
+document.getElementById("rs-new").addEventListener("click", () => openRuleSet(null));
+document.getElementById("rs-cancel").addEventListener("click", () => { document.getElementById("rs-editor").hidden = true; });
+document.getElementById("rs-save").addEventListener("click", async () => {
+  const body = { name: document.getElementById("rs-name").value, regime: document.getElementById("rs-regime").value,
+    description: document.getElementById("rs-desc").value, enabled: document.getElementById("rs-enabled").checked,
+    rule_ids: Array.from(document.getElementById("rs-rules").selectedOptions).map(o => o.value),
+    group_ids: Array.from(document.getElementById("rs-groups").selectedOptions).map(o => o.value) };
+  const r = await fetch(editingSet ? `/api/reveal/rule-sets/${encodeURIComponent(editingSet)}` : "/api/reveal/rule-sets",
+    { method: editingSet ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const msg = document.getElementById("rs-msg");
+  if (!r.ok) { msg.textContent = await r.text(); return; }
+  const d = await r.json();
+  msg.textContent = `Saved. ${d.rules_updated} rule(s) took this set's targeting and state.`;
+  loadRuleSets();
+  if (typeof loadRules === "function") loadRules();
+});
+document.getElementById("rs-delete").addEventListener("click", async () => {
+  const x = ruleSets.find(v => v.id === editingSet);
+  if (!x || !confirm(`Delete "${x.name}"? The ${x.rule_ids.length} rule(s) it turned on are disabled.`)) return;
+  const r = await fetch(`/api/reveal/rule-sets/${encodeURIComponent(editingSet)}`, { method: "DELETE" });
+  if (!r.ok) { document.getElementById("rs-msg").textContent = await r.text(); return; }
+  document.getElementById("rs-editor").hidden = true;
+  loadRuleSets();
+  if (typeof loadRules === "function") loadRules();
+});
+</script>
+</body>
+</html>

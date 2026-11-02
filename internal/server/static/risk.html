@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risk &amp; Compliance — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .sev-pill { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .sev-pill.critical { background: var(--off-bg); color: var(--off); }
+  .sev-pill.high { background: var(--off-bg); color: var(--off); }
+  .sev-pill.medium { background: var(--ok-bg); color: var(--accent); }
+  .sev-pill.low, .sev-pill.unknown { background: var(--surface-2); color: var(--text-muted); }
+  .cve-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cve-chip { font-family: var(--mono); font-size: var(--fs-meta); color: var(--accent); background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 6px; }
+  .summary-cell { max-width: 340px; white-space: normal; color: var(--text-muted); font-size: 12px; }
+  .vuln-row { cursor: pointer; }
+  .vuln-row:hover { background: var(--surface-2); }
+  .active-pill { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; font-weight: 700; background: var(--ok-bg); color: var(--ok); }
+
+  .drawer-overlay { position: fixed; inset: 0; background: var(--scrim); z-index: 200; display: none; }
+  .drawer-overlay.open { display: block; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--surface); border-left: 1px solid var(--border);
+    z-index: 201; transform: translateX(100%); transition: transform .18s ease; display: flex; flex-direction: column; }
+  .drawer.open { transform: translateX(0); }
+  @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+  .drawer-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .drawer-header h3 { margin: 0 0 6px; font-size: 15px; }
+  .drawer-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 6px; }
+  .drawer-close:hover { color: var(--text); }
+  .drawer-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+  .drawer-section { margin-bottom: 18px; }
+  .drawer-section h4 { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 0 0 8px; }
+  .drawer-section p { font-size: 13px; line-height: 1.5; margin: 0; }
+  .remediation-box { background: var(--surface-2); border-radius: var(--radius-md); padding: 10px 12px; font-size: 12.5px; line-height: 1.5; }
+  .affected-scroll { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .affected-scroll table { margin: 0; }
+  .affected-scroll thead th { position: sticky; top: 0; background: var(--surface); }
+  .drawer-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .drawer-footer { padding: 14px 20px; border-top: 1px solid var(--border); font-size: var(--fs-meta); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+      <div id="risk-page-head"></div>
+    <div class="module-section" id="section-vulns" hidden>
+    <div class="panel-header u-mb-16">
+      <h2 class="section-title u-m-0">Risk &amp; Compliance</h2>
+      <div class="u-d-flex u-gap-10 u-ai-center">
+        <span class="scan-status" id="last-scan"></span>
+        <button class="primary u-w-auto u-p-6-14 u-fs-12" id="scan-now-btn" hidden>Scan now</button>
+      </div>
+    </div>
+
+    <div class="stat-tiles" id="severity-tiles"></div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Vulnerabilities</h2>
+        <input class="search-input" id="vuln-search" type="search" placeholder="Search package, CVE or host" title="Search by package, CVE or hostname; severity:high narrows to one severity">
+      </div>
+      <p class="u-fs-12 u-c-text-muted u-mt-n8">Click a row for the full advisory, affected endpoints, and remediation.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Severity</th><th>Exploit</th><th>CVE</th><th>Package</th><th>Affected</th><th>Summary</th></tr></thead>
+          <tbody id="vulns-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Devices</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Hostname</th><th>OS</th><th>Site</th><th>Vulnerabilities</th><th>Critical</th><th>High</th></tr></thead>
+          <tbody id="devices-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    </div>
+
+    <div class="module-section" id="section-exploitability" hidden>
+      <div class="stat-tiles" id="ex-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Exploitability</h2><div class="u-d-flex u-gap-10 u-ai-center"><span class="scan-status" id="ex-feeds"></span><button class="tiny" id="ex-refresh" hidden>Refresh feeds</button></div></div>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8 u-lh-1_55">
+          The vulnerabilities on this fleet that somebody is known to be using: listed in <b>CISA's Known Exploited Vulnerabilities</b>
+          catalogue, or with an <b>EPSS</b> probability of exploitation in the next 30 days of 1% or more. KEV first, then by EPSS.
+          Click a row for the advisory, the affected endpoints and one-click patching.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Exploit</th><th>Severity</th><th>CVE</th><th>What CISA calls it</th><th>EPSS</th><th>Due</th><th>Packages</th><th>Endpoints</th><th>Fix</th></tr></thead>
+            <tbody id="ex-body"><tr><td class="empty" colspan="9">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-levels" hidden>
+      <div class="stat-tiles" id="lv-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Vulnerability levels</h2><span class="scan-status" id="lv-status"></span></div>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8 u-lh-1_55">
+          One level per endpoint, the way Comply states it: the worst actionable severity if the endpoint was scanned in the
+          last <span id="lv-days">30</span> days; <b>no vulnerabilities</b> for a clean fresh scan; <b>not scored</b> when findings
+          have no published severity; <b>not scanned</b> for anything older, never scanned, or on a platform the scanner does not cover.
+          A level from a stale scan is a guess wearing a label, so it is not stated.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>Platform</th><th>Level</th><th>Actionable</th><th>Findings</th><th>Last scanned</th><th>Note</th></tr></thead>
+            <tbody id="lv-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-remediation" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Remediation</h2><span class="scan-status" id="rm-status"></span></div>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8 u-lh-1_55">
+          Findings grouped by the package that fixes them. <b>Patch pending</b> means the endpoint's own package manager already
+          offers an update for that package, so deploying patches to those endpoints closes the finding; a catalog package with the same
+          name links to Deploy. Ordered by known-exploited first, then critical.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Package</th><th>Vulnerabilities</th><th>Endpoints</th><th>Fixed in</th><th>Patch pending</th><th>Catalog</th><th>Action</th></tr></thead>
+            <tbody id="rm-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="apply-output" id="rm-output" hidden></div>
+      </div>
+    </div>
+    </main>
+  </div>
+
+  <div class="drawer-overlay" id="cve-overlay"></div>
+  <aside class="drawer" id="cve-drawer">
+    <div class="drawer-header">
+      <div>
+        <div id="cve-drawer-pills" class="u-mb-6"></div>
+        <h3 id="cve-drawer-title">—</h3>
+      </div>
+      <button class="drawer-close" id="cve-drawer-close">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-section">
+        <h4>Description</h4>
+        <p id="cve-drawer-summary">—</p>
+      </div>
+      <div class="drawer-section">
+        <h4>Remediation</h4>
+        <div class="remediation-box" id="cve-drawer-remediation">—</div>
+      </div>
+      <div class="drawer-section">
+        <h4>Affected endpoints (<span id="cve-drawer-affected-count">0</span>)</h4>
+        <div class="affected-scroll">
+          <table>
+            <thead><tr><th>Hostname</th><th>Site</th><th>Package</th><th>Installed</th><th>Last confirmed</th></tr></thead>
+            <tbody id="cve-drawer-affected-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <h4>Take action</h4>
+        <div class="drawer-actions">
+          <button class="primary u-w-auto" id="cve-deploy-now-btn">Deploy fix to affected endpoints now</button>
+          <button class="secondary u-w-auto" id="cve-schedule-btn">Schedule…</button>
+        </div>
+        <div id="cve-schedule-panel" hidden class="form-grid u-mt-12">
+          <div class="field"><label for="cve-sched-kind">Cadence</label>
+            <select id="cve-sched-kind">
+              <option value="once">Once</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <div class="field" id="cve-sched-field-runat"><label for="cve-sched-runat">Date &amp; time (local)</label><input type="datetime-local" id="cve-sched-runat"></div>
+          <div class="field" id="cve-sched-field-weekday" hidden><label for="cve-sched-weekday">Day of week</label>
+            <select id="cve-sched-weekday">
+              <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+              <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+            </select>
+          </div>
+          <div class="field" id="cve-sched-field-time" hidden><label for="cve-sched-time">Time (local)</label><input type="time" id="cve-sched-time" value="03:00"></div>
+          <div class="field"><button class="primary" id="cve-sched-create">Create schedule</button></div>
+        </div>
+        <div id="cve-action-status" class="u-fs-12 u-mt-8"></div>
+      </div>
+    </div>
+    <div class="drawer-footer" id="cve-drawer-footer">—</div>
+  </aside>
+
+<script src="/static/app.js"></script>
+<script>
+let risk = { severity_counts: {}, vulnerabilities: [], agents: [] };
+let canScan = false;
+
+document.addEventListener("mustra:user", (e) => {
+  initModuleSections([
+    { hash: "vulns", label: "Vulnerabilities" },
+    { hash: "exploitability", label: "Exploitability" },
+    { hash: "levels", label: "Levels" },
+    { hash: "remediation", label: "Remediation" },
+  ]);
+  renderPageHead("risk-page-head", "/compliance", { title: "Vulnerabilities",
+    sub: "Real CVE matches against installed packages, with the distribution\u2019s own verdict applied." });
+  canScan = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("patches.manage")));
+  document.getElementById("scan-now-btn").hidden = !canScan;
+  document.getElementById("ex-refresh").hidden = !canScan;
+  loadExploitability(); loadLevels(); loadRemediation();
+});
+
+function sevPill(sev) {
+  const s = sev || "unknown";
+  return `<span class="sev-pill ${escapeHtml(s)}">${escapeHtml(s)}</span>`;
+}
+
+async function loadRisk() {
+  const resp = await fetch("/api/risk");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  risk = await resp.json();
+  document.getElementById("last-scan").textContent = risk.last_scan_at
+    ? "last scanned " + fmtAgo(risk.last_scan_at) : "no scan yet";
+  renderSeverityTiles();
+  renderVulns();
+  renderDevices();
+}
+
+function renderSeverityTiles() {
+  const counts = risk.severity_counts || {};
+  const order = [["critical", "off"], ["high", "off"], ["medium", ""], ["low", ""], ["unknown", ""]];
+  document.getElementById("severity-tiles").innerHTML = order.map(([sev, cls]) => `
+    <div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(sev)}</div>
+      <div class="stat-tile-value ${escapeHtml(counts[sev] > 0 ? cls : "")}">${escapeHtml(counts[sev] || 0)}</div>
+    </div>
+  `).join("");
+}
+
+// Groups the flat (agent, package, vuln) rows the API returns into one
+// entry per distinct vuln_id — the Vulnerabilities table shows one row per
+// CVE, not one per affected host, with the per-host breakdown living in
+// the drawer instead.
+function groupedVulns() {
+  const groups = new Map();
+  for (const v of risk.vulnerabilities || []) {
+    let g = groups.get(v.vuln_id);
+    if (!g) {
+      g = {
+        vuln_id: v.vuln_id, severity: v.severity, summary: v.summary,
+        cve_ids: v.cve_ids && v.cve_ids.length ? v.cve_ids : [v.vuln_id],
+        package_name: v.package_name, rows: [], kev: !!v.kev, ransomware: !!v.ransomware, epss: v.epss || 0,
+      };
+      groups.set(v.vuln_id, g);
+    }
+    g.rows.push(v);
+  }
+  return [...groups.values()].sort((a, b) => (b.kev - a.kev) || severityRank(b.severity) - severityRank(a.severity) || (b.epss - a.epss) || b.rows.length - a.rows.length);
+}
+
+function severityRank(sev) {
+  return { critical: 4, high: 3, medium: 2, low: 1 }[sev] || 0;
+}
+
+function renderVulns() {
+  const q = (document.getElementById("vuln-search").value || "").toLowerCase().trim();
+  const body = document.getElementById("vulns-body");
+  const groups = groupedVulns();
+  const filtered = !q ? groups : groups.filter(g => {
+    // "severity:high" is what Home's severity bars hand over, so it has to
+    // be something the box can match.
+    const hay = [g.package_name, g.vuln_id, "severity:" + g.severity, ...g.cve_ids, ...g.rows.map(r => r.hostname)].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  if (groups.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no known vulnerabilities in the current scan — or no scan has run yet</td></tr>';
+    return;
+  }
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no matches</td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map((g, i) => `
+    <tr class="vuln-row" data-idx="${i}">
+      <td>${sevPill(g.severity)}</td>
+      <td>${exploitBadge(g)}</td>
+      <td><div class="cve-list">${g.cve_ids.map(id => `<span class="cve-chip">${escapeHtml(id)}</span>`).join("")}</div></td>
+      <td>${escapeHtml(g.package_name)}</td>
+      <td>${escapeHtml(g.rows.length)} device(s)</td>
+      <td class="summary-cell">${escapeHtml(g.summary || "—")}</td>
+    </tr>
+  `).join("");
+  body.querySelectorAll(".vuln-row").forEach(row => {
+    row.addEventListener("click", () => openCveDrawer(filtered[parseInt(row.dataset.idx, 10)]));
+  });
+  const dt = initDataTable(body.closest("table"), { storageKey: "risk-vulns" });
+  if (dt) dt.refresh();
+}
+document.getElementById("vuln-search").addEventListener("input", renderVulns);
+
+// --- CVE detail drawer ---
+
+let activeCveGroup = null;
+
+function openCveDrawer(group) {
+  activeCveGroup = group;
+  document.getElementById("cve-drawer-pills").innerHTML =
+    sevPill(group.severity) + ` <span class="active-pill">actively detected</span>`;
+  document.getElementById("cve-drawer-title").textContent = group.cve_ids.join(", ");
+  document.getElementById("cve-drawer-summary").textContent = group.summary || "No description published for this advisory.";
+
+  const fixedVersions = [...new Set(group.rows.map(r => r.fixed_version).filter(Boolean))];
+  const remediation = document.getElementById("cve-drawer-remediation");
+  if (fixedVersions.length > 0) {
+    remediation.innerHTML = `Upgrade <strong>${escapeHtml(group.package_name)}</strong> to <strong>${fixedVersions.map(escapeHtml).join(" / ")}</strong> or later. ` +
+      `Use "Deploy fix" below to run the fleet's normal patch mechanism (apt/dnf upgrade) on every affected endpoint.`;
+  } else {
+    remediation.innerHTML = `No fixed version is published yet for <strong>${escapeHtml(group.package_name)}</strong> in this advisory. ` +
+      `Deploying pending patches below will still pick it up automatically once a fix is released upstream — track this CVE until then.`;
+  }
+
+  const mostRecent = group.rows.reduce((max, r) => r.checked_at > max ? r.checked_at : max, group.rows[0].checked_at);
+  document.getElementById("cve-drawer-affected-count").textContent = String(group.rows.length);
+  document.getElementById("cve-drawer-affected-body").innerHTML = group.rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.hostname)}</td>
+      <td>${escapeHtml(r.site)}</td>
+      <td>${escapeHtml(r.package_name)}</td>
+      <td>${escapeHtml(r.package_version)}</td>
+      <td>${fmtAgo(r.checked_at)}</td>
+    </tr>
+  `).join("");
+  document.getElementById("cve-drawer-footer").textContent =
+    `vuln id: ${group.vuln_id} · last confirmed present ${fmtAgo(mostRecent)}`;
+
+  document.getElementById("cve-deploy-now-btn").style.display = canScan ? "" : "none";
+  document.getElementById("cve-schedule-btn").style.display = canScan ? "" : "none";
+  document.getElementById("cve-schedule-panel").hidden = true;
+  document.getElementById("cve-action-status").textContent = "";
+
+  document.getElementById("cve-overlay").classList.add("open");
+  document.getElementById("cve-drawer").classList.add("open");
+}
+
+function closeCveDrawer() {
+  document.getElementById("cve-overlay").classList.remove("open");
+  document.getElementById("cve-drawer").classList.remove("open");
+  activeCveGroup = null;
+}
+document.getElementById("cve-drawer-close").addEventListener("click", closeCveDrawer);
+document.getElementById("cve-overlay").addEventListener("click", closeCveDrawer);
+
+document.getElementById("cve-deploy-now-btn").addEventListener("click", async () => {
+  if (!activeCveGroup) return;
+  if (!confirm(`Deploy patches now to all ${activeCveGroup.rows.length} online device(s) affected by ${activeCveGroup.cve_ids.join(", ")}? This can take several minutes per device.`)) return;
+  const status = document.getElementById("cve-action-status");
+  status.textContent = "deploying…";
+  try {
+    const resp = await fetch("/api/patches/deploy", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_vuln_id: activeCveGroup.vuln_id }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || JSON.stringify(data));
+    const failedCount = Object.keys(data.failed || {}).length;
+    status.innerHTML = `<span class="u-c-ok">${escapeHtml(data.started.length)} started</span>` +
+      (failedCount ? `, <span class="u-c-off">${escapeHtml(failedCount)} failed</span>` : "");
+  } catch (e) {
+    status.innerHTML = `<span class="u-c-off">failed: ${escapeHtml(e.message)}</span>`;
+  }
+});
+
+document.getElementById("cve-schedule-btn").addEventListener("click", () => {
+  const panel = document.getElementById("cve-schedule-panel");
+  panel.hidden = !panel.hidden;
+});
+
+document.getElementById("cve-sched-kind").addEventListener("change", (e) => {
+  const kind = e.target.value;
+  document.getElementById("cve-sched-field-runat").style.display = kind === "once" ? "" : "none";
+  document.getElementById("cve-sched-field-time").hidden = kind === "once";
+  document.getElementById("cve-sched-field-weekday").hidden = kind !== "weekly";
+});
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+function localDailyToUTC(timeStr) {
+  const [hh, mm] = timeStr.split(":").map(Number);
+  const d = new Date(); d.setHours(hh, mm, 0, 0);
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+function localWeeklyToUTC(weekdayLocal, timeStr) {
+  const [hh, mm] = timeStr.split(":").map(Number);
+  const d = new Date(); d.setHours(hh, mm, 0, 0);
+  const diff = (weekdayLocal - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return { weekday: d.getUTCDay(), time_of_day: `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}` };
+}
+
+document.getElementById("cve-sched-create").addEventListener("click", async () => {
+  if (!activeCveGroup) return;
+  const kind = document.getElementById("cve-sched-kind").value;
+  const body = { name: `${activeCveGroup.cve_ids.join(", ")} remediation`, kind, target_vuln_id: activeCveGroup.vuln_id };
+  if (kind === "once") {
+    const raw = document.getElementById("cve-sched-runat").value;
+    if (!raw) { alert("pick a date and time"); return; }
+    body.run_at = new Date(raw).toISOString();
+  } else if (kind === "daily") {
+    body.time_of_day = localDailyToUTC(document.getElementById("cve-sched-time").value);
+  } else if (kind === "weekly") {
+    const { weekday, time_of_day } = localWeeklyToUTC(parseInt(document.getElementById("cve-sched-weekday").value, 10), document.getElementById("cve-sched-time").value);
+    body.weekday = weekday;
+    body.time_of_day = time_of_day;
+  }
+  const status = document.getElementById("cve-action-status");
+  const resp = await fetch("/api/patches/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">failed: ${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = `<span class="u-c-ok">schedule created</span> — see Patches &gt; Deploy &amp; Schedule`;
+  document.getElementById("cve-schedule-panel").hidden = true;
+});
+
+function renderDevices() {
+  const body = document.getElementById("devices-body");
+  const agents = risk.agents || [];
+  if (agents.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no devices scanned yet</td></tr>';
+    return;
+  }
+  body.innerHTML = agents.map(a => `
+    <tr>
+      <td>${escapeHtml(a.hostname)}</td>
+      <td><span class="os-pill" title="${escapeHtml(a.os)}">${escapeHtml(osDisplay(a))}</span></td>
+      <td>${escapeHtml(a.site)}</td>
+      <td>${escapeHtml(a.vuln_count)}</td>
+      <td>${a.critical_count > 0 ? `<span class="sev-pill critical">${escapeHtml(a.critical_count)}</span>` : "0"}</td>
+      <td>${a.high_count > 0 ? `<span class="sev-pill high">${escapeHtml(a.high_count)}</span>` : "0"}</td>
+    </tr>
+  `).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "risk-devices" });
+  if (dt) dt.refresh();
+}
+
+document.getElementById("scan-now-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("scan-now-btn");
+  btn.disabled = true;
+  btn.textContent = "Scanning…";
+  try {
+    const resp = await fetch("/api/risk/scan", { method: "POST" });
+    if (!resp.ok) throw new Error(await resp.text());
+    await loadRisk();
+  } catch (e) {
+    alert("scan failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Scan now";
+  }
+});
+
+// Drill-downs from Home arrive as /risk?q=<package> or /risk?severity=<level>
+// and land in the search box, where they stay visible and easy to clear.
+{
+  const params = new URLSearchParams(window.location.search);
+  const q = params.get("q") || (params.get("severity") ? "severity:" + params.get("severity") : "");
+  if (q) document.getElementById("vuln-search").value = q;
+}
+loadRisk();
+
+// --- exploitability, levels, remediation -----------------------------------
+function exploitBadge(g) {
+  const parts = [];
+  if (g.kev) parts.push(`<span class="sev-pill critical" title="${escapeHtml(g.ransomware ? "In CISA's Known Exploited Vulnerabilities catalogue and used in ransomware campaigns" : "In CISA's Known Exploited Vulnerabilities catalogue")}">KEV${g.ransomware ? " · ransomware" : ""}</span>`);
+  if (g.epss >= 0.01) parts.push(`<span class="sev-pill ${g.epss >= 0.1 ? "high" : "medium"}" title="EPSS: probability of exploitation in the next 30 days">EPSS ${(g.epss * 100).toFixed(1)}%</span>`);
+  else if (g.epss > 0) parts.push(`<span class="u-fs-meta u-c-text-muted" title="EPSS">${(g.epss * 100).toFixed(2)}%</span>`);
+  return parts.join(" ") || "";
+}
+function fmtDate(d) { return d ? new Date(d).toISOString().slice(0, 10) : "—"; }
+async function loadExploitability() {
+  const resp = await fetch("/api/risk/exploitability");
+  if (!resp.ok) return;
+  const d = await resp.json();
+  const f = d.feeds || {};
+  document.getElementById("ex-tiles").innerHTML = [
+    { label: "Known-exploited vulnerabilities on the fleet", value: d.kev_vulnerabilities || 0, cls: d.kev_vulnerabilities ? "off" : "ok" },
+    { label: "Endpoints carrying one", value: d.kev_endpoints || 0, cls: d.kev_endpoints ? "off" : "ok" },
+    { label: "Used in ransomware", value: d.ransomware || 0, cls: d.ransomware ? "off" : "ok" },
+    { label: "EPSS ≥ 1%, not in KEV", value: (d.vulnerabilities || []).filter(v => !v.intel.kev).length },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  document.getElementById("ex-feeds").innerHTML = `KEV: ${f.kev_entries ? escapeHtml(f.kev_entries) + " entries, catalogue " + escapeHtml(f.kev_version || "?") + ", fetched " + escapeHtml(fmtAgo(f.kev_fetched_at)) : (f.kev_error ? '<span class="bad">' + escapeHtml(f.kev_error) + "</span>" : "not fetched yet")} · EPSS: ${f.epss_scores ? escapeHtml(f.epss_scores) + " scores dated " + escapeHtml((f.epss_date || "").slice(0, 10)) + ", fetched " + escapeHtml(fmtAgo(f.epss_fetched_at)) : (f.epss_error ? '<span class="bad">' + escapeHtml(f.epss_error) + "</span>" : "not fetched yet")}`;
+  const body = document.getElementById("ex-body");
+  const vs = d.vulnerabilities || [];
+  if (!vs.length) { body.innerHTML = `<tr><td class="empty" colspan="9">${f.kev_entries ? "Nothing on the fleet is in the KEV catalogue or scores 1% or more on EPSS." : "The feeds have not loaded yet."}</td></tr>`; return; }
+  body.innerHTML = vs.map(v => `<tr class="vuln-row" data-vuln="${escapeHtml(v.vuln_id)}">
+    <td>${exploitBadge({ kev: v.intel.kev, ransomware: v.intel.ransomware, epss: v.intel.epss })}</td>
+    <td>${sevPill(v.severity)}</td>
+    <td>${escapeHtml((v.cve_ids || [v.vuln_id]).join(", "))}</td>
+    <td>${v.intel.kev ? `<b>${escapeHtml(v.intel.kev_vendor)} ${escapeHtml(v.intel.kev_product)}</b><div class="u-fs-meta u-c-text-muted">${escapeHtml(v.intel.kev_name)}</div>` : escapeHtml((v.summary || "").slice(0, 90))}</td>
+    <td data-sort="${escapeHtml(v.intel.epss)}">${v.intel.scored ? (v.intel.epss * 100).toFixed(1) + "%" : "—"}</td>
+    <td>${v.intel.kev ? fmtDate(v.intel.due_date) : "—"}</td>
+    <td>${escapeHtml((v.packages || []).join(", "))}</td>
+    <td title="${escapeHtml((v.endpoints || []).join(", "))}">${escapeHtml((v.endpoints || []).length)}</td>
+    <td>${v.fixed_version ? escapeHtml(v.fixed_version) : '<span class="u-c-text-muted">no fix published</span>'}</td>
+  </tr>`).join("");
+  body.querySelectorAll("[data-vuln]").forEach(tr => tr.addEventListener("click", () => {
+    const g = groupedVulns().find(x => x.vuln_id === tr.dataset.vuln);
+    if (g) openCveDrawer(g);
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "risk-exploit" });
+  if (dt) dt.refresh();
+}
+document.getElementById("ex-refresh").addEventListener("click", async () => {
+  const b = document.getElementById("ex-refresh"); b.disabled = true; b.textContent = "Refreshing…";
+  try { await fetch("/api/risk/intel/refresh", { method: "POST" }); await loadExploitability(); await loadRisk(); } finally { b.disabled = false; b.textContent = "Refresh feeds"; }
+});
+async function loadLevels() {
+  const resp = await fetch("/api/risk/levels");
+  if (!resp.ok) return;
+  const d = await resp.json();
+  const c = d.counts || {};
+  document.getElementById("lv-days").textContent = d.freshness_days || 30;
+  const order = [["critical", "off"], ["high", "off"], ["medium", ""], ["low", ""], ["not scored", ""], ["no vulnerabilities", "ok"], ["not scanned", ""]];
+  document.getElementById("lv-tiles").innerHTML = order.map(([l, cls]) => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(l)}</div><div class="stat-tile-value ${escapeHtml(c[l] ? cls : "")}">${escapeHtml(c[l] || 0)}</div></div>`).join("");
+  const rows = d.endpoints || [];
+  document.getElementById("lv-status").textContent = `${rows.length} endpoint(s)`;
+  const rank = { critical: 0, high: 1, medium: 2, low: 3, "not scored": 4, "no vulnerabilities": 5, "not scanned": 6 };
+  rows.sort((a, b) => rank[a.level] - rank[b.level] || a.hostname.localeCompare(b.hostname));
+  const pill = l => ["critical", "high", "medium", "low"].includes(l) ? sevPill(l) : `<span class="sev-pill ${l === "no vulnerabilities" ? "u-bg-ok-bg u-c-ok" : "none"}">${escapeHtml(l)}</span>`;
+  document.getElementById("lv-body").innerHTML = rows.map(e => `<tr>
+    <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname)}</a></td><td>${escapeHtml(e.os_release || e.platform || e.os)}${e.os_unsupported ? ` <span class="sev-pill critical" title="${escapeHtml("Security support ended" + (e.os_end_of_life ? " " + e.os_end_of_life : ""))}">OS end of life</span>` : ""}</td><td>${pill(e.level)}</td>
+    <td>${escapeHtml(e.scanned_at ? e.actionable : "—")}</td><td>${escapeHtml(e.scanned_at ? e.findings : "—")}</td><td>${e.scanned_at ? fmtAgo(e.scanned_at) : "never"}</td>
+    <td class="u-c-text-muted u-fs-12">${escapeHtml(e.reason || "")}</td></tr>`).join("");
+  const dt = initDataTable(document.getElementById("lv-body").closest("table"), { storageKey: "risk-levels" });
+  if (dt) dt.refresh();
+}
+async function loadRemediation() {
+  const resp = await fetch("/api/risk/remediation");
+  if (!resp.ok) return;
+  const rows = (await resp.json()).packages || [];
+  document.getElementById("rm-status").textContent = rows.length ? `${rows.length} package(s)` : "";
+  const body = document.getElementById("rm-body");
+  if (!rows.length) { body.innerHTML = '<tr><td class="empty" colspan="7">nothing to remediate — no actionable findings</td></tr>'; return; }
+  body.innerHTML = rows.map((r, i) => `<tr>
+    <td><b>${escapeHtml(r.package)}</b></td>
+    <td>${escapeHtml(r.vulns)}${r.critical ? ` <span class="sev-pill critical">${escapeHtml(r.critical)} critical</span>` : ""}${r.kev ? ` <span class="sev-pill critical">${escapeHtml(r.kev)} KEV</span>` : ""}</td>
+    <td title="${escapeHtml(r.endpoints.join(", "))}">${escapeHtml(r.endpoints.length)}</td>
+    <td>${r.fixed_versions.length ? escapeHtml(r.fixed_versions.join(", ")) : '<span class="u-c-text-muted">not published</span>'}</td>
+    <td>${r.patch_pending.length ? `<span class="sev-pill u-bg-ok-bg u-c-ok">${escapeHtml(r.patch_pending.length)} of ${escapeHtml(r.endpoints.length)}</span> ${escapeHtml(r.patch_version || "")}` : '<span class="u-c-text-muted">none offered yet</span>'}</td>
+    <td>${r.catalog_packages.length ? r.catalog_packages.map(n => `<a href="/software?package=${encodeURIComponent(n)}#catalog">${escapeHtml(n)}</a>`).join(", ") : "—"}</td>
+    <td>${canScan && r.patch_pending.length ? `<button class="tiny" data-rm="${i}">Deploy pending patches</button>` : ""}</td>
+  </tr>`).join("");
+  body.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", async () => {
+    const r = rows[Number(b.dataset.rm)];
+    // By agent ID: two endpoints can share a hostname, and only those that
+    // offer the update are in patch_pending_agent_ids. Never send an empty
+    // list: /api/patches/deploy without target_agents patches the fleet.
+    const ids = r.patch_pending_agent_ids || [];
+    const out = document.getElementById("rm-output");
+    if (!ids.length) { out.hidden = false; out.textContent = "No endpoint IDs to deploy to; reload the page and try again."; return; }
+    if (!confirm(`Deploy pending patches now to the ${ids.length} endpoint(s) that offer an update for ${r.package}? Patch lists and maintenance windows apply.`)) return;
+    b.disabled = true;
+    out.hidden = false; out.textContent = "deploying…";
+    const resp = await fetch("/api/patches/deploy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target_agents: ids }) });
+    const text = await resp.text();
+    out.textContent = resp.ok ? `started on ${(JSON.parse(text).started || []).length} endpoint(s); watch it under Patch → Deployments` : text;
+    b.disabled = false;
+  }));
+}
+</script>
+</body>
+</html>

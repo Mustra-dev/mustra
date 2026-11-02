@@ -1,0 +1,21 @@
+{
+  "name": "mustra-script-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test *.test.js"
+  },
+  "dependencies": {
+    "bash-language-server": "5.8.1",
+    "vscode-jsonrpc": "10.0.0"
+  },
+  "overrides": {
+    "editorconfig": {
+      "minimatch": "11.0.4"
+    },
+    "bash-language-server": {
+      "zod": "4.6.6"
+    }
+  }
+}

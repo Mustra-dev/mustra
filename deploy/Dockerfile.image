@@ -1,0 +1,24 @@
+# Package `make agents servers` output. The build context is bin/, not the
+# checkout: credentials and source files cannot enter this image.
+FROM --platform=$BUILDPLATFORM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS certificates
+RUN apk add --no-cache ca-certificates
+
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+ARG TARGETOS
+ARG TARGETARCH
+# apk upgrade: the pinned base digest only moves with Alpine's point
+# releases, and security fixes (OpenSSL, zlib) land in the repository first.
+RUN apk upgrade --no-cache \
+    && mkdir -p /var/lib/mustra/output /var/lib/mustra/package-files \
+    && chown -R 65532:65532 /var/lib/mustra
+COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# Keep the common agent layer before the server, so server-only releases
+# can reuse it across architectures and pulls. --link makes the layer
+# independent of the architecture-specific base filesystem.
+COPY --link agents/ /usr/local/share/mustra-agent-builds/
+COPY servers/${TARGETOS}_${TARGETARCH}/mustra-server /usr/local/bin/mustra-server
+# Unprivileged, as in Dockerfile.server.
+USER 65532:65532
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s CMD wget --spider -q http://127.0.0.1:8080/healthz || exit 1
+ENTRYPOINT ["/usr/local/bin/mustra-server"]

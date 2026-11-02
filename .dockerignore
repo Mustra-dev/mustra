@@ -1,0 +1,23 @@
+# The image build's context is the repository root. Keep secrets, generated
+# material and local artefacts out of it: without this, deploy/.env and the
+# NATS CA private key were sent to the daemon on every build.
+.git
+.github
+bin/
+deploy/.env
+deploy/.env.*
+deploy/nats/certs/
+deploy/cloudflared/creds.json
+mustra-agent-data/
+beacon-agent-data/
+scratch/
+packaging/
+docs/
+!docs/guides/
+*.md
+!CHANGELOG.md
+# The Help guides are built into the server, so they go into the image.
+!docs/guides/*.md
+*.test
+
+**/node_modules/

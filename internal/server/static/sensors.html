@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sensors — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/deploy.css">
+<script src="/static/theme.js"></script>
+<style>
+  .sensor-source pre { max-height: 480px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; }
+  .sensor { border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 9px; overflow: hidden; }
+  .sensor > summary { list-style: none; cursor: pointer; padding: 11px 13px; display: grid;
+                      grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; background: var(--surface-2); }
+  .sensor > summary::-webkit-details-marker { display: none; }
+  .sensor-name { font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  .sensor-name::before { content: "\25B8"; color: var(--text-muted); font-size: var(--fs-meta); transition: transform .15s ease; }
+  .sensor[open] .sensor-name::before { transform: rotate(90deg); }
+  .sensor-summary { grid-column: 1; font-size: 12px; color: var(--text-muted); padding-left: 17px; }
+  .sensor-cov { grid-row: 1 / span 2; text-align: right; font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; }
+  /* Phones: name, then what it is, then coverage, one under the other,
+     rather than the description squeezed beside the count. */
+  @media (max-width: 760px) {
+    .sensor > summary { grid-template-columns: minmax(0, 1fr); }
+    .sensor-name { flex-wrap: wrap; }
+    .sensor-cov { grid-row: auto; text-align: left; padding-left: 17px; white-space: normal; }
+    .sensor-cov br { display: none; }
+  }
+  .sensor-cov b { display: block; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .sensor-body { padding: 13px; border-top: 1px solid var(--border); }
+  .sensor-body h4 { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .05em;
+                    color: var(--text-muted); margin: 14px 0 5px; }
+  .sensor-body h4:first-child { margin-top: 0; }
+  .sensor-body p { font-size: 12.5px; margin: 0 0 4px; line-height: 1.55; }
+  .mech { width: 100%; border-collapse: collapse; }
+  .mech td { padding: 6px 8px; font-size: 12.5px; vertical-align: top; border-top: 1px solid var(--border); line-height: 1.5; }
+  .mech tr:first-child td { border-top: 0; }
+  .mech td.os { width: 92px; font-family: var(--mono); font-size: var(--fs-meta); color: var(--accent);
+                text-transform: uppercase; letter-spacing: .03em; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; margin-top: 4px; }
+  .fact { background: var(--surface-2); border-radius: var(--radius-sm); padding: 8px 10px; }
+  .fact-label { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+  .fact-value { font-size: 12.5px; margin-top: 2px; line-height: 1.45; }
+  .caveat { border-left: 3px solid var(--off); background: var(--surface-2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+            padding: 8px 11px; font-size: 12.5px; line-height: 1.55; }
+  .returns { font-family: var(--mono); font-size: var(--fs-meta); color: var(--accent);
+             background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px 9px; display: inline-block; }
+  .stale-pill { font-size: var(--fs-meta); font-weight: 700; padding: 1px 7px; border-radius: 999px;
+                background: var(--surface-2); color: var(--off); }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .sec-head { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 16px 0 6px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 12px; font-size: 12.5px; }
+  .checks label { display: flex; align-items: center; gap: 6px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .cs-out { font-family: var(--mono); font-size: var(--fs-meta); white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+            background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 9px; }
+  #cs-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .cs-workspace {
+    --cs-code-keyword: #7943a4; --cs-code-string: #18743b; --cs-code-number: #925215;
+    --cs-code-variable: #a33247; --cs-code-function: #215aa6;
+    border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 14px;
+    background: var(--surface); min-width: 0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .cs-workspace {
+      --cs-code-keyword: #cba0f0; --cs-code-string: #8ad6a1; --cs-code-number: #edbb81;
+      --cs-code-variable: #f39daa; --cs-code-function: #91bfff;
+    }
+  }
+  :root[data-theme="dark"] .cs-workspace {
+    --cs-code-keyword: #cba0f0; --cs-code-string: #8ad6a1; --cs-code-number: #edbb81;
+    --cs-code-variable: #f39daa; --cs-code-function: #91bfff;
+  }
+  .cs-tabs { display: flex; gap: 4px; padding: 8px 8px 0; background: var(--surface-2); overflow-x: auto; }
+  .cs-tabs button { flex: 1; border: 1px solid transparent; border-bottom: 3px solid transparent;
+    background: transparent; color: var(--text-muted); padding: 9px 12px; white-space: nowrap; cursor: pointer; }
+  .cs-tabs button[aria-selected="true"] { color: var(--text); background: var(--surface); border-bottom-color: var(--accent); }
+  .cs-tab-state { display: block; font-size: var(--fs-meta); margin-top: 3px; font-weight: 400; }
+  .cs-tab-dirty { color: var(--accent); }
+  .cs-editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  #cs-runner { font-family: var(--mono); font-size: var(--fs-meta); margin-right: auto; }
+  .cs-editor-host { height: 480px; min-height: 240px; max-height: 80vh; resize: vertical; overflow: auto; }
+  .cs-editor-host .cm-editor { height: 100%; background: var(--surface); color: var(--text); font-size: 13px; }
+  .cs-editor-host .cm-scroller { font-family: var(--mono); line-height: 1.65; overflow: auto; }
+  .cs-editor-host .cm-content { caret-color: var(--text); padding: 12px 0; }
+  .cs-editor-host .cm-line { padding: 0 12px; }
+  .cs-editor-host .cm-gutters { background: var(--surface-2); color: var(--text-muted); border-color: var(--border); }
+  .cs-editor-host .cm-activeLine, .cs-editor-host .cm-activeLineGutter { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .cs-editor-host .cm-cursor { border-left-color: var(--text); }
+  .cs-editor-host .cm-selectionBackground, .cs-editor-host .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+  .cs-editor-host .cm-selectionMatch { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  .cs-editor-host .cm-searchMatch { background: color-mix(in srgb, var(--cs-code-number) 25%, transparent); }
+  .cs-editor-host .cm-searchMatch-selected { outline: 1px solid var(--accent); }
+  .cs-editor-host .cm-matchingBracket { background: color-mix(in srgb, var(--accent) 20%, transparent); outline: 1px solid var(--accent); }
+  .cs-editor-host .cm-panels { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+  .cs-editor-host .cm-textfield { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .cs-editor-host .cm-button { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .cs-editor-host .cm-panel.cm-search [name="close"] { color: var(--text); }
+  .cs-editor-host .cm-tooltip { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .cs-editor-host .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--accent); color: var(--surface); }
+  .cs-editor-host .cm-focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cs-script-help { padding: 8px 12px; margin: 0; border-top: 1px solid var(--border); font-size: var(--fs-meta); color: var(--text-muted); }
+  #cs-expanded { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0;
+    padding: 12px; border: 0; background: var(--bg); color: var(--text); }
+  #cs-expanded::backdrop { background: var(--bg); }
+  #cs-expanded .cs-workspace { display: flex; flex-direction: column; height: 100%; margin: 0; }
+  #cs-expanded .cs-script-panel:not([hidden]) { flex: 1; min-height: 0; display: flex; }
+  #cs-expanded .cs-editor-host { flex: 1; height: 100%; max-height: none; min-height: 0; resize: none; }
+  .cs-field-error { color: var(--off); font-size: var(--fs-meta); margin: 4px 0 0; }
+  [aria-invalid="true"] { border-color: var(--off) !important; }
+  #cs-status[data-error="true"] { color: var(--off); }
+  #cs-status[data-error="false"] { color: var(--ok); }
+  @media (max-width: 600px) {
+    .cs-tabs button { padding: 8px; }
+    .cs-editor-host { height: 360px; }
+  }
+  .cs-platform-settings [hidden] { display:none; }
+  .cs-platform-settings { padding: 12px; margin: 0; }
+  .cs-platform-settings input[type="checkbox"] { width: auto; margin: 0 6px 0 0; }
+  .cs-platform-settings > label { display:flex; align-items:center; gap:6px; grid-column:1 / -1; }
+  #cs-schema input, #cs-schema select, #cs-sample { width:100%; min-width:80px; padding:8px; border:1px solid var(--border-input); border-radius:var(--radius-sm); background:var(--input-bg); color:var(--text); font:inherit; }
+  #cs-schema input { max-width:160px; }
+  #cs-schema td { padding:8px 6px; }
+  #cs-fields > .field { margin:12px 0; }
+  #cs-fields > details { padding:12px; margin:12px 0; border:1px solid var(--border); border-radius:var(--radius-md); }
+  #cs-fields > details > summary { cursor:pointer; margin-bottom:12px; }
+  #cs-preview pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+  #cs-preview { max-height:440px; overflow:auto; margin-top:12px; }
+  #cs-namespace-field { padding:0 12px 12px; }
+  .cs-help-label { display:flex; align-items:center; gap:0; }
+  .cs-help-label[hidden] { display:none; }
+  .cs-help-label label { margin-bottom:0; }
+  .cs-help-button { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; padding:0; margin-left:6px; border:1px solid var(--border); border-radius:50%; background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:help; vertical-align:middle; }
+  .cs-help-button:hover, .cs-help-button:focus-visible { color:var(--accent); border-color:var(--accent); outline:2px solid var(--accent); outline-offset:2px; }
+  .cs-help-tooltip { position:fixed; z-index:10000; box-sizing:border-box; width:340px; max-width:calc(100vw - 24px); padding:14px 16px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-2); color:var(--text); box-shadow:0 8px 28px #0003; font-size:13px; line-height:1.55; white-space:pre-line; text-transform:none; letter-spacing:normal; font-weight:400; }
+  /* Catalog table: one line per sensor, details expand beneath it. */
+  .sensor-row { cursor: pointer; }
+  .sensor-row:hover td { background: var(--surface-2); }
+  .sensor-caret { display: inline-block; width: 10px; color: var(--text-muted); }
+  .sensor-sum { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+  .sensor-detail > td { padding: 4px 18px 18px !important; background: var(--surface-2); white-space: normal; }
+  .cl-sensor-wrap, .cl-cov-wrap, .cl-cs-wrap { border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-catalog" hidden>
+      <div id="sensors-page-head"></div>
+      <div id="sensors-quick-links"></div>
+      <div class="stat-tiles" id="sensor-tiles"></div>
+
+      <section class="cl-panel">
+        <div class="cl-bar">
+          <div class="cl-count-line" id="sensor-count"></div>
+          <div class="cl-tools"><label class="cl-search"><input id="sensor-search" type="search" placeholder="Search name, purpose, or platform" aria-label="Find a built-in sensor"></label></div>
+        </div>
+        <div id="sensor-list"><p class="empty u-p-14-16">loading…</p></div>
+      </section>
+      <p class="hint u-mt-10">
+        Every sensor mustra collects, what question it answers, and exactly how it gets the answer on each
+        platform; click one for the details. The right reaction to a number depends on where it came from — "5
+        patches" read from the Windows Update API two minutes ago is a different fact from one read off a stale apt
+        index. <span id="sensors-status"></span>
+      </p>
+    </div>
+
+    <div class="module-section" id="section-coverage" hidden>
+      <div class="cl-head"><h1>Fleet Coverage</h1></div>
+      <section class="cl-panel">
+        <div class="cl-bar"><div class="cl-count-line" id="coverage-status"></div></div>
+        <div class="table-scroll table-scroll-y rows-10 no-cards cl-cov-wrap">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th>Sensor</th><th>Endpoints reporting</th><th>Linux</th><th>Windows</th><th>macOS</th><th>Newest</th><th>Oldest</th><th>Stale (&gt;1h)</th></tr></thead>
+            <tbody id="coverage-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <p class="hint u-mt-10">
+        How much of the fleet is actually reporting each sensor, per platform, and how fresh it is. A sensor can be
+        perfectly documented and still be silently broken on one platform: a platform column short of its total, or the
+        oldest collection, is what shows that. Platforms a sensor does not collect on read "—".
+      </p>
+    </div>
+
+    <div class="module-section" id="section-custom" hidden>
+      <div id="cs-list-view">
+        <div class="cl-head"><h1>Custom Sensors</h1><div class="cl-head-actions"><button class="primary" type="button" id="cs-new" hidden>New custom sensor</button></div></div>
+        <section class="cl-panel">
+          <div class="cl-bar">
+            <div class="cl-count-line" id="custom-status"></div>
+            <div class="cl-tools"><label class="cl-search"><input type="search" id="cs-filter" placeholder="Filter items" aria-label="Filter custom sensors"></label></div>
+          </div>
+          <div class="table-scroll table-scroll-y rows-10 no-cards cl-cs-wrap">
+            <table class="table-compact table-nowrap">
+              <thead><tr><th>Name</th><th>Platforms</th><th>Every</th><th>Timeout</th><th>Reporting</th><th>State</th><th>Action</th></tr></thead>
+              <tbody id="custom-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+        <p class="hint u-mt-10">
+          Collection you wrote, for the questions only you have. One sensor carries a script for each operating
+          system — Linux, macOS and Windows — and each endpoint runs the one for its platform; leave a platform blank to
+          skip it. The script runs with the agent's full rights through the selected interpreter, the same trust a
+          package command carries, which is why authoring one needs the same permission.
+        </p>
+      </div>
+
+      <form class="panel" id="cs-form" hidden novalidate>
+        <div class="panel-header"><h2 id="custom-editor-title">New custom sensor</h2><span id="cs-dirty" class="scan-status" role="status"></span></div>
+        <fieldset id="cs-fields">
+ <details><summary>Reusable sensor inputs</summary><label for="cs-inputs">Typed parameter definitions (JSON)</label><textarea id="cs-inputs" rows="5" class="u-w-100p">[]</textarea><p class="hint">Deploy checks bind these inputs to constants or package parameters. Scripts read MUSTRA_PARAM_name environment variables. Periodic collection uses defaults.</p></details>
+        <div class="form-grid">
+          <div class="field"><label for="cs-name">Name</label><input id="cs-name" required aria-describedby="cs-name-error" placeholder="Vendor agent version"><p id="cs-name-error" class="cs-field-error" hidden></p></div>
+          <div class="field"><label for="cs-desc">Description</label><input id="cs-desc" placeholder="What this answers, and why anyone would ask"></div>
+        </div>
+        <h3 class="sec-head" id="cs-script-heading">Script per operating system</h3>
+        <div id="cs-workspace-slot">
+          <div class="cs-workspace" id="cs-workspace">
+            <div class="cs-tabs" role="tablist" aria-label="Script platform">
+              <button type="button" role="tab" id="cs-tab-linux" aria-controls="cs-panel-linux" aria-selected="true" tabindex="0" data-cs-os="linux">Linux<span class="cs-tab-state" id="cs-state-linux">Empty</span></button>
+              <button type="button" role="tab" id="cs-tab-darwin" aria-controls="cs-panel-darwin" aria-selected="false" tabindex="-1" data-cs-os="darwin">macOS<span class="cs-tab-state" id="cs-state-darwin">Empty</span></button>
+              <button type="button" role="tab" id="cs-tab-windows" aria-controls="cs-panel-windows" aria-selected="false" tabindex="-1" data-cs-os="windows">Windows<span class="cs-tab-state" id="cs-state-windows">Empty</span></button>
+            </div>
+            <div class="cs-editor-toolbar">
+              <span id="cs-runner">Linux · /bin/sh -c</span>
+              <span id="cs-completion-status" class="scan-status" role="status" aria-live="polite"></span>
+              <button type="button" class="tiny" id="cs-find">Find / replace</button>
+              <button type="button" class="tiny" id="cs-expand" aria-expanded="false" aria-controls="cs-expanded">Expand editor</button>
+            </div>
+            <div class="cs-script-panel" id="cs-panel-linux" role="tabpanel" aria-labelledby="cs-tab-linux"><div class="form-grid cs-platform-settings">
+ <div class="field"><label for="cs-language-linux">Execution type</label><select id="cs-language-linux"><option value="shell">Shell (/bin/sh)</option><option value="python">Python 3 (bundled)</option><option value="go">Go (compiled)</option></select></div>
+ <div class="field"><label for="cs-format-linux">Output format</label><select id="cs-format-linux"><option value="text">Text lines</option><option value="json">JSON</option><option value="jsonl">JSON Lines</option><option value="delimited">Delimited rows</option><option value="list">Delimited list</option></select></div>
+ <div class="field"><label for="cs-rowpath-linux">JSON row path (blank = root)</label><input id="cs-rowpath-linux" placeholder="services"></div>
+ <div class="field"><label for="cs-delimiter-linux">Delimiter (use \t for tab)</label><input id="cs-delimiter-linux" value="," maxlength="2"></div>
+ <label><input id="cs-headers-linux" type="checkbox"> First row contains headers</label>
+ </div><div class="cs-editor-host" id="cs-cmd-linux"></div></div>
+            <div class="cs-script-panel" id="cs-panel-darwin" role="tabpanel" aria-labelledby="cs-tab-darwin" hidden><div class="form-grid cs-platform-settings">
+ <div class="field"><label for="cs-language-darwin">Execution type</label><select id="cs-language-darwin"><option value="shell">Shell (/bin/sh)</option><option value="python">Python 3 (bundled)</option><option value="go">Go (compiled)</option></select></div>
+ <div class="field"><label for="cs-format-darwin">Output format</label><select id="cs-format-darwin"><option value="text">Text lines</option><option value="json">JSON</option><option value="jsonl">JSON Lines</option><option value="delimited">Delimited rows</option><option value="list">Delimited list</option></select></div>
+ <div class="field"><label for="cs-rowpath-darwin">JSON row path (blank = root)</label><input id="cs-rowpath-darwin" placeholder="services"></div>
+ <div class="field"><label for="cs-delimiter-darwin">Delimiter (use \t for tab)</label><input id="cs-delimiter-darwin" value="," maxlength="2"></div>
+ <label><input id="cs-headers-darwin" type="checkbox"> First row contains headers</label>
+ </div><div class="cs-editor-host" id="cs-cmd-darwin"></div></div>
+            <div class="cs-script-panel" id="cs-panel-windows" role="tabpanel" aria-labelledby="cs-tab-windows" hidden><div class="form-grid cs-platform-settings">
+ <div class="field"><label for="cs-language-windows">Execution type</label><select id="cs-language-windows"><option value="powershell">Windows PowerShell</option><option value="batch">CMD / Batch</option><option value="python">Python 3 (bundled)</option><option value="go">Go (compiled)</option><option value="wql">WMI query (WQL)</option></select></div>
+ <div class="field"><label for="cs-format-windows">Output format</label><select id="cs-format-windows"><option value="text">Text lines</option><option value="json">JSON</option><option value="jsonl">JSON Lines</option><option value="delimited">Delimited rows</option><option value="list">Delimited list</option></select></div>
+ <div class="field"><label for="cs-rowpath-windows">JSON row path (blank = root)</label><input id="cs-rowpath-windows" placeholder="services"></div>
+ <div class="field"><label for="cs-delimiter-windows">Delimiter (use \t for tab)</label><input id="cs-delimiter-windows" value="," maxlength="2"></div>
+ <label><input id="cs-headers-windows" type="checkbox"> First row contains headers</label>
+ </div><div class="field" id="cs-namespace-field" hidden><label for="cs-namespace">WMI namespace</label><input id="cs-namespace" value="root&#92;cimv2"></div><div class="cs-editor-host" id="cs-cmd-windows"></div></div>
+            <p class="cs-script-help" id="cs-script-help">A blank script skips that platform. Syntax errors block saving; advisory warnings do not. Ctrl-Space opens language suggestions; Enter accepts. Tab indents; Escape then Tab moves out of the editor.</p>
+          </div>
+        </div>
+        <p id="cs-script-error" class="cs-field-error" hidden></p>
+        <h3 class="sec-head">Result fields</h3>
+        <p class="hint">All platforms share these fields and types. Leave paths blank to use the field name; nested paths such as memory.mb or /memory/mb are supported. Text and list formats use one field named value.</p>
+        <div class="table-scroll"><table><thead><tr><th>Name</th><th>Type</th><th>Linux path</th><th>macOS path</th><th>Windows path</th><th>Action</th></tr></thead><tbody id="cs-schema"></tbody></table></div>
+        <button type="button" id="cs-add-field" class="tiny">Add field</button>
+        <div class="field"><label for="cs-max-age">Maximum result age (seconds; 0 = two intervals plus timeout)</label><input id="cs-max-age" type="number" value="0" min="0" max="31536000"></div>
+        <details><summary>Test output and endpoint collection</summary>
+          <p class="hint">Parsing a sample runs no script. Endpoint testing executes the active platform script with the agent’s rights, with a maximum 60-second timeout.</p>
+          <div class="field"><label for="cs-sample">Sample output for active platform</label><textarea id="cs-sample" rows="5"></textarea></div>
+          <button type="button" id="cs-parse" class="tiny">Parse sample</button>
+          <div class="field"><label for="cs-test-agent">Test endpoint</label><select id="cs-test-agent"><option value="">Select an endpoint</option></select></div>
+          <button type="button" id="cs-test" class="tiny">Run on selected endpoint</button>
+          <button type="button" id="cs-use-fields" class="tiny" hidden>Use suggested WQL fields</button>
+          <div id="cs-preview" aria-live="polite"></div>
+        </details>
+        <div class="form-grid">
+          <div class="field"><label for="cs-interval">Run every (seconds)</label><input id="cs-interval" type="number" required min="60" step="1" value="900" aria-describedby="cs-interval-error"><p id="cs-interval-error" class="cs-field-error" hidden></p></div>
+          <div class="field"><label for="cs-timeout">Timeout (seconds)</label><input id="cs-timeout" type="number" required min="1" max="600" step="1" value="30" aria-describedby="cs-timeout-error"><p id="cs-timeout-error" class="cs-field-error" hidden></p></div>
+        </div>
+        <p class="hint">
+          Minimum interval: 60 seconds. Timeout: 1–600 seconds, no longer than the interval.
+        </p>
+        <div class="checks">
+          <label><input type="checkbox" id="cs-enabled" checked> Enabled on all endpoints with a configured platform</label>
+        </div>
+        <p class="hint">Agents check for saved changes every five minutes. Saving or disabling a sensor does not take effect immediately.</p>
+        <div class="panel-actions">
+          <button type="submit" class="primary" id="cs-save">Save sensor</button>
+          <button type="button" id="cs-cancel">Cancel</button>
+        </div>
+        </fieldset>
+        <p class="scan-status" id="cs-status" role="status" aria-live="polite"></p>
+      </form>
+      <p id="cs-readonly" class="hint" hidden>You can view sensor results. Creating, editing, and deleting sensors requires Deploy management permission.</p>
+      <dialog id="cs-expanded" aria-label="Expanded sensor script editor"></dialog>
+
+      <div class="panel" id="cs-results-panel" hidden>
+        <div class="panel-header"><h2 id="cs-results-title">Results</h2>
+          <span class="scan-status" id="cs-results-status"></span></div>
+        <p class="hint">
+          What each endpoint last reported. This is the only way to find out whether the command you wrote
+          actually does what you think on every platform.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>Collected</th><th>Output</th></tr></thead>
+            <tbody id="cs-results-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+<script src="/static/vendor/script-editor.js"></script>
+<script src="/static/app.js"></script>
+<script>
+let sensors = [];
+let coverage = [];
+let agentCount = 0;
+let agentCountByOS = {};
+
+document.addEventListener("mustra:user", () => {
+  initModuleSections([
+    { hash: "catalog", label: "Catalog" },
+    { hash: "coverage", label: "Fleet Coverage" },
+    { hash: "custom", label: "Custom Sensors" },
+  ]);
+  renderPageHead("sensors-page-head", "/sensors", { title: "Sensors",
+    sub: "What mustra collects from every endpoint, and how it collects it." });
+  renderQuickLinks("sensors-quick-links", "/sensors", null, [
+    { label: "Interact", href: "/interact", icon: "interact" },
+    { label: "Endpoints", href: "/agents", icon: "clients" },
+  ]);
+  csInit();
+  load();
+});
+
+// ---- custom sensors ----
+
+const CS_OSES = [["linux", "Linux"], ["darwin", "macOS"], ["windows", "Windows"]];
+// One viewport-positioned tooltip stays visible outside scrolling tables and the expanded editor.
+const csHelpTooltip = document.createElement('div');
+csHelpTooltip.id = 'cs-help-tooltip';
+csHelpTooltip.className = 'cs-help-tooltip';
+csHelpTooltip.role = 'tooltip';
+csHelpTooltip.hidden = true;
+document.body.append(csHelpTooltip);
+let csHelpActive = null, csHelpTimer;
+function csHideHelp() {
+  clearTimeout(csHelpTimer);
+  csHelpActive?.removeAttribute('aria-describedby');
+  csHelpActive = null;
+  csHelpTooltip.hidden = true;
+}
+function csHelp(anchor, label, content) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'cs-help-button';
+  button.textContent = '?';
+  button.setAttribute('aria-label', `Help: ${label}`);
+  // Keep help buttons outside labels so clicking help never toggles a form control.
+  if (anchor.tagName === 'LABEL') {
+    const heading = document.createElement('span');
+    heading.className = 'cs-help-label';
+    anchor.before(heading);
+    heading.append(anchor, button);
+  } else anchor.append(button);
+  const show = () => {
+    csHideHelp();
+    csHelpActive = button;
+    csHelpTooltip.textContent = typeof content === 'function' ? content() : content;
+    csHelpTooltip.hidden = false;
+    button.setAttribute('aria-describedby', csHelpTooltip.id);
+    const rect = button.getBoundingClientRect(), box = csHelpTooltip.getBoundingClientRect();
+    csHelpTooltip.style.left = `${Math.max(12, Math.min(rect.left, innerWidth - box.width - 12))}px`;
+    csHelpTooltip.style.top = `${Math.max(12, rect.bottom + box.height + 8 < innerHeight ? rect.bottom + 8 : rect.top - box.height - 8)}px`;
+  };
+  button.addEventListener('mouseenter', show);
+  button.addEventListener('focus', show);
+  button.addEventListener('click', e => { e.preventDefault(); show(); });
+  button.addEventListener('mouseleave', () => { csHelpTimer = setTimeout(() => { if (document.activeElement !== button) csHideHelp(); }, 150); });
+  button.addEventListener('blur', csHideHelp);
+}
+csHelpTooltip.addEventListener('mouseenter', () => clearTimeout(csHelpTimer));
+csHelpTooltip.addEventListener('mouseleave', csHideHelp);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') csHideHelp(); });
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.cs-help-button, .cs-help-tooltip')) csHideHelp(); });
+window.addEventListener('resize', csHideHelp);
+document.addEventListener('scroll', e => { if (!csHelpTooltip.contains(e.target)) csHideHelp(); }, true);
+const csFormatHelp = {
+  text: 'Text lines: each line becomes a separate record in the single field named value.\nExample: printing “running” and “stopped” on separate lines produces two records.',
+  json: 'JSON: return one JSON document. An array produces one record per item; an object produces one record.\nExample: [{"name":"agent","running":true}]. Use the row path to select a nested array, then field paths to select values within each record.',
+  jsonl: 'JSON Lines: return one complete JSON document per line. Blank lines are ignored.\nExample: {"name":"agent"} on one line and {"name":"server"} on the next. The row path is applied separately to each document.',
+  delimited: 'Delimited rows: each row is a record and each column supplies a field.\nExample: agent|true with | as the delimiter. Without headers, columns follow the result-field order. With headers, columns are matched by name or field path.',
+  list: 'Delimited list: each separated item becomes a record in the single field named value.\nExample: running|stopped produces two records when the delimiter is |. Use delimited rows when each record needs multiple fields.'
+};
+for (const [os] of CS_OSES) {
+  const help = (key, label, text) => csHelp(document.querySelector(`label[for="cs-${key}-${os}"]`), label, text);
+  help('format', 'Output format', () => csFormatHelp[document.getElementById(`cs-format-${os}`).value] + '\n\nAll formats use the shared result fields below. WMI queries automatically use JSON.');
+  help('rowpath', 'JSON row path', 'Select the object or array containing your records. Leave blank when records are at the JSON root.\nFor {"data":{"services":[{"name":"agent"}]}}, use data.services or /data/services. Each array item becomes a record; field paths start inside that record.');
+  help('delimiter', 'Delimiter', 'Enter one character, such as comma (,), pipe (|), or tilde (~). Enter \\t for a tab.\nUse CSV-style double quotes when a value contains the delimiter: "hello, world",running. Double a quote inside a quoted value: "say ""hello""".');
+  csHelp(document.getElementById(`cs-headers-${os}`).parentElement, 'First row contains headers', 'Use the first row as column names, not data. Names must be nonempty and unique.\nFor headers Name|State, map your shared name field to Name and status field to State. Without headers, columns follow the order of the result fields.');
+}
+csHelp(document.querySelector('label[for="cs-namespace"]'), 'WMI namespace', 'The local WMI namespace containing the class you query. Most Windows inventory classes use root\\cimv2.\nPaste a finite SELECT query, such as SELECT Name, State FROM Win32_Service. Results use the same JSON field mapping as other sensors.');
+csHelp(document.querySelector('label[for="cs-max-age"]'), 'Maximum result age', 'How long a successful result remains eligible for targeting. Set 0 to use two run intervals plus the timeout.\nStale or failed results are unknown for targeting, including negative conditions. The last successful result remains available for historical display and reporting.');
+const csFieldHeadings = document.querySelectorAll('#cs-schema').item(0).closest('table').querySelectorAll('th');
+csHelp(csFieldHeadings[0], 'Result field name', 'The shared name used in targeting and reports on every platform. Start with a letter; use letters, numbers, and underscores, up to 64 characters. Names must be unique; count and names starting with _ are reserved.\nText lines and delimited lists require one field named value.');
+csHelp(csFieldHeadings[1], 'Result field type', 'Choose string for text, number for numeric comparisons, or bool for true/false. Every platform must produce the same field types.\nMapped values must be scalar, not objects or arrays. Missing values become null; invalid conversions reject the result. Fields used by groups or saved queries cannot be removed or retyped.');
+for (let i = 2; i < 5; i++) csHelp(csFieldHeadings[i], 'Platform field path', 'Map this platform’s output into the shared field. Leave blank to use the field name.\nFor JSON, paths are relative to each selected record: memory.mb or /memory/mb selects a nested value; addresses.0 selects the first array item. Use $ for the entire item in an array of scalars.\nFor delimited rows with headers, enter the source column name. Leave paths blank for text lines and delimited lists.');
+csHelp(document.querySelector('label[for="cs-sample"]'), 'Sample output', 'Paste exactly what the active platform script writes to standard output. Parse sample uses the selected format, paths, and field types without running the script.\nUse this to check record boundaries and converted values before saving. Keep diagnostic messages on standard error.');
+
+let customSensors = [];
+let csEditingID = null;
+let csActiveOS = "linux";
+let csBaseline = null;
+let csBusy = false;
+let csValidated = false;
+const csEditors = {};
+const csCompletionStatus = {};
+const csEditorSession = Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16)).join("-");
+
+function csCanManage() { return hasPermission(currentUser, "deploy.manage"); }
+
+function csFormValue() {
+  return {
+    name: document.getElementById("cs-name").value,
+    description: document.getElementById("cs-desc").value,
+    commands: Object.fromEntries(CS_OSES.map(([os]) => [os, csEditors[os].getValue()])),
+    ...csOutputValue(),
+    interval: document.getElementById("cs-interval").value,
+    timeout: document.getElementById("cs-timeout").value,
+    enabled: document.getElementById("cs-enabled").checked,
+  };
+}
+
+function csIsDirty() {
+  return csBaseline !== null && JSON.stringify(csFormValue()) !== JSON.stringify(csBaseline);
+}
+
+function csSetStatus(message, error = false) {
+  const status = document.getElementById("cs-status");
+  status.textContent = message;
+  status.dataset.error = String(error);
+}
+
+function csChanged() {
+  if (!csBaseline) return;
+  document.getElementById("cs-dirty").textContent = csIsDirty() ? "Unsaved changes" : "";
+  CS_OSES.forEach(([os]) => {
+    const script = csEditors[os].getValue();
+    const changed = script !== csBaseline.commands[os];
+    const label = document.getElementById(`cs-state-${os}`);
+    label.textContent = `${script.trim() ? "Configured" : "Empty"}${changed ? " · Unsaved" : ""}`;
+    label.classList.toggle("cs-tab-dirty", changed);
+  });
+  csSetStatus("");
+  if (csValidated) csValidate(false);
+}
+
+function csActivate(os, focusTab = false) {
+  csActiveOS = os;
+  CS_OSES.forEach(([key]) => {
+    const tab = document.getElementById(`cs-tab-${key}`);
+    tab.setAttribute("aria-selected", String(key === os));
+    tab.tabIndex = key === os ? 0 : -1;
+    document.getElementById(`cs-panel-${key}`).hidden = key !== os;
+  });
+  const label = CS_OSES.find(([key]) => key === os)[1];
+  document.getElementById("cs-runner").textContent = `${label} · ${document.getElementById(`cs-language-${os}`).selectedOptions[0].textContent}`;
+  document.getElementById("cs-completion-status").textContent = csCompletionStatus[os] || "";
+  csEditors[os]?.refresh();
+  if (focusTab) document.getElementById(`cs-tab-${os}`).focus();
+}
+
+function csInit() {
+  // The editor opens for New or Edit, in place of the list.
+  csShowEditor(false);
+  document.getElementById("cs-new").hidden = !csCanManage();
+  document.getElementById("cs-readonly").hidden = csCanManage();
+  if (!csCanManage() || csEditors.linux) return;
+  if (typeof MustraScriptEditor !== "function") {
+    document.getElementById("cs-fields").disabled = true;
+    csSetStatus("The script editor could not load. Reload this page to try again.", true);
+    return;
+  }
+  CS_OSES.forEach(([os, label]) => {
+    csEditors[os] = MustraScriptEditor(document.getElementById(`cs-cmd-${os}`), {
+      language: os === "windows" ? "powershell" : "shell", label: `${label} script`, onChange: csChanged,
+      onCompletionStatus: message => {
+        csCompletionStatus[os] = message;
+        if (csActiveOS === os) document.getElementById("cs-completion-status").textContent = message;
+      },
+      complete: async (script, position, signal) => {
+        if (!["shell","powershell"].includes(document.getElementById(`cs-language-${os}`).value)) return [];
+        const resp = await fetch("/api/sensors/custom/complete", {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal,
+          body: JSON.stringify({ platform: os, language:document.getElementById(`cs-language-${os}`).value, script, position, session: csEditorSession }),
+        });
+        if (!resp.ok) throw new Error("Completion unavailable");
+        return (await resp.json()).items;
+      },
+      validate: async script => {
+        if (!script.trim()) return [];
+        const resp = await fetch("/api/sensors/custom/validate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ commands: { [os]: script }, platforms: csOutputValue().platforms }),
+        });
+        if (!resp.ok) throw new Error("Syntax check failed");
+        const result = await resp.json();
+        return [...(result.errors[os] || []), ...(result.warnings?.[os] || [])];
+      },
+    });
+    const tab = document.getElementById(`cs-tab-${os}`);
+    tab.addEventListener("click", () => csActivate(os));
+    tab.addEventListener("keydown", event => {
+      const i = CS_OSES.findIndex(([key]) => key === os);
+      const target = { ArrowRight: (i + 1) % 3, ArrowLeft: (i + 2) % 3, Home: 0, End: 2 }[event.key];
+      if (target === undefined) return;
+      event.preventDefault();
+      csActivate(CS_OSES[target][0], true);
+    });
+  });
+  csLoadOutput({});
+  csInitOutput();
+  csBaseline = csFormValue();
+  document.getElementById("cs-form").addEventListener("input", csChanged);
+  document.getElementById("cs-find").addEventListener("click", () => csEditors[csActiveOS].find());
+  const dialog = document.getElementById("cs-expanded");
+  const expand = document.getElementById("cs-expand");
+  expand.addEventListener("click", () => {
+    if (dialog.open) { dialog.close(); return; }
+    dialog.append(document.getElementById("cs-workspace"));
+    expand.textContent = "Collapse editor";
+    expand.setAttribute("aria-expanded", "true");
+    dialog.showModal();
+    csEditors[csActiveOS].refresh();
+    csEditors[csActiveOS].focus();
+  });
+  dialog.addEventListener("close", () => {
+    document.getElementById("cs-workspace-slot").append(document.getElementById("cs-workspace"));
+    expand.textContent = "Expand editor";
+    expand.setAttribute("aria-expanded", "false");
+    csEditors[csActiveOS].refresh();
+    expand.focus();
+  });
+  window.addEventListener("beforeunload", event => {
+    if (!csIsDirty() && !csBusy) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+}
+
+function csConfirmDiscard() {
+  return !csBusy && (!csIsDirty() || confirm("Discard unsaved changes to this sensor?"));
+}
+
+function csSetBusy(busy) {
+  csBusy = busy;
+  document.getElementById("cs-fields").disabled = busy || !csEditors.linux;
+  Object.values(csEditors).forEach(editor => editor.setReadOnly(busy));
+  document.querySelectorAll("[data-cs-edit], [data-cs-del]").forEach(button => { button.disabled = busy; });
+}
+
+function csValidate(focus = true) {
+  csValidated = true;
+  const value = csFormValue();
+  const interval = Number(value.interval), timeout = Number(value.timeout);
+  const errors = {
+    name: value.name.trim() ? "" : "Enter a sensor name.",
+    interval: Number.isSafeInteger(interval) && interval >= 60 ? "" : "Enter a whole number of at least 60 seconds.",
+    timeout: !Number.isSafeInteger(timeout) || timeout < 1 || timeout > 600
+      ? "Enter a whole number from 1 to 600 seconds."
+      : timeout > interval ? "Timeout cannot exceed the collection interval." : "",
+    script: Object.values(value.commands).some(script => script.trim()) ? "" : "Add a script for at least one platform.",
+  };
+  Object.entries(errors).forEach(([field, message]) => {
+    const error = document.getElementById(`cs-${field}-error`);
+    error.textContent = message;
+    error.hidden = !message;
+    document.getElementById(`cs-${field}`)?.setAttribute("aria-invalid", String(!!message));
+  });
+  const first = Object.keys(errors).find(field => errors[field]);
+  if (first && focus) {
+    if (first === "script") csEditors[csActiveOS].focus();
+    else document.getElementById(`cs-${first}`).focus();
+  }
+  return !first;
+}
+
+async function loadCustom() {
+  let resp;
+  try {
+    resp = await fetch("/api/sensors/custom");
+    if (!resp.ok) throw new Error(await resp.text());
+    customSensors = (await resp.json()).sensors || [];
+  } catch (error) {
+    document.getElementById("custom-status").textContent = `Could not load sensors: ${error.message}`;
+    return;
+  }
+  const body = document.getElementById("custom-body");
+  document.getElementById("custom-status").innerHTML =
+    `<strong>${escapeHtml(customSensors.length)}</strong> of <strong>${escapeHtml(customSensors.length)}</strong> Items`;
+  body.innerHTML = customSensors.length === 0
+    ? '<tr><td class="empty" colspan="7">none yet — the built-ins cover the common questions, this is for yours</td></tr>'
+    : customSensors.map(c => {
+        const cov = coverage.find(x => x.sensor === `custom_${c.id}`);
+        return `<tr>
+          <td><strong>${escapeHtml(c.name)}</strong>
+            ${c.description ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(c.description)}</div>` : ""}</td>
+          <td>${Object.keys(c.commands || {}).map(os => `<span class="os-pill">${escapeHtml(CS_OSES.find(([key]) => key === os)?.[1] || os)}</span>`).join(" ")}</td>
+          <td>${escapeHtml(c.interval_seconds)}s</td>
+          <td>${escapeHtml(c.timeout_seconds)}s</td>
+          <td>${cov ? `${escapeHtml(cov.agents)} endpoint(s)` : "—"}</td>
+          <td>${c.enabled ? '<span class="sev-pill u-bg-ok-bg u-c-ok">enabled</span>'
+                          : '<span class="sev-pill none">disabled</span>'}</td>
+          <td class="row-actions">
+            <button class="tiny" data-cs-results="${escapeHtml(c.id)}">results</button>
+            ${csCanManage() ? `<button class="tiny" data-cs-edit="${escapeHtml(c.id)}"${csBusy ? " disabled" : ""}>edit</button>
+            <button class="tiny danger" data-cs-del="${escapeHtml(c.id)}"${csBusy ? " disabled" : ""}>delete</button>` : ""}
+          </td></tr>`;
+      }).join("");
+
+  body.querySelectorAll("[data-cs-edit]").forEach(b =>
+    b.addEventListener("click", () => csEdit(b.dataset.csEdit)));
+  body.querySelectorAll("[data-cs-results]").forEach(b =>
+    b.addEventListener("click", () => csResults(b.dataset.csResults)));
+  body.querySelectorAll("[data-cs-del]").forEach(b =>
+    b.addEventListener("click", async () => {
+      if (csBusy || !csCanManage()) return;
+      const id = b.dataset.csDel;
+      const unsaved = csEditingID === id && csIsDirty() ? " Unsaved changes will also be discarded." : "";
+      if (!confirm(`Delete this custom sensor? Its collected results are removed too.${unsaved}`)) return;
+      csSetBusy(true);
+      try {
+        const resp = await fetch(`/api/sensors/custom/${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (!resp.ok) throw new Error(await resp.text());
+        if (csEditingID === id) csReset();
+        document.getElementById("cs-results-panel").hidden = true;
+        csSetStatus("Sensor deleted.");
+        await loadCustom();
+      } catch (error) {
+        csSetStatus(`Could not delete sensor: ${error.message}`, true);
+      } finally { csSetBusy(false); }
+    }));
+}
+
+function csEdit(id) {
+  if (!csCanManage() || !csEditors.linux || !csConfirmDiscard()) return;
+  const c = customSensors.find(x => x.id === id);
+  if (!c) return;
+  csEditingID = id;
+  csLoadOutput(c);
+  document.getElementById("custom-editor-title").textContent = `Editing ${c.name}`;
+  document.getElementById("cs-name").value = c.name || "";
+  document.getElementById("cs-desc").value = c.description || "";
+  CS_OSES.forEach(([os]) => {
+    csEditors[os].setValue((c.commands || {})[os] || "");
+  });
+  document.getElementById("cs-interval").value = c.interval_seconds;
+  document.getElementById("cs-timeout").value = c.timeout_seconds;
+  document.getElementById("cs-enabled").checked = !!c.enabled;
+  csClearValidation();
+  csBaseline = csFormValue();
+  csChanged();
+  csActivate(CS_OSES.find(([os]) => (c.commands || {})[os]?.trim())?.[0] || "linux");
+  csShowEditor(true);
+  document.getElementById("cs-form").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function csClearValidation() {
+  csValidated = false;
+  document.querySelectorAll(".cs-field-error").forEach(element => { element.hidden = true; element.textContent = ""; });
+  document.querySelectorAll("#cs-form [aria-invalid]").forEach(element => element.removeAttribute("aria-invalid"));
+}
+
+function csShowEditor(show) {
+  document.getElementById("cs-form").hidden = !show;
+  document.getElementById("cs-list-view").hidden = show;
+  if (!show) document.getElementById("cs-results-panel").hidden = true;
+}
+document.getElementById("cs-new").addEventListener("click", () => {
+  if (!csCanManage() || !csConfirmDiscard()) return;
+  csReset();
+  csShowEditor(true);
+  document.getElementById("cs-name").focus();
+});
+document.getElementById("cs-filter").addEventListener("input", () => {
+  const q = document.getElementById("cs-filter").value.trim().toLowerCase();
+  document.querySelectorAll("#custom-body tr").forEach(tr => { tr.hidden = !!q && !tr.textContent.toLowerCase().includes(q); });
+});
+
+function csReset() {
+  csEditingID = null;
+  csLoadOutput({});
+  document.getElementById("custom-editor-title").textContent = "New custom sensor";
+  ["cs-name", "cs-desc"].forEach(id => { document.getElementById(id).value = ""; });
+  CS_OSES.forEach(([os]) => { csEditors[os].setValue(""); });
+  document.getElementById("cs-interval").value = 900;
+  document.getElementById("cs-timeout").value = 30;
+  document.getElementById("cs-enabled").checked = true;
+  csClearValidation();
+  csBaseline = csFormValue();
+  csChanged();
+  csActivate("linux");
+}
+document.getElementById("cs-cancel").addEventListener("click", () => { if (csConfirmDiscard()) { csReset(); csShowEditor(false); } });
+
+document.getElementById("cs-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!csCanManage() || csBusy || !csEditors.linux || !csValidate()) return;
+  const value = csFormValue();
+  const commands = {};
+  CS_OSES.forEach(([os]) => {
+    const v = value.commands[os];
+    if (v.trim()) commands[os] = v;
+  });
+  const body = {
+    name: value.name.trim(), description: value.description.trim(), commands,
+    platforms: value.platforms, fields:value.fields, max_age_seconds:value.max_age_seconds, parameters:value.parameters,
+    interval_seconds: Number(value.interval), timeout_seconds: Number(value.timeout), enabled: value.enabled,
+  };
+  csSetBusy(true);
+  csSetStatus("Saving…");
+  try {
+    const resp = await fetch(csEditingID ? `/api/sensors/custom/${encodeURIComponent(csEditingID)}` : "/api/sensors/custom", {
+      method: csEditingID ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (resp.status === 422) {
+      const { errors, warnings } = await resp.json();
+      CS_OSES.forEach(([os]) => csEditors[os].setDiagnostics([...(errors[os] || []), ...(warnings?.[os] || [])]));
+      const first = CS_OSES.find(([os]) => errors[os]?.length);
+      if (first) {
+        csActivate(first[0]);
+        csSetStatus(errors[first[0]][0].message, true);
+      }
+      return;
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+    const saved = await resp.json();
+    csEditingID = saved.id;
+    document.getElementById("custom-editor-title").textContent = `Editing ${saved.name}`;
+    csBaseline = csFormValue();
+    csChanged();
+    csSetStatus("Saved. Agents check for changes every five minutes.");
+    await loadCustom();
+    csShowEditor(false);
+  } catch (error) {
+    csSetStatus(`Could not save sensor: ${error.message}. Your edits are still here.`, true);
+  } finally { csSetBusy(false); }
+});
+
+async function csResults(id) {
+  const panel = document.getElementById("cs-results-panel");
+  panel.hidden = false;
+  document.getElementById("cs-results-body").innerHTML = '<tr><td class="empty" colspan="3">loading…</td></tr>';
+  const resp = await fetch(`/api/sensors/custom/${encodeURIComponent(id)}/results`);
+  if (!resp.ok) {
+    document.getElementById("cs-results-body").innerHTML =
+      `<tr><td class="empty" colspan="3">${escapeHtml(await resp.text())}</td></tr>`;
+    return;
+  }
+  const data = await resp.json();
+  document.getElementById("cs-results-title").textContent = `Results — ${data.sensor.name}`;
+  const rows = data.results || [];
+  document.getElementById("cs-results-status").textContent = `${rows.length} endpoint(s)`;
+  document.getElementById("cs-results-body").innerHTML = rows.length === 0
+    ? '<tr><td class="empty" colspan="3">nothing reported yet — endpoints pick up a new sensor within five minutes</td></tr>'
+    : rows.map(r => {
+        let d = {};
+        try { d = typeof r.data === "string" ? JSON.parse(r.data) : (r.data || {}); } catch (e) {}
+        const lines = d.raw ?? (d.lines || []).join("\n");
+        const problem = d.error ? `<div class="u-c-off u-fs-meta u-mb-4">${escapeHtml(d.error)}${d.timed_out ? " (timed out)" : ""}</div>` : "";
+        return `<tr>
+          <td>${escapeHtml(r.hostname || r.agent_id)}</td>
+          <td>${r.collected_at ? fmtAgo(r.collected_at) : "—"}</td>
+          <td><div>${escapeHtml(r.status || "")}</div>${problem}${csRowsTable(d.rows || [])}${r.last_success ? `<details><summary>Last successful result · ${escapeHtml(r.last_success.collected_at)}</summary>${csRowsTable(r.last_success.rows || [])}</details>` : ""}${lines ? `<div class="cs-out">${escapeHtml(lines)}</div>` : '<span class="u-c-text-muted">no output</span>'}</td>
+        </tr>`;
+      }).join("");
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+
+function csAddField(field = {name:"",type:"string"}, platforms = {}) {
+ const row=document.createElement('tr');
+ row.innerHTML=`<td><input class="cs-field-name" aria-label="Field name" value="${escapeHtml(field.name)}"></td><td><select class="cs-field-type" aria-label="Field type"><option>string</option><option>number</option><option>bool</option></select></td>${CS_OSES.map(([os,label])=>`<td><input data-path="${escapeHtml(os)}" aria-label="${escapeHtml(label)} field path" value="${escapeHtml(platforms[os]?.output?.paths?.[field.name] || '')}"></td>`).join('')}<td><button type="button" class="tiny danger">Remove</button></td>`;
+ row.querySelector('select').value=field.type;
+ row.querySelector('button').onclick=()=>{row.remove();csChanged();};
+ document.getElementById('cs-schema').append(row);
+}
+function csOutputValue(){
+ const rows=[...document.querySelectorAll('#cs-schema tr')];
+ const fields=rows.map(row=>({name:row.querySelector('.cs-field-name').value.trim(),type:row.querySelector('.cs-field-type').value}));
+ const platforms=Object.fromEntries(CS_OSES.map(([os])=>[os,{
+  language:document.getElementById(`cs-language-${os}`).value,
+  namespace:os==='windows'?document.getElementById('cs-namespace').value:'',
+  output:{format:document.getElementById(`cs-format-${os}`).value,row_path:document.getElementById(`cs-rowpath-${os}`).value,
+   delimiter:document.getElementById(`cs-delimiter-${os}`).value === String.raw`\t` ? '\t' : document.getElementById(`cs-delimiter-${os}`).value,headers:document.getElementById(`cs-headers-${os}`).checked,
+   paths:Object.fromEntries(rows.map((row,i)=>[fields[i].name,row.querySelector(`[data-path="${os}"]`).value]).filter(([,path])=>path!==''))}
+ }]));
+ // Empty platforms are intentionally absent, including parser configuration.
+ for(const [os] of CS_OSES) if(!csEditors[os]?.getValue().trim()) delete platforms[os];
+ return {fields,platforms,parameters:JSON.parse(document.getElementById('cs-inputs').value||'[]'),max_age_seconds:Number(document.getElementById('cs-max-age').value)};
+}
+function csLoadOutput(c){
+ document.getElementById('cs-schema').replaceChildren();
+ (c.fields?.length?c.fields:[{name:'value',type:'string'}]).forEach(f=>csAddField(f,c.platforms||{}));
+ document.getElementById('cs-max-age').value=c.max_age_seconds||0;
+ document.getElementById('cs-inputs').value=JSON.stringify(c.parameters||[],null,2);
+ for(const [os] of CS_OSES){const p=c.platforms?.[os]||{},o=p.output||{};
+  document.getElementById(`cs-language-${os}`).value=p.language||(os==='windows'?'powershell':'shell');
+  document.getElementById(`cs-format-${os}`).value=o.format||'text';
+  document.getElementById(`cs-rowpath-${os}`).value=o.row_path||'';
+  document.getElementById(`cs-delimiter-${os}`).value=o.delimiter==='\t'?String.raw`\t`:(o.delimiter||',');
+  document.getElementById(`cs-headers-${os}`).checked=!!o.headers;
+  csEditors[os]?.setLanguage(document.getElementById(`cs-language-${os}`).value);csSyncOutput(os);
+ }
+ document.getElementById('cs-namespace').value=c.platforms?.windows?.namespace||String.raw`root\cimv2`;
+ document.getElementById('cs-namespace-field').hidden=document.getElementById('cs-language-windows').value!=='wql';
+ document.getElementById('cs-preview').replaceChildren();
+ document.getElementById('cs-use-fields').hidden=true;
+}
+function csRowsTable(rows){
+ if(!rows.length)return '<p class="hint">No records</p>';
+ const keys=Object.keys(rows[0]);return `<div class="table-scroll"><table><thead><tr>${keys.map(k=>`<th>${escapeHtml(k)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${keys.map(k=>`<td>${escapeHtml(row[k]===null?'[null]':String(row[k]??''))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+function csSyncOutput(os){
+ const language=document.getElementById(`cs-language-${os}`).value,select=document.getElementById(`cs-format-${os}`);
+ if(language==='wql')select.value='json';select.disabled=language==='wql';
+ const format=select.value;
+ document.getElementById(`cs-rowpath-${os}`).parentElement.hidden=!['json','jsonl'].includes(format);
+ document.getElementById(`cs-delimiter-${os}`).parentElement.hidden=!['delimited','list'].includes(format);
+ document.getElementById(`cs-headers-${os}`).closest('.cs-help-label').hidden=format!=='delimited';
+}
+function csInitOutput(){
+ document.getElementById('cs-add-field').onclick=()=>{csAddField();csChanged();};
+ for(const [os] of CS_OSES){document.getElementById(`cs-format-${os}`).onchange=()=>{csSyncOutput(os);csChanged();};}
+ for(const [os] of CS_OSES)document.getElementById(`cs-language-${os}`).onchange=()=>{
+  const language=document.getElementById(`cs-language-${os}`).value;csEditors[os].setLanguage(language);csEditors[os].setDiagnostics([]);
+  if(language==='wql') document.getElementById(`cs-format-${os}`).value='json';
+  document.getElementById('cs-namespace-field').hidden=document.getElementById('cs-language-windows').value!=='wql';csSyncOutput(os);csActivate(os);csChanged();
+ };
+ fetch('/api/agents').then(r=>r.json()).then(data=>{
+  const agents=data.agents||data;document.getElementById('cs-test-agent').innerHTML='<option value="">Select an endpoint</option>'+agents.filter(a=>a.online).map(a=>`<option value="${escapeHtml(a.agent_id)}" data-os="${escapeHtml(a.os)}">${escapeHtml(a.hostname)} (${escapeHtml(a.os)})</option>`).join('');
+ }).catch(()=>{});
+ async function preview(endpoint){
+  const box=document.getElementById('cs-preview');box.textContent='Testing…';
+  const value=csFormValue();
+  try{
+   const p=value.platforms[csActiveOS];if(!p)throw new Error('Add a script to the active platform first.');
+   const selected=document.getElementById('cs-test-agent');
+   if(endpoint && (!selected.value||selected.selectedOptions[0].dataset.os!==csActiveOS))throw new Error('Select an online endpoint matching the active platform.');
+   const body=endpoint?{agent_id:selected.value,sensor:{name:value.name,commands:value.commands,platforms:value.platforms,fields:value.fields,timeout_seconds:Number(value.timeout)}}:{raw:document.getElementById('cs-sample').value,output:p.output,fields:value.fields};
+   const resp=await fetch(`/api/sensors/custom/${endpoint?'test':'parse'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   if(!resp.ok)throw new Error(await resp.text());const data=await resp.json();const result=data.result||data;
+   box.innerHTML=(result.error?`<p class="cs-field-error">${escapeHtml(result.error)}</p>`:'')+csRowsTable(result.rows||[]);
+   if(result.raw!==undefined){document.getElementById('cs-sample').value=result.raw;box.innerHTML+=`<details><summary>Raw output and diagnostics</summary><pre>${escapeHtml(result.raw)}\n${escapeHtml(result.stderr||'')}</pre></details>`;}
+   const use=document.getElementById('cs-use-fields');use.hidden=!data.suggested_fields?.length;
+   use.onclick=()=>{document.getElementById('cs-schema').replaceChildren();data.suggested_fields.forEach(f=>csAddField(f));use.hidden=true;csChanged();};
+  }catch(e){box.textContent=e.message;}
+ }
+ document.getElementById('cs-parse').onclick=()=>preview(false);
+ document.getElementById('cs-test').onclick=()=>preview(true);
+}
+
+async function load() {
+  const resp = await fetch("/api/sensors");
+  if (!resp.ok) {
+    document.getElementById("sensor-list").innerHTML =
+      `<p class="empty">could not load the sensor catalog: ${escapeHtml(await resp.text())}</p>`;
+    return;
+  }
+  const data = await resp.json();
+  sensors = data.sensors || [];
+  coverage = data.coverage || [];
+  agentCount = data.agent_count || 0;
+  agentCountByOS = data.agent_count_by_os || {};
+  renderTiles();
+  renderSensors();
+  renderCoverage();
+  loadCustom();
+}
+
+function covFor(kind) {
+  return coverage.find(c => c.sensor === kind) || null;
+}
+
+function renderTiles() {
+  // On-demand sensors are never collected, so they don't count as missing.
+  const collected = sensors.filter(s => !s.on_demand);
+  const reporting = collected.filter(s => (covFor(s.kind)?.agents || 0) > 0).length;
+  const stale = coverage.reduce((a, c) => a + (c.stale || 0), 0);
+  document.getElementById("sensor-tiles").innerHTML = [
+    { label: "Sensors", value: sensors.length, cls: "" },
+    { label: "Reporting data", value: `${reporting}/${collected.length}`, cls: reporting === collected.length ? "ok" : "" },
+    { label: "Endpoints", value: agentCount, cls: "" },
+    { label: "Stale collections", value: stale, cls: stale > 0 ? "bad" : "ok" },
+  ].map(t => `
+    <div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls)}">${escapeHtml(String(t.value))}</div>
+    </div>`).join("");
+  document.getElementById("sensors-status").textContent = `${sensors.length} sensors`;
+}
+
+// sensorPlatforms names the platforms a sensor's mechanism covers.
+function sensorPlatforms(s) {
+  const oses = new Set();
+  for (const m of s.mechanism || []) {
+    if (m.os === "all") ["linux", "windows", "darwin"].forEach(o => oses.add(o));
+    else oses.add(m.os);
+  }
+  return ["linux", "windows", "darwin"].filter(o => oses.has(o));
+}
+
+function renderSensors() {
+  const query = document.getElementById("sensor-search").value.trim().toLowerCase();
+  const matches = sensors.filter(s => [s.name, s.kind, s.summary, s.answers,
+    ...(s.mechanism || []).map(m => `${m.os === 'darwin' ? 'macOS darwin' : m.os} ${m.how}`)
+  ].join(" ").toLowerCase().includes(query));
+  document.getElementById("sensor-count").innerHTML = `<strong>${escapeHtml(matches.length)}</strong> of <strong>${escapeHtml(sensors.length)}</strong> Sensors`;
+  // One compact row per sensor; clicking it opens everything about it
+  // (what it answers, how each platform collects it, the source) beneath.
+  document.getElementById("sensor-list").innerHTML = matches.length ? `
+    <div class="table-scroll table-scroll-y rows-10 no-cards cl-sensor-wrap">
+      <table class="table-compact sensor-table">
+        <thead><tr><th>Sensor</th><th>Kind</th><th>What it collects</th><th>Platforms</th><th>Reporting</th><th>Stale</th></tr></thead>
+        <tbody>${matches.map(s => {
+    const c = covFor(s.kind);
+    const n = c ? c.agents : 0;
+    return `
+    <tr class="sensor-row" data-sensor-row="${escapeHtml(s.kind)}" tabindex="0" aria-expanded="false">
+      <td><span class="sensor-caret" aria-hidden="true">▸</span> <strong>${escapeHtml(s.name)}</strong></td>
+      <td><code>${escapeHtml(s.kind)}</code></td>
+      <td class="sensor-sum">${escapeHtml(s.summary)}</td>
+      <td>${sensorPlatforms(s).map(o => `<span class="os-pill">${escapeHtml(osLabel(o))}</span>`).join(" ")}</td>
+      <td data-sort="${escapeHtml(n)}">${s.on_demand ? '<span class="u-c-text-muted">on demand</span>' : `${escapeHtml(n)} of ${escapeHtml(agentCount)}`}</td>
+      <td>${c && c.stale > 0 ? `<span class="stale-pill">${escapeHtml(c.stale)}</span>` : "0"}</td>
+    </tr>
+    <tr class="sensor-detail" data-sensor-detail="${escapeHtml(s.kind)}" hidden><td colspan="6">
+      <div class="sensor-body">
+        <h4>What it answers</h4>
+        <p>${escapeHtml(s.answers)}</p>
+
+        <h4>How it is collected</h4>
+        <table class="mech"><tbody>
+          ${(s.mechanism || []).map(m => `
+            <tr><td class="os">${escapeHtml(m.os)}</td><td>${escapeHtml(m.how)}</td></tr>`).join("")}
+        </tbody></table>
+
+        <details class="sensor-source" data-source-kind="${escapeHtml(s.kind)}">
+          <summary>View built-in Go source</summary>
+          <p>Collector files from this server build. Endpoint versions may differ. These files use agent internals and are reference code, not standalone custom scripts.</p>
+          <div data-source-content></div>
+        </details>
+        ${s.template ? `<h4>Editable custom example</h4>
+          <p>${escapeHtml(s.template.notes)} Each output line becomes a <code>value</code> record. Custom output limits apply (500 rows, 64 KiB).</p>
+          ${CS_OSES.filter(([os]) => s.template.commands[os]).map(([os, label]) => `<details class="sensor-source"><summary>${escapeHtml(label)} example</summary><pre><code>${escapeHtml(s.template.commands[os])}</code></pre></details>`).join('')}
+          ${csCanManage() ? `<button type="button" class="tiny" data-clone-builtin="${escapeHtml(s.kind)}">Clone into custom sensor</button><p class="hint">Opens an unsaved, disabled draft for review and testing.</p>` : '<p>Cloning requires Deploy management permission.</p>'}` : '<p>No standalone custom example is available for this sensor.</p>'}
+
+        <h4>What it returns</h4>
+        <p><span class="returns">${escapeHtml(s.returns)}</span></p>
+
+        <div class="facts">
+          <div class="fact"><div class="fact-label">Collected</div><div class="fact-value">${escapeHtml(s.interval)}</div></div>
+          <div class="fact"><div class="fact-label">Time budget</div><div class="fact-value">${escapeHtml(s.timeout)}</div></div>
+          <div class="fact"><div class="fact-label">Cost on the endpoint</div><div class="fact-value">${escapeHtml(s.cost)}</div></div>
+          ${c && c.newest ? `<div class="fact"><div class="fact-label">Newest collection</div><div class="fact-value">${fmtAgo(c.newest)}</div></div>` : ""}
+          ${c && c.oldest ? `<div class="fact"><div class="fact-label">Oldest collection</div><div class="fact-value">${fmtAgo(c.oldest)}</div></div>` : ""}
+        </div>
+
+        ${s.caveat ? `<h4>Where it can be wrong</h4><div class="caveat">${escapeHtml(s.caveat)}</div>` : ""}
+      </div>
+    </td></tr>`;
+  }).join("")}</tbody>
+      </table>
+    </div>` : '<p class="empty">No built-in sensors match your search.</p>';
+}
+
+function toggleSensorRow(row) {
+  const detail = document.querySelector(`[data-sensor-detail="${CSS.escape(row.dataset.sensorRow)}"]`);
+  if (!detail) return;
+  detail.hidden = !detail.hidden;
+  row.setAttribute("aria-expanded", String(!detail.hidden));
+  row.querySelector(".sensor-caret").textContent = detail.hidden ? "▸" : "▾";
+}
+document.getElementById("sensor-list").addEventListener("click", event => {
+  const row = event.target.closest("[data-sensor-row]");
+  if (row && !event.target.closest("button, a, summary")) toggleSensorRow(row);
+});
+document.getElementById("sensor-list").addEventListener("keydown", event => {
+  const row = event.target.closest("[data-sensor-row]");
+  if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); toggleSensorRow(row); }
+});
+
+document.getElementById("sensor-search").addEventListener("input", renderSensors);
+document.getElementById("sensor-list").addEventListener("toggle", async event => {
+  const details = event.target;
+  if (!details.open || !details.dataset.sourceKind || details.dataset.loaded) return;
+  const content = details.querySelector('[data-source-content]');
+  details.dataset.loaded = 'loading';
+  content.textContent = 'Loading source…';
+  try {
+    const response = await fetch(`/api/sensors/builtin/${encodeURIComponent(details.dataset.sourceKind)}/source`);
+    if (!response.ok) throw new Error(await response.text());
+    const data = await response.json();
+    content.innerHTML = data.sources.map(file => `<details><summary>${escapeHtml(file.name)}</summary><pre><code>${escapeHtml(file.code)}</code></pre></details>`).join('');
+    details.dataset.loaded = 'true';
+  } catch (error) {
+    delete details.dataset.loaded;
+    content.textContent = `Could not load source: ${error.message}. Close and reopen to retry.`;
+  }
+}, true);
+document.getElementById("sensor-list").addEventListener("click", event => {
+  const button = event.target.closest('[data-clone-builtin]');
+  if (!button || !csCanManage() || !csEditors.linux || !csConfirmDiscard()) return;
+  const template = sensors.find(s => s.kind === button.dataset.cloneBuiltin)?.template;
+  if (!template) return;
+  csReset();
+  csLoadOutput(template);
+  document.getElementById('cs-name').value = template.name;
+  document.getElementById('cs-desc').value = template.description;
+  CS_OSES.forEach(([os]) => csEditors[os].setValue(template.commands[os] || ''));
+  document.getElementById('cs-interval').value = template.interval_seconds;
+  document.getElementById('cs-timeout').value = template.timeout_seconds;
+  document.getElementById('cs-enabled').checked = false;
+  document.getElementById('custom-editor-title').textContent = `Clone of ${template.name}`;
+  csChanged();
+  csSetStatus('Unsaved clone. Review the example, test it, and enable it when ready.');
+  location.hash = 'custom';
+  requestAnimationFrame(() => document.getElementById('cs-form').scrollIntoView({block:'start'}));
+});
+
+function renderCoverage() {
+  const body = document.getElementById("coverage-body");
+  if (sensors.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="8">no sensors</td></tr>';
+    return;
+  }
+  const perOS = (s, c, os) => {
+    if (s.on_demand) return `<td class="u-c-text-muted" title="runs only when requested">—</td>`;
+    if (!sensorPlatforms(s).includes(os)) return `<td class="u-c-text-muted" title="not collected on this platform">—</td>`;
+    const have = (c && c.by_os && c.by_os[os]) || 0, total = agentCountByOS[os] || 0;
+    const short = total && have < total;
+    return `<td data-sort="${escapeHtml(have)}"${short ? ' class="u-c-viz-warning"' : ""}>${escapeHtml(have)} of ${escapeHtml(total)}</td>`;
+  };
+  body.innerHTML = sensors.map(s => {
+    const c = covFor(s.kind);
+    return `<tr>
+      <td><strong>${escapeHtml(s.name)}</strong> <code class="u-c-text-muted">${escapeHtml(s.kind)}</code></td>
+      <td data-sort="${escapeHtml(c ? c.agents : 0)}">${s.on_demand ? '<span class="u-c-text-muted" title="runs only when requested, never collected as inventory">on demand</span>' : c ? `${escapeHtml(c.agents)} of ${escapeHtml(agentCount)}` : '<span class="u-c-text-muted">nothing reported yet</span>'}</td>
+      ${perOS(s, c, "linux")}${perOS(s, c, "windows")}${perOS(s, c, "darwin")}
+      <td>${c && c.newest ? fmtAgo(c.newest) : "—"}</td>
+      <td>${c && c.oldest ? fmtAgo(c.oldest) : "—"}</td>
+      <td>${c && c.stale > 0 ? `<span class="stale-pill">${escapeHtml(c.stale)}</span>` : "0"}</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("coverage-status").innerHTML =
+    `<strong>${escapeHtml(sensors.length)}</strong> sensors · <strong>${escapeHtml(coverage.reduce((a, c) => a + c.stale, 0))}</strong> stale collection(s)`;
+  const dt = initDataTable(body.closest("table"), { storageKey: "sensor-coverage" });
+  if (dt) dt.refresh();
+}
+</script>
+</body>
+</html>

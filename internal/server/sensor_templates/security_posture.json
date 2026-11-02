@@ -1,0 +1,37 @@
+{
+  "notes": "Standalone example: firewall state and disk encryption as text. The built-in sensor reports the firewall profiles, BitLocker volumes (and escrows recovery passwords), Defender status and AppLocker enforcement as structured fields; this example prints the headline state only.",
+  "commands": {
+    "linux": "# Standalone example: firewall and disk encryption state as text.\n# The built-in sensor detects ufw, firewalld, nftables and iptables and walks the block-device tree for LUKS.\nif command -v ufw >/dev/null 2>&1; then ufw status | head -1; elif command -v firewall-cmd >/dev/null 2>&1; then echo \"firewalld: $(firewall-cmd --state 2>/dev/null)\"; else echo 'firewall: none detected'; fi\nlsblk -rno TYPE,MOUNTPOINT | awk '$1==\"crypt\"{print \"encrypted: \" ($2==\"\"?\"(unmounted)\":$2)}'\n",
+    "darwin": "# Standalone example: application firewall and FileVault state as text.\n/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate\nfdesetup status\n",
+    "windows": "# Standalone example: firewall profiles, BitLocker, Defender and AppLocker as text.\n# The built-in sensor reports the same as structured fields and escrows BitLocker recovery passwords to the server.\nGet-NetFirewallProfile | ForEach-Object { \"firewall $($_.Name): enabled=$($_.Enabled) inbound=$($_.DefaultInboundAction)\" }\nGet-BitLockerVolume -ErrorAction SilentlyContinue | ForEach-Object { \"bitlocker $($_.MountPoint): $($_.VolumeStatus) protection=$($_.ProtectionStatus)\" }\n$s = Get-MpComputerStatus -ErrorAction SilentlyContinue; if ($s) { \"defender: realtime=$($s.RealTimeProtectionEnabled) signatures=$($s.AntivirusSignatureLastUpdated)\" }\n$p = [xml](Get-AppLockerPolicy -Local -Xml); $p.AppLockerPolicy.RuleCollection | ForEach-Object { \"applocker $($_.Type): $($_.EnforcementMode)\" }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 90,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

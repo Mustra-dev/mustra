@@ -1,0 +1,37 @@
+{
+  "notes": "Native session listing as text; Windows quser reports an error when no users are logged on on some systems.",
+  "commands": {
+    "linux": "# Standalone example: Native session listing as text; Windows quser reports an error when no users are logged on on some systems.\nwho\n",
+    "darwin": "# Standalone example: Native session listing as text; Windows quser reports an error when no users are logged on on some systems.\nwho\n",
+    "windows": "# Standalone example: Native session listing as text; Windows quser reports an error when no users are logged on on some systems.\n$ErrorActionPreference = \"Stop\"\nquser\nif ($LASTEXITCODE -ne 0) { throw \"quser failed with exit code $LASTEXITCODE\" }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

@@ -1,0 +1,90 @@
+FROM golang:1.27.3-trixie@sha256:c65ecfe613b539ac74c62a4c3b2c27e8f8a6076384c8f27e8a3c0f3be17cc385 AS go-builder
+WORKDIR /src
+COPY go.mod ./
+COPY internal/sensorbuild ./internal/sensorbuild
+COPY cmd/sensor-builder ./cmd/sensor-builder
+RUN CGO_ENABLED=0 go build -o /sensor-builder ./cmd/sensor-builder
+
+# This image has no control-plane credentials or endpoint data. Keep tool
+# versions/checksums together so source and release builds use the same engines.
+FROM --platform=$BUILDPLATFORM node:26.12.0-trixie-slim@sha256:e556a144463cc8dc53afe8de6d2fa0db5c132fd39ffa232c17641bd40df2bf11 AS npm
+WORKDIR /app
+COPY tools/script-service/package*.json ./
+RUN npm ci --omit=dev
+
+# Parse with the same pinned Python grammar shipped to endpoints.
+FROM --platform=$BUILDPLATFORM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS python-runtime
+ARG TARGETARCH
+RUN apk add --no-cache python3 ca-certificates
+COPY tools/python-runtime/ /tools/
+RUN python3 /tools/package.py /archives linux-${TARGETARCH} \
+    && mkdir /runtime && tar -xzf /archives/mustra-python-linux-${TARGETARCH}.tar.gz -C /runtime
+
+FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 AS tools
+ARG TARGETARCH
+# apt-get upgrade picks up security fixes newer than the pinned digest.
+# /usr/bin/pebble is Ubuntu's container init, unused here; it carries its own
+# Go runtime that scanners flag whenever the base image lags a Go release.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl unzip libatomic1 libgcc-s1 libgssapi-krb5-2 libicu78 libssl3t64 libstdc++6 zlib1g \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /usr/bin/pebble
+RUN set -eu; \
+    case "$TARGETARCH" in \
+      amd64) psarch=x64; pssha=6896f9e3a6b0a354bf470835a96da76d2f801cd50dcf047ad7c4563bf93bf431; scarch=x86_64; scsha=b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6 ;; \
+      arm64) psarch=arm64; pssha=ba465efdfb0984c1c5dc5ed9eb0b79a7e91a1b52c45f99377058c0659b84d3f1; scarch=aarch64; scsha=68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc ;; \
+      *) exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 3 "https://github.com/PowerShell/PowerShell/releases/download/v7.6.7/powershell-7.6.7-linux-${psarch}.tar.gz" -o /tmp/pwsh.tar.gz; \
+    echo "$pssha  /tmp/pwsh.tar.gz" | sha256sum -c -; \
+    mkdir -p /opt/microsoft/powershell/7; \
+    tar -xzf /tmp/pwsh.tar.gz -C /opt/microsoft/powershell/7; \
+    chmod +x /opt/microsoft/powershell/7/pwsh; \
+    ln -s /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh; \
+    curl -fsSL --retry 3 "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.${scarch}.tar.gz" -o /tmp/shellcheck.tar.gz; \
+    echo "$scsha  /tmp/shellcheck.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/shellcheck.tar.gz -C /tmp; \
+    mv /tmp/shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck; \
+    rm -rf /tmp/*
+RUN curl -fsSL --retry 3 https://github.com/PowerShell/PowerShellEditorServices/releases/download/v4.7.0/PowerShellEditorServices.zip -o /tmp/pses.zip \
+    && echo '5084f0326cc88539e9d880b08f6c52ce5be4672bb8ecee8921e35f8895a6b9d7  /tmp/pses.zip' | sha256sum -c - \
+    && unzip -q /tmp/pses.zip -d /opt/pses \
+    && curl -fsSL --retry 3 https://github.com/PowerShell/PSScriptAnalyzer/releases/download/1.25.0/PSScriptAnalyzer.1.25.0.nupkg -o /tmp/pssa.zip \
+    && echo '14e634c828eb98efb9f40b2918ba90f139ed5eccdf663a2a747736d996995d60  /tmp/pssa.zip' | sha256sum -c - \
+    && mkdir -p /opt/microsoft/powershell/7/Modules/PSScriptAnalyzer/1.25.0 \
+    && unzip -q /tmp/pssa.zip -d /opt/microsoft/powershell/7/Modules/PSScriptAnalyzer/1.25.0 \
+    && rm /tmp/pses.zip /tmp/pssa.zip
+
+RUN mkdir -p /usr/local/share/licenses/shellcheck /usr/local/share/licenses/node \
+    && curl -fsSL --retry 3 https://raw.githubusercontent.com/koalaman/shellcheck/v0.11.0/LICENSE -o /usr/local/share/licenses/shellcheck/LICENSE \
+    && curl -fsSL --retry 3 https://raw.githubusercontent.com/nodejs/node/v26.12.0/LICENSE -o /usr/local/share/licenses/node/LICENSE
+
+# Node is architecture-specific, unlike the JavaScript dependency layer above.
+# Node 26 links libatomic, which the tools stage installs (libatomic1).
+FROM node:26.12.0-trixie-slim@sha256:e556a144463cc8dc53afe8de6d2fa0db5c132fd39ffa232c17641bd40df2bf11 AS node-runtime
+FROM tools
+COPY --from=go-builder /usr/local/go /usr/local/go
+COPY --from=go-builder /sensor-builder /usr/local/bin/sensor-builder
+ENV PATH=/usr/local/go/bin:$PATH
+COPY --from=python-runtime /runtime/python /opt/python
+ENV MUSTRA_PYTHON_ANALYZER=/opt/python/bin/python3
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+WORKDIR /app
+COPY --from=npm /app/node_modules ./node_modules
+COPY tools/script-service/ ./
+ENV HOST=0.0.0.0 PORT=8091 HOME=/tmp POWERSHELL_TELEMETRY_OPTOUT=1
+RUN pwsh -NoLogo -NoProfile -NonInteractive -Command "Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -ErrorAction Stop" \
+    && shellcheck --version \
+    && node --version
+# Same source label as the server image: GHCR links a package to a
+# repository by reading it off the push, and an unlinked package cannot
+# inherit the repository's collaborators.
+LABEL org.opencontainers.image.source="https://github.com/mustra-dev/mustra"
+LABEL org.opencontainers.image.url="https://github.com/mustra-dev/mustra"
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
+LABEL org.opencontainers.image.title="mustra-script-tools"
+LABEL org.opencontainers.image.description="Isolated ShellCheck, PowerShell and Go analysis for mustra custom sensors."
+USER 65532:65532
+EXPOSE 8091
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s CMD node -e "fetch('http://127.0.0.1:8091/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "server.js"]

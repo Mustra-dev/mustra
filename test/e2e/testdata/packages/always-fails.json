@@ -1,0 +1,11 @@
+{
+  "name": "always-fails (test)",
+  "kind": "action",
+  "category": "Test",
+  "commands": {
+    "linux": {
+      "install": "echo starting; echo \"this fails on purpose\" >&2; exit 7"
+    }
+  },
+  "command_timeout_seconds": 60
+}

@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Groups — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .rule-row { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(100px,.9fr) auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .rule-row select, .rule-row input { width: 100%; padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 12.5px; }
+  .rule-hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 10px; }
+  .match-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-bottom: 12px; }
+  .match-row select { padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 12.5px; }
+  .preview-count { font-size: 20px; font-weight: 700; }
+  .preview-count .of { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .kind-pill { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); font-weight: 700; }
+@media(max-width:760px){.rule-row{grid-template-columns:1fr 1fr;}.rule-row .r-remove{justify-self:start;}}
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <div id="groups-page-head"></div>
+    <div class="panel">
+      <div class="panel-header"><h2>Computer groups</h2><span class="scan-status" id="groups-status"></span></div>
+      <p class="u-fs-12 u-c-text-muted u-mt-n8">
+        Reusable slices of the fleet. A dynamic group is a set of rules matched live against inventory and
+        sensor data, so membership stays current on its own.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Name</th><th>Type</th><th>Rules</th><th>Devices</th><th>Created by</th><th>Action</th></tr></thead>
+          <tbody id="groups-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" id="builder" hidden>
+      <h2 id="builder-title">New computer group</h2>
+      <div class="form-grid">
+        <div class="field"><label for="g-name">Name</label><input id="g-name" placeholder="Linux production servers"></div>
+        <div class="field"><label for="g-desc">Description</label><input id="g-desc" placeholder="optional"></div>
+        <div class="field"><label for="g-kind">Type</label>
+          <select id="g-kind">
+            <option value="dynamic">Dynamic — matched by rules</option>
+            <option value="static">Static — a fixed list of devices</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="dynamic-editor">
+        <div class="match-row">
+          <span>Match</span>
+          <select id="g-match" aria-label="Match all or any rules"><option value="all">all</option><option value="any">any</option></select>
+          <span>of these rules:</span>
+        </div>
+        <p class="hint">Give conditions the same record-group name to require them on one record from the same sensor. Each named group combines with AND; other conditions follow the all/any setting above.</p>
+        <div id="rules"></div>
+        <button class="tiny" id="add-rule">+ Add rule</button>
+        <p class="rule-hint" id="field-hint"></p>
+      </div>
+
+      <div id="static-editor" hidden>
+        <p class="rule-hint">Pick the devices that belong to this group.</p>
+        <select id="g-members" multiple size="10" class="u-w-100p u-maxw-520 u-p-8 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-fs-12_5"></select>
+      </div>
+
+      <div class="panel u-mt-16 u-bg-surface-2">
+        <div class="panel-header">
+          <h2 class="u-fs-13">Preview</h2>
+          <span class="scan-status" id="preview-note">rules are matched as you edit them</span>
+        </div>
+        <div class="preview-count" id="preview-count">— <span class="of"></span></div>
+        <div class="table-scroll table-scroll-y u-maxh-260 u-mt-10">
+          <table>
+            <thead><tr><th>Hostname</th><th>OS</th><th>Platform</th><th>Site</th><th>Status</th></tr></thead>
+            <tbody id="preview-body"><tr><td class="empty" colspan="5">add a rule to see what it matches</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="save-row u-d-flex u-gap-12 u-ai-center u-mt-14">
+        <button class="primary u-w-auto" id="g-save">Save group</button>
+        <button class="secondary u-w-auto" id="g-cancel">Cancel</button>
+        <span class="scan-status" id="g-status"></span>
+      </div>
+    </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let fields = [];
+let allGroups = [];
+let fleet = [];
+let canManage = false;
+let editingID = null;
+
+document.addEventListener("mustra:user", (e) => {
+  renderPageHead("groups-page-head", "/settings", { title: "Computer Groups",
+    sub: "Reusable slices of the fleet, matched live against inventory and sensor data." });
+  renderModuleSubnav("/settings", e.detail);
+  canManage = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("groups.manage")));
+  document.getElementById("builder").hidden = !canManage;
+  loadGroups();
+  loadFleet();
+});
+
+async function loadFleet() {
+  const resp = await fetch("/api/agents");
+  if (!resp.ok) return;
+  fleet = (await resp.json()).agents || [];
+  document.getElementById("g-members").innerHTML = fleet.map(a =>
+    `<option value="${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)} — ${escapeHtml(osDisplay(a))} / ${escapeHtml(a.site || "—")}</option>`
+  ).join("");
+}
+
+async function loadGroups() {
+  const resp = await fetch("/api/groups");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const data = await resp.json();
+  fields = data.fields || [];
+  allGroups = data.groups || [];
+  renderGroups();
+  if (document.querySelectorAll(".rule-row").length === 0) addRule();
+}
+
+function renderGroups() {
+  const body = document.getElementById("groups-body");
+  document.getElementById("groups-status").textContent =
+    allGroups.length === 0 ? "" : `${allGroups.length} group(s)`;
+  if (allGroups.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no groups yet</td></tr>';
+    return;
+  }
+  body.innerHTML = allGroups.map(g => `
+    <tr>
+      <td><strong>${escapeHtml(g.name)}</strong>${g.description ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(g.description)}</div>` : ""}</td>
+      <td><span class="kind-pill">${escapeHtml(g.kind)}</span></td>
+      <td class="u-fs-meta u-c-text-muted u-ws-normal u-maxw-320">${escapeHtml(describeRules(g))}</td>
+      <td data-sort="${escapeHtml(g.member_count)}">${escapeHtml(g.member_count)}</td>
+      <td>${escapeHtml(g.created_by || "—")}</td>
+      <td class="row-actions">
+        ${canManage ? `<button class="tiny" data-edit="${escapeHtml(g.id)}">edit</button>
+        <button class="tiny danger" data-delete="${escapeHtml(g.id)}">delete</button>` : ""}
+      </td>
+    </tr>
+  `).join("");
+
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => editGroup(b.dataset.edit)));
+  body.querySelectorAll("[data-delete]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Delete this group? Anything targeting it stops matching.")) return;
+    await fetch(`/api/groups/${b.dataset.delete}`, { method: "DELETE" });
+    loadGroups();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "computer-groups" });
+  if (dt) dt.refresh();
+}
+
+function describeRules(g) {
+  if (g.kind === "static") return `${(g.member_ids || []).length} device(s), chosen by hand`;
+  const joiner = g.match_mode === "any" ? " OR " : " AND ";
+  const describe = r => {
+    if (r.op === 'same_row') return '(same record: ' + JSON.parse(r.value).map(describe).join(' AND ') + ')';
+    const label = fields.find(f => f.field === r.field)?.label || r.field;
+    return `${label} ${r.op.replace(/_/g, ' ')} ${r.value}`;
+  };
+  return (g.rules || []).map(describe).join(joiner);
+}
+
+// --- rule builder ---
+
+let nextRowGroup=1;
+function addRule(rule, rowGroup="") {
+  if(rule?.op==='same_row'){const group=String(nextRowGroup++);JSON.parse(rule.value).forEach(child=>addRule(child,group));return;}
+  const row = document.createElement("div");
+  row.className = "rule-row";
+  row.innerHTML = `
+    <select class="r-field" aria-label="Rule field">${fields.map(f => `<option value="${escapeHtml(f.field)}">${escapeHtml(f.label)}</option>`).join("")}</select>
+    <select class="r-op" aria-label="Rule operator"></select>
+    <input class="r-value" placeholder="value" aria-label="Rule value">
+    <input class="r-group u-maxw-160" placeholder="record group (optional)" aria-label="Same record group">
+    <button class="tiny danger r-remove" title="Remove rule">×</button>
+  `;
+  document.getElementById("rules").appendChild(row);
+
+  const fieldSel = row.querySelector(".r-field");
+  const opSel = row.querySelector(".r-op");
+  const valueInput = row.querySelector(".r-value");
+  const groupInput=row.querySelector(".r-group");groupInput.value=typeof rowGroup==="string"?rowGroup:"";
+
+  function syncOps() {
+    const spec = fields.find(f => f.field === fieldSel.value) || { ops: [] };
+    opSel.innerHTML = spec.ops.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o.replace(/_/g, " "))}</option>`).join("");
+    valueInput.placeholder = spec.hint || (spec.kind === "number" ? "a number" : "value");
+    document.getElementById("field-hint").textContent = spec.hint ? `${spec.label}: ${spec.hint}` : "";
+  }
+  fieldSel.addEventListener("change", () => { syncOps(); schedulePreview(); });
+  syncOps();
+
+  if (rule) {
+    fieldSel.value = rule.field;
+    syncOps();
+    opSel.value = rule.op;
+    valueInput.value = rule.value;
+  }
+
+  [opSel, valueInput, groupInput].forEach(el => el.addEventListener("input", schedulePreview));
+  row.querySelector(".r-remove").addEventListener("click", () => { row.remove(); schedulePreview(); });
+  schedulePreview();
+}
+
+document.getElementById("add-rule").addEventListener("click", () => addRule());
+
+document.getElementById("g-kind").addEventListener("change", (e) => {
+  const dynamic = e.target.value !== "static";
+  document.getElementById("dynamic-editor").hidden = !dynamic;
+  document.getElementById("static-editor").hidden = dynamic;
+  schedulePreview();
+});
+document.getElementById("g-match").addEventListener("change", schedulePreview);
+
+function currentRules() {
+  const rules = [...document.querySelectorAll(".rule-row")].map(row => ({
+    field: row.querySelector(".r-field").value,
+    op: row.querySelector(".r-op").value,
+    value: row.querySelector(".r-value").value,
+    rowGroup:row.querySelector(".r-group").value.trim(),
+  })).filter(r => r.op === "exists" || r.op === "not_exists" ? true : r.value !== "");
+ const grouped=new Map(),out=[];
+ for(const {rowGroup,...rule} of rules){if(!rowGroup){out.push(rule);continue;}const sensor=rule.field.split('.')[0],key=sensor+':'+rowGroup;if(!grouped.has(key))grouped.set(key,{sensor,rules:[]});grouped.get(key).rules.push(rule);}
+ for(const {sensor,rules} of grouped.values())out.push({field:sensor+'._row',op:'same_row',value:JSON.stringify(rules)});
+ return out;
+}
+
+// Debounced so typing a hostname doesn't fire a request per keystroke.
+let previewTimer = null;
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(runPreview, 250);
+}
+
+async function runPreview() {
+  if (document.getElementById("g-kind").value === "static") {
+    const chosen = [...document.getElementById("g-members").selectedOptions];
+    document.getElementById("preview-count").innerHTML =
+      `${escapeHtml(chosen.length)} <span class="of">device(s) selected</span>`;
+    document.getElementById("preview-body").innerHTML = chosen.length === 0
+      ? '<tr><td class="empty" colspan="5">none selected</td></tr>'
+      : chosen.map(o => {
+          const a = fleet.find(x => x.agent_id === o.value) || {};
+          return `<tr><td>${escapeHtml(a.hostname || o.value)}</td><td>${escapeHtml(a.os || "")}</td>
+                  <td>${escapeHtml(a.platform || "")}</td><td>${escapeHtml(a.site || "")}</td>
+                  <td>${a.online ? "online" : "offline"}</td></tr>`;
+        }).join("");
+    return;
+  }
+
+  const rules = currentRules();
+  const countEl = document.getElementById("preview-count");
+  const body = document.getElementById("preview-body");
+  if (rules.length === 0) {
+    countEl.innerHTML = `— <span class="of"></span>`;
+    body.innerHTML = '<tr><td class="empty" colspan="5">add a rule to see what it matches</td></tr>';
+    return;
+  }
+  try {
+    const resp = await fetch("/api/groups/preview", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_mode: document.getElementById("g-match").value, rules }),
+    });
+    if (!resp.ok) {
+      countEl.innerHTML = `<span class="u-c-off u-fs-13">${escapeHtml(await resp.text())}</span>`;
+      return;
+    }
+    const data = await resp.json();
+    countEl.innerHTML = `${escapeHtml(data.matched)} <span class="of">of ${escapeHtml(data.total)} device(s) match</span>`;
+    body.innerHTML = (data.members || []).length === 0
+      ? '<tr><td class="empty" colspan="5">nothing matches these rules</td></tr>'
+      : data.members.map(a => `
+          <tr>
+            <td><a href="/endpoint/${encodeURIComponent(a.agent_id)}">${escapeHtml(a.hostname)}</a></td>
+            <td title="${escapeHtml(a.os)}">${escapeHtml(osDisplay(a))}</td><td>${escapeHtml(a.platform || "—")}</td>
+            <td>${escapeHtml(a.site || "—")}</td>
+            <td><span class="badge-pill ${a.online ? "online" : "offline"}">${a.online ? "online" : "offline"}</span></td>
+          </tr>`).join("");
+  } catch (e) {
+    countEl.innerHTML = `<span class="u-c-off u-fs-13">preview failed: ${escapeHtml(e.message)}</span>`;
+  }
+}
+document.getElementById("g-members").addEventListener("change", schedulePreview);
+
+function editGroup(id) {
+  const g = allGroups.find(x => x.id === id);
+  if (!g) return;
+  editingID = id;
+  document.getElementById("builder-title").textContent = "Edit " + g.name;
+  document.getElementById("g-name").value = g.name;
+  document.getElementById("g-desc").value = g.description || "";
+  document.getElementById("g-kind").value = g.kind;
+  document.getElementById("g-match").value = g.match_mode || "all";
+  document.getElementById("dynamic-editor").hidden = g.kind === "static";
+  document.getElementById("static-editor").hidden = g.kind !== "static";
+  document.getElementById("rules").innerHTML = "";
+  nextRowGroup=1;
+  (g.rules || []).forEach(addRule);
+  if ((g.rules || []).length === 0 && g.kind !== "static") addRule();
+  [...document.getElementById("g-members").options].forEach(o => {
+    o.selected = (g.member_ids || []).includes(o.value);
+  });
+  schedulePreview();
+  document.getElementById("builder-title").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetBuilder() {
+  editingID = null;
+  document.getElementById("builder-title").textContent = "New computer group";
+  document.getElementById("g-name").value = "";
+  document.getElementById("g-desc").value = "";
+  document.getElementById("g-kind").value = "dynamic";
+  document.getElementById("g-match").value = "all";
+  document.getElementById("dynamic-editor").hidden = false;
+  document.getElementById("static-editor").hidden = true;
+  document.getElementById("rules").innerHTML = "";
+  nextRowGroup=1;
+  [...document.getElementById("g-members").options].forEach(o => { o.selected = false; });
+  document.getElementById("g-status").textContent = "";
+  addRule();
+}
+document.getElementById("g-cancel").addEventListener("click", resetBuilder);
+
+document.getElementById("g-save").addEventListener("click", async () => {
+  const status = document.getElementById("g-status");
+  const kind = document.getElementById("g-kind").value;
+  const body = {
+    name: document.getElementById("g-name").value.trim(),
+    description: document.getElementById("g-desc").value.trim(),
+    kind,
+    match_mode: document.getElementById("g-match").value,
+    rules: kind === "static" ? [] : currentRules(),
+    member_ids: kind === "static"
+      ? [...document.getElementById("g-members").selectedOptions].map(o => o.value)
+      : [],
+  };
+  if (!body.name) { status.textContent = "name is required"; return; }
+
+  status.textContent = "saving…";
+  const url = editingID ? `/api/groups/${editingID}` : "/api/groups";
+  const resp = await fetch(url, {
+    method: editingID ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = `<span class="u-c-ok">saved</span>`;
+  resetBuilder();
+  loadGroups();
+});
+</script>
+</body>
+</html>
