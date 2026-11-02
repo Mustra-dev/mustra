@@ -1,0 +1,37 @@
+{
+  "notes": "Native interface/address text; each output line is a separate record.",
+  "commands": {
+    "linux": "# Standalone example: Native interface/address text; each output line is a separate record.\nip address show\n",
+    "darwin": "# Standalone example: Native interface/address text; each output line is a separate record.\nifconfig -a\n",
+    "windows": "# Standalone example: Native interface/address text; each output line is a separate record.\n$ErrorActionPreference = \"Stop\"\nGet-NetIPAddress | ForEach-Object { '{0} {1}' -f $_.InterfaceAlias, $_.IPAddress }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

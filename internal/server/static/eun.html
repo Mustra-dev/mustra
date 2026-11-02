@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>End-User Notifications — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .form-grid textarea { min-height: 76px; resize: vertical; }
+  .kind-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kind-opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border);
+              border-radius: var(--radius-md); cursor: pointer; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+  .kind-opt b { color: var(--text); font-size: 13px; }
+  .kind-opt:has(input:checked) { border-color: var(--accent); background: var(--surface-2); }
+  .sec-head { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 16px 0 6px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 12px; font-size: 12.5px; }
+  .checks label { display: flex; align-items: center; gap: 6px; }
+  .btn-row { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1.3fr) 90px auto auto;
+    gap: 8px; align-items: center; margin-bottom: 6px; }
+  .btn-row input[type=text], .btn-row select, .btn-row input[type=number] {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); font: inherit; min-width: 0; }
+  .btn-row .primary-pick { display: flex; align-items: center; gap: 5px; font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; }
+  .btn-row.invalid input[type=text], .btn-row.invalid select { border-color: var(--off); }
+  .btn-note { font-size: var(--fs-meta); color: var(--off); margin: 0 0 8px; }
+  @media (max-width: 700px) { .btn-row { grid-template-columns: 1fr 1fr; } }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .kind-badge { font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+                padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+  .kind-badge.restart { color: var(--bad); }
+  /* A faithful preview of what the person at the endpoint will actually
+     see, because a message is the one thing you cannot judge from a form. */
+  .preview { border: 1px solid var(--border); border-left: 4px solid var(--off); border-radius: var(--radius);
+             padding: 13px 15px; background: var(--surface-2); }
+  .preview.restart { border-left-color: var(--bad); }
+  .preview-kind { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px;
+                  border-radius: 999px; background: var(--off); color: var(--bg); font-weight: 700; }
+  .preview.restart .preview-kind { background: var(--bad); color: var(--bg); }
+  .preview-head { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 650; margin-bottom: 6px; }
+  .preview-body { font-size: 12.5px; line-height: 1.55; color: var(--text-muted); white-space: pre-wrap; }
+  .preview-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+  .preview-actions span { font-size: 12px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); }
+  .preview-actions span.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-messages" hidden>
+      <div id="eun-page-head"></div>
+      <div id="eun-quick-links"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Messages</h2><span class="scan-status" id="eun-status"></span></div>
+        <p class="hint">
+          What the person at the endpoint sees. A <strong>notice</strong> tells them something; a
+          <strong>restart</strong> asks them to do something disruptive, so it negotiates — a countdown, a
+          deadline, and a bounded set of postponements. Answers come back as a deployment, so "who did we tell
+          and what did they say" is the same question as "who did we patch and did it work".
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Title</th><th>Postpone</th><th>Deadline</th><th>Action</th></tr></thead>
+            <tbody id="eun-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="eun-editor-title">New message</h2>
+
+        <div class="kind-picker">
+          <label class="kind-opt">
+            <input type="radio" name="e-kind" value="notice" checked>
+            <span><b>Notice</b><br>Tells someone something. No buttons beyond acknowledging it, because it is not asking for anything.</span>
+          </label>
+          <label class="kind-opt">
+            <input type="radio" name="e-kind" value="restart">
+            <span><b>Restart required</b><br>Asks for a reboot, with a countdown and postponement options. The person can accept or defer.</span>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <div class="field"><label for="e-name">Name (for you, not shown to them)</label><input id="e-name" placeholder="September patch reboot"></div>
+          <div class="field"><label for="e-deadline">Deadline (optional)</label><input id="e-deadline" type="datetime-local"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="e-title">Title</label><input id="e-title" placeholder="Your computer needs to restart"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="e-body">Message</label>
+            <textarea id="e-body" placeholder="We installed security updates this morning. A restart is needed to finish."></textarea></div>
+        </div>
+
+        <div id="restart-only" hidden>
+          <h3 class="sec-head">Restart options</h3>
+          <div class="checks">
+            <label><input type="checkbox" id="e-postpone" checked> Let them postpone</label>
+          </div>
+          <div class="form-grid">
+            <div class="field"><label for="e-countdown">Final countdown (minutes)</label><input id="e-countdown" type="number" min="1" value="15"></div>
+            <div class="field"><label for="e-gentle">Gentle warning first (minutes)</label><input id="e-gentle" type="number" min="0" value="60"></div>
+            <div class="field"><label for="e-postpone-opts">Postponement options (minutes, comma separated)</label><input id="e-postpone-opts" value="60, 240, 480"></div>
+          </div>
+          <p class="hint">
+            The gentle warning is what stops a restart prompt being the first anyone hears of it. Postponement
+            options are deliberately a fixed list rather than a free-text box — "remind me later" with no bound
+            is how a machine goes unpatched for a month.
+          </p>
+        </div>
+
+        <h3 class="sec-head">Buttons</h3>
+        <div class="checks">
+          <label><input type="checkbox" id="e-custom-buttons"> Write my own buttons</label>
+        </div>
+        <p class="hint" id="e-buttons-default-hint">
+          Left off, the window shows the usual choices for this kind: <em>Got it</em> on a notice,
+          <em>Restart now</em> plus whatever postponements you allowed on a restart.
+        </p>
+        <div id="e-buttons-editor" hidden>
+          <div id="e-buttons-rows"></div>
+          <div class="panel-actions u-mt-8">
+            <button id="e-button-add" type="button">Add a button</button>
+            <span class="scan-status" id="e-buttons-error"></span>
+          </div>
+          <p class="hint">
+            A label is yours to write; what the button <em>does</em> comes from a fixed list, so an answer
+            still means one thing when you report on it later. At least one button has to dismiss the
+            message — otherwise the person at the endpoint gets a window they cannot close.
+          </p>
+        </div>
+
+        <h3 class="sec-head">Preview</h3>
+        <div class="preview" id="e-preview"></div>
+
+        <div class="panel-actions u-mt-14">
+          <button class="primary" id="e-save">Save message</button>
+          <button id="e-cancel">Cancel</button>
+          <span class="scan-status" id="e-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-send" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Send a message</h2><span class="scan-status" id="send-status"></span></div>
+        <p class="hint">
+          Sending creates a deployment, so the answers land beside every other endpoint outcome. Offline
+          endpoints are skipped rather than queued — a notice is about something happening now, and one that
+          arrives whenever a laptop next wakes is worse than none.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="s-message">Message</label><select id="s-message"></select></div>
+          <div class="field"><label for="s-target">Send to</label><select id="s-target">
+            <option value="">Every online endpoint</option>
+          </select></div>
+        </div>
+        <div class="panel-actions">
+          <button class="primary" id="s-send">Send now</button>
+          <span class="scan-status" id="s-result"></span>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+let messages = [];
+let agents = [];
+let editingID = null;
+
+document.addEventListener("mustra:user", () => {
+  initModuleSections([
+    { hash: "messages", label: "Messages" },
+    { hash: "send", label: "Send" },
+  ]);
+  renderPageHead("eun-page-head", "/eun", { title: "End-User Notifications",
+    sub: "What the person at the endpoint is told, and what they said back." });
+  renderQuickLinks("eun-quick-links", "/eun", null, [
+    { label: "Deployments", href: "/patches#deployments", icon: "list" },
+  ]);
+  document.querySelectorAll('input[name="e-kind"]').forEach(r =>
+    r.addEventListener("change", () => { syncKind(); renderButtonRows(); renderPreview(); }));
+  ["e-title", "e-body"].forEach(id =>
+    document.getElementById(id).addEventListener("input", renderPreview));
+  // Postponement settings decide which button actions are legal, so these
+  // redraw the rows as well as the preview.
+  ["e-postpone", "e-postpone-opts"].forEach(id =>
+    document.getElementById(id).addEventListener("input", () => { renderButtonRows(); renderPreview(); }));
+  syncKind();
+  renderButtonRows();
+  renderPreview();
+  load();
+  loadAgents();
+});
+
+function currentKind() {
+  const el = document.querySelector('input[name="e-kind"]:checked');
+  return el ? el.value : "notice";
+}
+
+function syncKind() {
+  document.getElementById("restart-only").hidden = currentKind() !== "restart";
+}
+
+// The preview is the point of this page. A message is the one thing you
+// cannot judge from a form — the wording only reads wrong once it is
+// sitting in the shape the person will actually see it in.
+function renderPreview() {
+  const restart = currentKind() === "restart";
+  const title = document.getElementById("e-title").value || "Your title goes here";
+  const body = document.getElementById("e-body").value || "Your message goes here.";
+  const allowPostpone = restart && document.getElementById("e-postpone").checked;
+  const opts = parsePostponeOptions();
+  const el = document.getElementById("e-preview");
+  el.className = "preview" + (restart ? " restart" : "");
+  el.innerHTML = `
+    <div class="preview-head">
+      <span class="preview-kind">${restart ? "Restart required" : "Notice"}</span>
+      <span>${escapeHtml(title)}</span>
+    </div>
+    <div class="preview-body">${escapeHtml(body)}</div>
+    <div class="preview-actions">${previewActions(restart, allowPostpone, opts)}</div>`;
+}
+
+// ---- Operator-defined buttons -------------------------------------------
+// The rules here are the server's rules, checked again in the browser so the
+// person editing finds out while they are looking at the thing rather than
+// after they press Save.
+let buttons = [];
+
+function customButtonsOn() { return document.getElementById("e-custom-buttons").checked; }
+
+function actionsFor(restart, allowPostpone) {
+  const out = [["acknowledged", "Dismiss the message"]];
+  if (restart) {
+    out.push(["restart_now", "Restart now"]);
+    if (allowPostpone) out.push(["postponed", "Postpone"]);
+  }
+  return out;
+}
+
+// Mirrors cleanEUNButtons in internal/server/eun_api.go.
+function validateButtons() {
+  if (!customButtonsOn() || buttons.length === 0) return { ok: true, rows: {} };
+  const restart = currentKind() === "restart";
+  const allowPostpone = restart && document.getElementById("e-postpone").checked;
+  const rows = {};
+  let dismissals = 0, primaries = 0;
+  if (buttons.length > 6) return { ok: false, error: "a notification may have at most 6 buttons", rows };
+  buttons.forEach((b, i) => {
+    const label = (b.label || "").trim();
+    if (!label) rows[i] = "needs a label";
+    else if ([...label].length > 40) rows[i] = "40 characters max";
+    if (b.action === "acknowledged") dismissals++;
+    else if (b.action === "restart_now") {
+      if (!restart) rows[i] = "only on a restart message";
+      else dismissals++;
+    } else if (b.action === "postponed") {
+      if (!allowPostpone) rows[i] = "needs postponement allowed";
+      else if (!(b.minutes > 0)) rows[i] = "needs a duration";
+    } else rows[i] = "pick what it does";
+    if (b.primary) primaries++;
+  });
+  if (Object.keys(rows).length) return { ok: false, error: "some buttons need fixing", rows };
+  if (dismissals === 0) return { ok: false, error: "at least one button has to dismiss the message, or nobody can close it", rows };
+  if (primaries > 1) return { ok: false, error: "only one button can be the primary one", rows };
+  return { ok: true, rows };
+}
+
+function renderButtonRows() {
+  const editor = document.getElementById("e-buttons-editor");
+  const on = customButtonsOn();
+  editor.hidden = !on;
+  document.getElementById("e-buttons-default-hint").hidden = on;
+  if (!on) { document.getElementById("e-buttons-error").textContent = ""; return; }
+
+  const restart = currentKind() === "restart";
+  const allowPostpone = restart && document.getElementById("e-postpone").checked;
+  const opts = actionsFor(restart, allowPostpone);
+  const check = validateButtons();
+  const host = document.getElementById("e-buttons-rows");
+
+  host.innerHTML = buttons.map((b, i) => {
+    const note = check.rows ? check.rows[i] : null;
+    return `
+    <div class="btn-row${note ? " invalid" : ""}" data-i="${i}">
+      <input type="text" data-f="label" maxlength="60" aria-label="Button ${i + 1} label" placeholder="Got it" value="${escapeHtml(b.label || "")}">
+      <select data-f="action" aria-label="Button ${i + 1} action">
+        ${opts.map(([v, t]) => `<option value="${escapeHtml(v)}"${b.action === v ? " selected" : ""}>${escapeHtml(t)}</option>`).join("")}
+        ${opts.some(([v]) => v === b.action) ? "" : `<option value="${escapeHtml(b.action || "")}" selected>${escapeHtml(b.action || "—")}</option>`}
+      </select>
+      <input type="number" data-f="minutes" min="1" aria-label="Button ${i + 1} postpone minutes" placeholder="min" value="${escapeHtml(b.minutes || "")}"
+             ${b.action === "postponed" ? "" : "disabled"}>
+      <label class="primary-pick"><input type="radio" name="e-btn-primary" data-f="primary" ${b.primary ? "checked" : ""}> Primary</label>
+      <button type="button" data-f="remove" title="Remove this button">Remove</button>
+    </div>
+    ${note ? `<p class="btn-note">${escapeHtml(note)}</p>` : ""}`;
+  }).join("");
+
+  host.querySelectorAll(".btn-row").forEach(row => {
+    const i = Number(row.dataset.i);
+    row.querySelector('[data-f="label"]').addEventListener("input", e => { buttons[i].label = e.target.value; renderPreview(); });
+    row.querySelector('[data-f="action"]').addEventListener("change", e => {
+      buttons[i].action = e.target.value;
+      if (e.target.value !== "postponed") buttons[i].minutes = 0;
+      renderButtonRows(); renderPreview();
+    });
+    row.querySelector('[data-f="minutes"]').addEventListener("input", e => { buttons[i].minutes = Number(e.target.value) || 0; renderPreview(); });
+    row.querySelector('[data-f="primary"]').addEventListener("change", () => {
+      buttons.forEach((b, j) => { b.primary = (j === i); });
+      renderButtonRows(); renderPreview();
+    });
+    row.querySelector('[data-f="remove"]').addEventListener("click", () => {
+      buttons.splice(i, 1); renderButtonRows(); renderPreview();
+    });
+  });
+
+  document.getElementById("e-buttons-error").textContent = check.ok ? "" : (check.error || "");
+}
+
+document.getElementById("e-custom-buttons").addEventListener("change", () => {
+  // Seed from what the defaults would have been, so switching it on starts
+  // from the message they already have rather than an empty row.
+  if (customButtonsOn() && buttons.length === 0) buttons = defaultButtons();
+  renderButtonRows(); renderPreview();
+});
+document.getElementById("e-button-add").addEventListener("click", () => {
+  if (buttons.length >= 6) return;
+  buttons.push({ label: "", action: "acknowledged", minutes: 0, primary: buttons.length === 0 });
+  renderButtonRows(); renderPreview();
+});
+
+function defaultButtons() {
+  const restart = currentKind() === "restart";
+  const allowPostpone = restart && document.getElementById("e-postpone").checked;
+  const out = restart
+    ? [{ label: "Restart now", action: "restart_now", minutes: 0, primary: true }]
+    : [{ label: "Got it", action: "acknowledged", minutes: 0, primary: true }];
+  if (allowPostpone) {
+    parsePostponeOptions().slice(0, 5).forEach(m => out.push({
+      label: m >= 60 ? `Remind me in ${Math.round(m / 60)}h` : `Remind me in ${m}m`,
+      action: "postponed", minutes: m, primary: false,
+    }));
+  }
+  return out;
+}
+
+// What the person at the endpoint will actually see. Custom buttons replace
+// the defaults wholesale, exactly as the Self Service window treats them.
+function previewActions(restart, allowPostpone, opts) {
+  if (customButtonsOn() && buttons.length) {
+    return buttons.map(b => `<span${b.primary ? ' class="primary"' : ""}>${
+      escapeHtml((b.label || "").trim() || "Untitled button")}</span>`).join("");
+  }
+  return `<span class="primary">${restart ? "Restart now" : "Got it"}</span>` +
+    (allowPostpone ? opts.map(m =>
+      `<span>${escapeHtml(m >= 60 ? `Remind me in ${Math.round(m / 60)}h` : `Remind me in ${m}m`)}</span>`).join("") : "");
+}
+
+function parsePostponeOptions() {
+  return (document.getElementById("e-postpone-opts").value || "")
+    .split(",").map(x => parseInt(x.trim(), 10)).filter(n => Number.isFinite(n) && n > 0);
+}
+
+async function load() {
+  const resp = await fetch("/api/eun");
+  if (!resp.ok) return;
+  messages = (await resp.json()).messages || [];
+  document.getElementById("eun-status").textContent = messages.length ? `${messages.length} message(s)` : "";
+  const body = document.getElementById("eun-body");
+  body.innerHTML = messages.length === 0
+    ? '<tr><td class="empty" colspan="5">none yet — write one below</td></tr>'
+    : messages.map(m => `
+      <tr>
+        <td><strong>${escapeHtml(m.name)}</strong>
+          <span class="kind-badge ${m.kind === "restart" ? "restart" : ""}">${escapeHtml(m.kind)}</span></td>
+        <td>${escapeHtml(m.title)}</td>
+        <td>${escapeHtml(m.allow_postpone ? (m.postpone_minutes || []).join(", ") + " min" : "—")}</td>
+        <td>${m.deadline_at ? fmtAgo(m.deadline_at) : "—"}</td>
+        <td class="row-actions">
+          <button class="tiny" data-edit="${escapeHtml(m.id)}">edit</button>
+          <button class="tiny danger" data-del="${escapeHtml(m.id)}">delete</button>
+        </td>
+      </tr>`).join("");
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => edit(b.dataset.edit)));
+  body.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest("tr"), id = b.dataset.del;
+    undoable({ text: "Message deleted", hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/eun/${encodeURIComponent(id)}`, { method: "DELETE", keepalive: true }); reset(); load(); } });
+  }));
+  document.getElementById("s-message").innerHTML = messages.map(m =>
+    `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} — ${escapeHtml(m.title)}</option>`).join("");
+}
+
+async function loadAgents() {
+  const resp = await fetch("/api/agents");
+  if (!resp.ok) return;
+  agents = (await resp.json()).agents || [];
+  const sel = document.getElementById("s-target");
+  sel.innerHTML = `<option value="">Every online endpoint (${escapeHtml(agents.filter(a => a.online).length)})</option>` +
+    agents.filter(a => a.online).map(a =>
+      `<option value="${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)}</option>`).join("");
+}
+
+function edit(id) {
+  const m = messages.find(x => x.id === id);
+  if (!m) return;
+  editingID = id;
+  document.getElementById("eun-editor-title").textContent = `Editing ${m.name}`;
+  document.querySelector(`input[name="e-kind"][value="${m.kind === "restart" ? "restart" : "notice"}"]`).checked = true;
+  document.getElementById("e-name").value = m.name || "";
+  document.getElementById("e-title").value = m.title || "";
+  document.getElementById("e-body").value = m.body || "";
+  document.getElementById("e-deadline").value = m.deadline_at ? m.deadline_at.slice(0, 16) : "";
+  document.getElementById("e-postpone").checked = !!m.allow_postpone;
+  document.getElementById("e-countdown").value = m.countdown_minutes || 15;
+  document.getElementById("e-gentle").value = m.gentle_minutes || 60;
+  document.getElementById("e-postpone-opts").value = (m.postpone_minutes || []).join(", ");
+  buttons = (m.buttons || []).map(b => ({ ...b }));
+  document.getElementById("e-custom-buttons").checked = buttons.length > 0;
+  syncKind();
+  renderButtonRows();
+  renderPreview();
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function reset() {
+  editingID = null;
+  document.getElementById("eun-editor-title").textContent = "New message";
+  ["e-name", "e-title", "e-body", "e-deadline"].forEach(id => { document.getElementById(id).value = ""; });
+  document.querySelector('input[name="e-kind"][value="notice"]').checked = true;
+  document.getElementById("e-postpone").checked = true;
+  document.getElementById("e-countdown").value = 15;
+  document.getElementById("e-gentle").value = 60;
+  document.getElementById("e-postpone-opts").value = "60, 240, 480";
+  document.getElementById("e-save-status").textContent = "";
+  buttons = [];
+  document.getElementById("e-custom-buttons").checked = false;
+  syncKind();
+  renderButtonRows();
+  renderPreview();
+}
+document.getElementById("e-cancel").addEventListener("click", reset);
+
+document.getElementById("e-save").addEventListener("click", async () => {
+  const status = document.getElementById("e-save-status");
+  const name = document.getElementById("e-name").value.trim();
+  const title = document.getElementById("e-title").value.trim();
+  if (!name || !title) { status.textContent = "a name and a title are required"; return; }
+  const deadline = document.getElementById("e-deadline").value;
+  const body = {
+    kind: currentKind(), name, title,
+    body: document.getElementById("e-body").value,
+    deadline_at: deadline ? new Date(deadline).toISOString() : null,
+    allow_postpone: document.getElementById("e-postpone").checked,
+    countdown_minutes: Number(document.getElementById("e-countdown").value) || 15,
+    gentle_minutes: Number(document.getElementById("e-gentle").value) || 60,
+    postpone_minutes: parsePostponeOptions(),
+    buttons: customButtonsOn() ? buttons.map(b => ({
+      label: (b.label || "").trim(),
+      action: b.action,
+      minutes: b.action === "postponed" ? Number(b.minutes) || 0 : 0,
+      primary: !!b.primary,
+    })) : [],
+  };
+  const check = validateButtons();
+  if (!check.ok) { status.textContent = check.error; renderButtonRows(); return; }
+  status.textContent = "saving…";
+  const resp = await fetch(editingID ? `/api/eun/${editingID}` : "/api/eun", {
+    method: editingID ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = '<span class="u-c-ok">saved</span>';
+  reset();
+  load();
+});
+
+document.getElementById("s-send").addEventListener("click", async () => {
+  const result = document.getElementById("s-result");
+  const id = document.getElementById("s-message").value;
+  if (!id) { result.textContent = "write a message first"; return; }
+  const target = document.getElementById("s-target").value;
+  const msg = messages.find(m => m.id === id);
+  const who = target ? "that endpoint" : "every online endpoint";
+  if (!confirm(`Send "${msg ? msg.title : id}" to ${who}?`)) return;
+  result.textContent = "sending…";
+  const resp = await fetch(`/api/eun/${encodeURIComponent(id)}/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_ids: target ? [target] : [] }),
+  });
+  if (!resp.ok) { result.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  const out = await resp.json();
+  result.innerHTML = `<span class="u-c-ok">${escapeHtml(out.message)} — deployment ${escapeHtml(out.run_id)}</span>`;
+});
+</script>
+</body>
+</html>

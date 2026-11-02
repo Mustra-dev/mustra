@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in the server, agent or console does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security issues do not belong here.** If this could let someone run
+        commands on endpoints, read data they should not, or bypass sign-in or
+        permissions, report it privately as described in SECURITY.md.
+
+        Remove hostnames, IP addresses, usernames and credentials from
+        anything you paste.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. In the console, open ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: Administration → About, or the image tag.
+      placeholder: "0.79.4"
+    validations:
+      required: true
+  - type: input
+    id: agent-version
+    attributes:
+      label: Agent version(s)
+      description: Server and agent versions are independent. Leave empty if no agent is involved.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Agent platform(s) affected
+      multiple: true
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Not agent-related
+  - type: textarea
+    id: environment
+    attributes:
+      label: Deployment
+      description: How the server runs (compose from deploy/, published image, from source), reverse proxy or tunnel, OS versions.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant server or agent log lines, with private details removed.
+      render: text

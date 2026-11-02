@@ -1,0 +1,64 @@
+name: Build deployment binaries
+description: Build the agent matrix and Linux servers once with a persistent Go cache.
+inputs:
+  version:
+    description: Server version
+    required: true
+  agent-version:
+    description: Independent agent version
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      id: go
+      with:
+        go-version-file: go.mod
+        cache: false
+    - name: Locate Go caches
+      id: paths
+      shell: bash
+      run: |
+        echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+    # Separate the cross-build cache from native check jobs. Refresh it on
+    # each commit: immutable dependency-only keys freeze compiled packages.
+    # Fall back across dependency changes within the same OS/arch/toolchain;
+    # Go validates cached inputs and rebuilds packages affected by the change.
+    #
+    # Only main saves (see the save step below); everything else restores
+    # main's latest entry through the prefix match. E2E restores the same
+    # key, so keep the two in step.
+    #
+    # A self-hosted runner skips both: its Go caches stay on disk between
+    # runs, so the download only replaced them with an older copy.
+    - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      if: runner.environment == 'github-hosted'
+      id: cache
+      with:
+        path: |
+          ${{ steps.paths.outputs.build }}
+          ${{ steps.paths.outputs.modules }}
+        key: binaries-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          binaries-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+          binaries-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-
+    - name: Build agents and servers
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        AGENT_VERSION: ${{ inputs.agent-version }}
+      run: |
+        make agents servers COMMIT="$(git rev-parse --short HEAD)" BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    # Each entry is ~400 MB and a pull request's can only be read by that
+    # pull request, so saving from every ref pushed the repository past its
+    # 10 GB cache limit and evicted main's entries -- the ones every ref
+    # restores. A cache only changes speed: Go checks every cached input.
+    - name: Save the Go cache (main only)
+      if: runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.build }}
+          ${{ steps.paths.outputs.modules }}
+        key: ${{ steps.cache.outputs.cache-primary-key }}

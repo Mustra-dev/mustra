@@ -1,0 +1,34 @@
+# The mustra agent as a Home Assistant OS add-on. HAOS has no systemd and
+# no shell on the host, so this container is where the agent lives there.
+# install.sh writes this directory to /addons/mustra_agent when it is run
+# from the Home Assistant SSH add-on; the image carries no agent binary.
+# run.sh installs it from the server once after each install or rebuild of
+# the add-on; updates are the agent's own signed, verified builds.
+name: mustra agent
+version: "1.1.0"
+slug: mustra_agent
+description: mustra endpoint agent for this Home Assistant OS host
+url: https://github.com/mustra-dev/mustra
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: services
+boot: auto
+# The host's addresses, not the container's, and a route to the NATS port.
+host_network: true
+# Read-only questions about the host: its name and OS version (/host/info,
+# /os/info) and its add-ons, which stand in for services and installed
+# software there.
+hassio_api: true
+hassio_role: default
+options:
+  server_url: ""
+  site: default
+  log_level: info
+  enroll_token: ""
+schema:
+  server_url: url
+  site: str
+  log_level: list(debug|info|warn|error)
+  enroll_token: password?

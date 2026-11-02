@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File Integrity — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); word-break: break-all; }
+  .k { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .k.added { background: var(--ok-bg); color: var(--ok); }
+  .k.removed { background: var(--off-bg); color: var(--off); }
+  .k.modified { background: color-mix(in srgb, var(--viz-warning) 20%, transparent); color: var(--warn); }
+  .k.expected { background: var(--surface-2); color: var(--text-muted); }
+  .delta { font-family: var(--mono); font-size: var(--fs-meta); color: var(--text-muted); }
+  .delta .was { text-decoration: line-through; opacity: .7; }
+  .delta .now { color: var(--text); }
+  .lbl { font-size: var(--fs-meta); padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-weight: 600; margin-right: 3px; }
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; line-height: 1.5; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); } button.tiny.danger { color: var(--off); } button.tiny.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .tpl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .tpl-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--surface); }
+  .tpl-card b { display: block; margin-bottom: 4px; } .tpl-card .hint { margin: 0 0 8px; }
+  .state-pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; background: var(--surface-2); color: var(--text-muted); }
+  .state-ok { background: var(--ok-bg); color: var(--ok); } .state-bad { background: var(--off-bg); color: var(--off); } .state-warn { background: color-mix(in srgb, var(--viz-warning) 20%, transparent); color: var(--warn); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-changes" hidden>
+      <div id="integrity-page-head"></div>
+      <div class="stat-tiles" id="fim-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Changes</h2><span class="scan-status" id="fim-status"></span></div>
+        <p class="hint">
+          Endpoints hash a watched set — authentication, authorization, scheduled execution, service definitions —
+          and the server diffs consecutive snapshots. Detection happens here rather than on the endpoint on purpose:
+          an attacker who can rewrite /etc/sudoers can also rewrite a baseline sitting beside it, so the comparison
+          is made somewhere they cannot reach. Change that mustra itself caused during a deployment is labelled
+          rather than hidden — without that, every patch run buries the findings that matter.
+        </p>
+        <div class="query-row">
+          <label class="u-fs-12 u-c-text-muted">
+            <input type="checkbox" id="only-unexpected" checked> hide expected change (deployments, labels)
+          </label>
+          <label for="fim-q" class="u-fs-12 u-c-text-muted">
+            <input type="checkbox" id="only-open"> only not yet acknowledged
+          </label>
+          <input class="search-input u-w-200" id="fim-q" placeholder="path, endpoint or label">
+          <button class="secondary u-w-auto" id="refresh">Refresh</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>When</th><th>Endpoint</th><th>Path</th><th>Change</th><th>What</th><th>Detail</th><th>Labels</th><th>Action</th></tr></thead>
+            <tbody id="fim-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Unexpected change by endpoint, last 7 days</h2></div>
+        <div class="table-scroll"><table><thead><tr><th>Endpoint</th><th>Unexpected changes</th></tr></thead><tbody id="fim-byep"><tr><td class="empty" colspan="2">—</td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-watchlists" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Watchlists</h2><span class="scan-status" id="wl-status"></span></div>
+        <p class="hint">
+          A named set of paths — files or directories — and, on Windows, registry keys, in addition to the built-in set every
+          endpoint watches (authentication, scheduled execution, service definitions). A watchlist does nothing on its own;
+          a <b>monitor</b> applies it to computer groups. The agent skips a path its OS does not have, so one watchlist can
+          carry Linux, macOS and Windows paths together. Templates are a starting point aligned to a standard, not a certification.
+        </p>
+        <div class="tpl-grid" id="wl-templates"></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Template</th><th>Paths</th><th>Registry keys</th><th>Symlinks</th><th>By</th><th>Action</th></tr></thead>
+            <tbody id="wl-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="wl-editor-title">New watchlist</h2>
+        <div class="form-grid">
+          <div class="field"><label for="w-name">Name</label><input id="w-name" placeholder="PCI in-scope hosts"></div>
+          <div class="field"><label for="w-desc">Description</label><input id="w-desc" placeholder="optional"></div>
+          <div class="field"><label for="w-symlinks">Follow symlinks</label><select id="w-symlinks"><option value="false">no — a repointed link is the change</option><option value="true">yes — hash what the link points at</option></select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="w-paths">Paths, one per line (absolute)</label><textarea id="w-paths" rows="8" placeholder="/etc/nginx&#10;/opt/app/config.yml&#10;C:\inetpub\wwwroot"></textarea></div>
+          <div class="field"><label for="w-keys">Registry keys, one per line (Windows; HKLM\…)</label><textarea id="w-keys" rows="8" placeholder="HKLM\SOFTWARE\Policies\Microsoft\Windows\System"></textarea></div>
+        </div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="w-save">Save watchlist</button><button class="tiny" id="w-cancel">Cancel</button></div>
+        <div class="hint u-mt-8" id="w-error"></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-monitors" hidden>
+      <div class="stat-tiles" id="mon-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Monitors</h2><div class="u-d-flex u-gap-8"><button class="tiny" id="mon-apply">Push to endpoints now</button></div></div>
+        <p class="hint">
+          A monitor is a watchlist applied to computer groups. The union of an endpoint's monitors is its watch set, pushed to
+          the agent and re-applied every five minutes, so an endpoint that joins a group or restarts converges. An agent older
+          than 0.49.0 does not take a watch set and shows as needing an upgrade.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Monitor</th><th>Watchlist</th><th>Groups</th><th>Enabled</th><th>Action</th></tr></thead>
+            <tbody id="mon-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="mon-editor-title">New monitor</h2>
+        <div class="form-grid">
+          <div class="field"><label for="m-name">Name</label><input id="m-name" placeholder="PCI file integrity"></div>
+          <div class="field"><label for="m-watchlist">Watchlist</label><select id="m-watchlist"></select></div>
+          <div class="field"><label for="m-groups">Computer groups</label><select id="m-groups" multiple size="5"></select></div>
+          <div class="field"><label for="m-enabled">Enabled</label><select id="m-enabled"><option value="true">yes</option><option value="false">no</option></select></div>
+        </div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="m-save">Save monitor</button><button class="tiny" id="m-cancel">Cancel</button></div>
+        <div class="hint u-mt-8" id="m-error"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Coverage</h2><span class="scan-status" id="cov-status"></span></div>
+        <p class="hint">Which endpoints are under a monitor, whether the agent runs the set its monitors say, and which need the 0.49.0 agent.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>OS</th><th>Agent</th><th>Monitors</th><th>Paths</th><th>Keys</th><th>State</th></tr></thead>
+            <tbody id="cov-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-labels" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Labels</h2></div>
+        <p class="hint">
+          Rules evaluated as a change or event is recorded. Every matching label tags it; a label marked <b>expected</b>
+          classifies it as change that needs no investigation — a package repository refresh, a config-management run at
+          02:00, anything during an open maintenance window. Change mustra itself caused during a deployment is already
+          expected. What a rule cannot see is <i>who</i> made the change: no agent reports the process or user behind a
+          file write yet, so those criteria never match.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Label</th><th>Effect</th><th>Criteria</th><th>Priority</th><th>Enabled</th><th>Action</th></tr></thead>
+            <tbody id="lbl-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="lbl-editor-title">New label</h2>
+        <div class="form-grid">
+          <div class="field"><label for="l-name">Name</label><input id="l-name" placeholder="apt refresh"></div>
+          <div class="field"><label for="l-expected">Effect</label><select id="l-expected"><option value="false">tag only</option><option value="true">expected — needs no investigation</option></select></div>
+          <div class="field"><label for="l-priority">Priority (higher first)</label><input id="l-priority" type="number" value="0"></div>
+          <div class="field"><label for="l-enabled">Enabled</label><select id="l-enabled"><option value="true">yes</option><option value="false">no</option></select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="l-prefix">Path starts with</label><input id="l-prefix" placeholder="/etc/apt/"></div>
+          <div class="field"><label for="l-suffix">Path ends with</label><input id="l-suffix" placeholder=".list"></div>
+          <div class="field"><label for="l-contains">Path contains</label><input id="l-contains"></div>
+          <div class="field"><label for="l-kinds">Kinds (comma-separated: added, removed, modified, create, write, remove, rename, chmod)</label><input id="l-kinds" placeholder="modified"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="l-groups">Computer groups (optional)</label><select id="l-groups" multiple size="4"></select></div>
+          <div class="field"><label for="l-weekdays">Weekdays (0=Sun…6=Sat, comma-separated)</label><input id="l-weekdays" placeholder="1,2,3,4,5"></div>
+          <div class="field"><label for="l-start">From (HH:MM)</label><input id="l-start" placeholder="02:00"></div>
+          <div class="field"><label for="l-end">To (HH:MM)</label><input id="l-end" placeholder="04:00"></div>
+          <div class="field"><label for="l-tz">Timezone</label><input id="l-tz" placeholder="UTC"></div>
+          <div class="field"><label for="l-maint">Only during an open maintenance window</label><select id="l-maint"><option value="false">no</option><option value="true">yes — the change-window rule</option></select></div>
+        </div>
+        <div class="u-d-flex u-gap-8 u-ai-center"><button class="tiny go" id="l-save">Save label</button><button class="tiny" id="l-test">Test against recent changes</button><button class="tiny" id="l-cancel">Cancel</button><span class="hint u-m-0" id="l-testout"></span></div>
+        <div class="hint u-mt-8" id="l-error"></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-events" hidden>
+      <div class="stat-tiles" id="ev-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Live events</h2><span class="scan-status" id="ev-status"></span></div>
+        <p class="hint">
+          The same watched set, reported <b>as it changes</b> rather than at the next sweep. The hash baseline and this
+          run together and answer different questions: the baseline cannot miss a change made while the agent was down,
+          and this one does not wait fifteen minutes to notice one made now. An event also triggers an immediate
+          re-hash, so the diff above lands seconds after the write instead of at the next interval — and an indicator
+          matching a path raises its finding while the file is still there.
+        </p>
+        <p class="hint">
+          <b>What this does not say is who did it.</b> An event carries the path, the operation and the time. Naming
+          the process that wrote the file needs kernel plumbing mustra does not have, and a plausible guess would be
+          worse than the honest gap.
+        </p>
+        <div class="query-row">
+          <label class="u-fs-12 u-c-text-muted">
+            <input type="checkbox" id="only-matched"> only events that matched an indicator
+          </label>
+          <button class="secondary u-w-auto" id="ev-refresh">Refresh</button>
+        </div>
+        <div class="table-scroll table-scroll-y">
+          <table>
+            <thead><tr><th>When</th><th>Endpoint</th><th>Path</th><th>Operation</th><th>Indicator</th><th>Labels</th></tr></thead>
+            <tbody id="ev-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let changes = [], meta = {};
+
+document.addEventListener("mustra:user", () => {
+  initModuleSections([
+    { hash: "changes", label: "Changes" },
+    { hash: "events", label: "Live Events" },
+    { hash: "watchlists", label: "Watchlists" },
+    { hash: "monitors", label: "Monitors" },
+    { hash: "labels", label: "Labels" },
+  ]);
+  renderPageHead("integrity-page-head", "/integrity", { title: "Integrity Monitor" });
+  load();
+  loadEvents();
+  loadGroupsIM().then(() => { loadWatchlists(); loadMonitors(); loadLabels(); });
+});
+document.getElementById("only-open").addEventListener("change", render);
+document.getElementById("fim-q").addEventListener("input", render);
+document.getElementById("refresh").addEventListener("click", load);
+document.getElementById("only-unexpected").addEventListener("change", render);
+document.getElementById("ev-refresh").addEventListener("click", loadEvents);
+document.getElementById("only-matched").addEventListener("change", loadEvents);
+
+async function load() {
+  const resp = await fetch("/api/integrity");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  meta = await resp.json();
+  changes = meta.changes || [];
+  render();
+}
+
+// A file's hash is recorded in full; the table shows its first 12
+// characters, the whole hash on hover.
+function isHash(c, v) {
+  return (c.what === "file" || c.what === "contents") && /^[0-9a-f]{13,}$/i.test(v || "");
+}
+function deltaText(c, v) { return isHash(c, v) ? v.slice(0, 12) + "…" : v; }
+function deltaTitle(c, v) { return isHash(c, v) ? ` title="${escapeHtml(v)}"` : ""; }
+
+function render() {
+  const mt = meta.metrics || {}, cov = meta.coverage || {};
+  const mtti = mt.mean_time_to_investigate_hours == null ? "—" : (mt.mean_time_to_investigate_hours < 1 ? Math.round(mt.mean_time_to_investigate_hours * 60) + "m" : mt.mean_time_to_investigate_hours.toFixed(1) + "h");
+  document.getElementById("fim-tiles").innerHTML = [
+    { label: "Unexpected, 7 days", value: mt.unexpected_7d || 0, cls: (mt.unexpected_7d || 0) ? "bad" : "ok" },
+    { label: "Expected, 7 days", value: mt.expected_7d || 0 },
+    { label: "Awaiting investigation", value: mt.unacknowledged || 0, cls: (mt.unacknowledged || 0) ? "bad" : "ok" },
+    { label: "Mean time to investigate", value: mtti },
+    { label: "Under a monitor", value: `${cov.monitored || 0} / ${cov.total || 0}` },
+    { label: "Files watched", value: meta.watched_files || 0 },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+
+  document.getElementById("fim-byep").innerHTML = (mt.by_endpoint || []).length
+    ? mt.by_endpoint.map(e => `<tr><td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.agent_id)}</a></td><td>${escapeHtml(e.unexpected)}</td></tr>`).join("")
+    : '<tr><td class="empty" colspan="2">no unexpected change in the last 7 days</td></tr>';
+  const hideExpected = document.getElementById("only-unexpected").checked;
+  const onlyOpen = document.getElementById("only-open").checked;
+  const q = document.getElementById("fim-q").value.trim().toLowerCase();
+  const shown = changes.filter(c => (!hideExpected || !c.expected) && (!onlyOpen || (!c.acknowledged_at && !c.expected))
+    && (!q || c.path.toLowerCase().includes(q) || (c.hostname || "").toLowerCase().includes(q) || (c.labels || []).some(l => l.toLowerCase().includes(q))));
+  document.getElementById("fim-status").textContent = `${shown.length} shown of ${changes.length}`;
+
+  document.getElementById("fim-body").innerHTML = shown.length === 0
+    ? `<tr><td class="empty" colspan="8">${changes.length === 0
+        ? "no changes detected yet — the first snapshot from each endpoint is its baseline, so changes appear from the second interval onward (agent 0.9.0 or newer)"
+        : "every recorded change was caused by a deployment mustra ran"}</td></tr>`
+    : shown.map(c => `
+      <tr>
+        <td data-sort="${escapeHtml(c.detected_at || "")}">${fmtAgo(c.detected_at)}</td>
+        <td><a href="/endpoint/${escapeHtml(c.agent_id)}">${escapeHtml(c.hostname || c.agent_id)}</a></td>
+        <td class="mono u-ws-normal u-maxw-280">${escapeHtml(c.path)}</td>
+        <td><span class="k ${escapeHtml(c.kind)}">${escapeHtml(c.kind)}</span>
+            ${c.expected ? ' <span class="k expected">expected</span>' : ""}</td>
+        <td>${escapeHtml(c.what)}</td>
+        <td class="delta u-ws-normal u-maxw-260">
+          ${c.was ? `<span class="was"${deltaTitle(c, c.was)}>${escapeHtml(deltaText(c, c.was))}</span> → ` : ""}<span class="now"${deltaTitle(c, c.now)}>${escapeHtml(deltaText(c, c.now) || "gone")}</span>
+          ${c.because ? `<div class="u-mt-3">${escapeHtml(c.because)}</div>` : ""}
+        </td>
+        <td>${(c.labels || []).map(l => `<span class="lbl">${escapeHtml(l)}</span>`).join("") || "—"}</td>
+        <td>${c.expected ? "" : (c.acknowledged_at ? `<span class="state-pill state-ok" title="${escapeHtml(c.acknowledged_by || "")}">investigated</span>` : `<button class="tiny" data-ack="${escapeHtml(c.id)}">acknowledge</button>`)}</td>
+      </tr>`).join("");
+  document.querySelectorAll("[data-ack]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true;
+    const r = await fetch(`/api/integrity/changes/${encodeURIComponent(b.dataset.ack)}/ack`, { method: "POST" });
+    if (!r.ok) { alert(await r.text()); b.disabled = false; return; }
+    load();
+  }));
+  const dt = initDataTable(document.getElementById("fim-body").closest("table"), { storageKey: "integrity-changes" });
+  if (dt) dt.refresh();
+}
+
+// ---- watchlists, monitors, labels ---------------------------------------------
+let imGroups = [], watchlists = [], templates = [], monitors = [], labels = [], editingWL = null, editingMon = null, editingLbl = null;
+async function loadGroupsIM() {
+  const r = await fetch("/api/groups"); if (!r.ok) return;
+  imGroups = (await r.json()).groups || [];
+  const opts = imGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("");
+  document.getElementById("m-groups").innerHTML = opts; document.getElementById("l-groups").innerHTML = opts;
+}
+const groupName = id => (imGroups.find(g => g.id === id) || {}).name || id;
+async function loadWatchlists() {
+  const r = await fetch("/api/watchlists"); if (!r.ok) return;
+  const d = await r.json(); watchlists = d.watchlists || []; templates = d.templates || [];
+  document.getElementById("wl-templates").innerHTML = templates.map(t => `<div class="tpl-card"><b>${escapeHtml(t.name)}</b><div class="hint">${escapeHtml(t.description)}</div>
+    <span class="hint u-m-0">${escapeHtml(t.paths.length)} paths · ${escapeHtml(t.registry_keys.length)} registry keys</span> <button class="tiny go u-float-right" data-tpl="${escapeHtml(t.id)}">Use template</button></div>`).join("");
+  document.querySelectorAll("[data-tpl]").forEach(b => b.addEventListener("click", () => { const t = templates.find(x => x.id === b.dataset.tpl); editWatchlist(null, t); }));
+  document.getElementById("wl-status").textContent = watchlists.length ? `${watchlists.length} watchlist(s)` : "";
+  document.getElementById("wl-body").innerHTML = watchlists.length ? watchlists.map(w => `<tr>
+    <td><b>${escapeHtml(w.name)}</b>${w.description ? `<div class="hint u-m-2-0-0">${escapeHtml(w.description)}</div>` : ""}</td>
+    <td>${escapeHtml(w.template || "—")}</td><td>${escapeHtml(w.paths.length)}</td><td>${escapeHtml(w.registry_keys.length)}</td><td>${w.follow_symlinks ? "followed" : "no"}</td><td>${escapeHtml(w.created_by)}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-wedit="${escapeHtml(w.id)}">Edit</button> <button class="tiny danger" data-wdel="${escapeHtml(w.id)}">Delete</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="7">No watchlists yet — start from a template above, or write one below.</td></tr>';
+  document.querySelectorAll("[data-wedit]").forEach(b => b.addEventListener("click", () => editWatchlist(watchlists.find(w => w.id === b.dataset.wedit))));
+  document.querySelectorAll("[data-wdel]").forEach(b => b.addEventListener("click", async () => {
+    const w = watchlists.find(x => x.id === b.dataset.wdel); if (!confirm(`Delete "${w.name}"? Monitors using it go with it.`)) return;
+    const r = await fetch(`/api/watchlists/${encodeURIComponent(w.id)}`, { method: "DELETE" }); if (!r.ok) alert(await r.text());
+    loadWatchlists(); loadMonitors();
+  }));
+  const sel = document.getElementById("m-watchlist");
+  sel.innerHTML = watchlists.map(w => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join("");
+}
+function editWatchlist(w, tpl) {
+  editingWL = w ? w.id : null;
+  document.getElementById("wl-editor-title").textContent = w ? `Edit ${w.name}` : (tpl ? `New watchlist from ${tpl.name}` : "New watchlist");
+  document.getElementById("w-name").value = w ? w.name : (tpl ? tpl.name : "");
+  document.getElementById("w-desc").value = w ? w.description : (tpl ? tpl.description : "");
+  document.getElementById("w-symlinks").value = w ? String(!!w.follow_symlinks) : "false";
+  document.getElementById("w-paths").value = (w ? w.paths : (tpl ? tpl.paths : [])).join("\n");
+  document.getElementById("w-keys").value = (w ? w.registry_keys : (tpl ? tpl.registry_keys : [])).join("\n");
+  document.getElementById("w-paths").dataset.template = w ? (w.template || "") : (tpl ? tpl.id : "");
+  document.getElementById("w-error").textContent = "";
+  document.getElementById("wl-editor-title").scrollIntoView({ behavior: "smooth" });
+}
+document.getElementById("w-save").addEventListener("click", async () => {
+  const body = { name: document.getElementById("w-name").value, description: document.getElementById("w-desc").value, follow_symlinks: document.getElementById("w-symlinks").value === "true",
+    template: document.getElementById("w-paths").dataset.template || "",
+    paths: document.getElementById("w-paths").value.split("\n").map(x => x.trim()).filter(Boolean), registry_keys: document.getElementById("w-keys").value.split("\n").map(x => x.trim()).filter(Boolean) };
+  const r = await fetch(editingWL ? `/api/watchlists/${encodeURIComponent(editingWL)}` : "/api/watchlists", { method: editingWL ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { document.getElementById("w-error").textContent = await r.text(); return; }
+  editWatchlist(null); loadWatchlists();
+});
+document.getElementById("w-cancel").addEventListener("click", () => editWatchlist(null));
+
+async function loadMonitors() {
+  const [mr, sr] = await Promise.all([fetch("/api/integrity/monitors"), fetch("/api/integrity/watch-status")]);
+  if (mr.ok) monitors = (await mr.json()).monitors || [];
+  document.getElementById("mon-body").innerHTML = monitors.length ? monitors.map(m => `<tr${sx(m.enabled ? "" : "opacity:.55")}>
+    <td><b>${escapeHtml(m.name)}</b></td><td>${escapeHtml(m.watchlist_name || m.watchlist_id)}</td><td>${(m.group_ids || []).map(groupName).map(escapeHtml).join(", ")}</td><td>${m.enabled ? "yes" : "no"}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-medit="${escapeHtml(m.id)}">Edit</button> <button class="tiny danger" data-mdel="${escapeHtml(m.id)}">Delete</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="5">No monitors yet. A watchlist only takes effect through a monitor.</td></tr>';
+  document.querySelectorAll("[data-medit]").forEach(b => b.addEventListener("click", () => editMonitor(monitors.find(m => m.id === b.dataset.medit))));
+  document.querySelectorAll("[data-mdel]").forEach(b => b.addEventListener("click", async () => {
+    const m = monitors.find(x => x.id === b.dataset.mdel); if (!confirm(`Delete the monitor "${m.name}"?`)) return;
+    await fetch(`/api/integrity/monitors/${encodeURIComponent(m.id)}`, { method: "DELETE" }); loadMonitors();
+  }));
+  if (sr.ok) {
+    const d = await sr.json();
+    document.getElementById("mon-tiles").innerHTML = [
+      { label: "Endpoints", value: d.total }, { label: "Under a monitor", value: d.monitored }, { label: "Set applied", value: d.applied, cls: d.applied === d.monitored ? "ok" : "bad" },
+      { label: "Need agent 0.49.0", value: d.needs_upgrade, cls: d.needs_upgrade ? "bad" : "ok" },
+    ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+    const rows = (d.endpoints || []).filter(e => e.want_revision || e.have_revision);
+    document.getElementById("cov-status").textContent = `${rows.length} endpoint(s) with a watch set`;
+    document.getElementById("cov-body").innerHTML = rows.length ? rows.map(e => `<tr>
+      <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname)}</a>${e.online ? "" : ' <span class="state-pill">offline</span>'}</td><td>${escapeHtml(osLabel(e.os))}</td><td>${escapeHtml(e.agent_version)}</td>
+      <td>${e.monitors.map(escapeHtml).join(", ") || "—"}</td><td>${escapeHtml(e.paths)}</td><td>${escapeHtml(e.registry_keys)}</td>
+      <td>${e.applied ? '<span class="state-pill state-ok">applied</span>' : (e.needs_upgrade ? '<span class="state-pill state-bad">needs 0.49.0</span>' : '<span class="state-pill state-warn">pending push</span>')}</td></tr>`).join("")
+      : '<tr><td class="empty" colspan="7">no endpoint is under a monitor</td></tr>';
+  }
+}
+function editMonitor(m) {
+  editingMon = m ? m.id : null;
+  document.getElementById("mon-editor-title").textContent = m ? `Edit ${m.name}` : "New monitor";
+  document.getElementById("m-name").value = m ? m.name : "";
+  if (m) document.getElementById("m-watchlist").value = m.watchlist_id;
+  Array.from(document.getElementById("m-groups").options).forEach(o => { o.selected = !!(m && (m.group_ids || []).includes(o.value)); });
+  document.getElementById("m-enabled").value = m ? String(!!m.enabled) : "true";
+  document.getElementById("m-error").textContent = "";
+}
+document.getElementById("m-save").addEventListener("click", async () => {
+  const body = { name: document.getElementById("m-name").value, watchlist_id: document.getElementById("m-watchlist").value,
+    group_ids: Array.from(document.getElementById("m-groups").selectedOptions).map(o => o.value), enabled: document.getElementById("m-enabled").value === "true" };
+  const r = await fetch(editingMon ? `/api/integrity/monitors/${encodeURIComponent(editingMon)}` : "/api/integrity/monitors", { method: editingMon ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { document.getElementById("m-error").textContent = await r.text(); return; }
+  editMonitor(null); setTimeout(loadMonitors, 1500);
+});
+document.getElementById("m-cancel").addEventListener("click", () => editMonitor(null));
+document.getElementById("mon-apply").addEventListener("click", async () => {
+  const b = document.getElementById("mon-apply"); b.disabled = true; b.textContent = "pushing…";
+  const r = await fetch("/api/integrity/watch-status/apply", { method: "POST" });
+  const d = r.ok ? await r.json() : {}; b.disabled = false; b.textContent = "Push to endpoints now";
+  const failed = Object.keys(d.failed || {});
+  document.getElementById("cov-status").textContent = `pushed ${d.pushed || 0}${failed.length ? `, failed ${failed.length}: ${failed.slice(0, 4).join(", ")}` : ""}`;
+  loadMonitors();
+});
+
+function critLabel(c) {
+  c = c || {}; const parts = [];
+  if (c.path_prefix) parts.push(`path starts with ${c.path_prefix}`); if (c.path_suffix) parts.push(`ends with ${c.path_suffix}`); if (c.path_contains) parts.push(`contains ${c.path_contains}`);
+  if ((c.kinds || []).length) parts.push(`kind ${c.kinds.join("/")}`); if ((c.group_ids || []).length) parts.push(`in ${c.group_ids.map(groupName).join(", ")}`);
+  if ((c.weekdays || []).length) parts.push(`days ${c.weekdays.join(",")}`); if (c.start) parts.push(`${c.start}–${c.end} ${c.timezone || "UTC"}`);
+  if (c.during_maintenance) parts.push("during an open maintenance window"); if (c.process) parts.push(`process ${c.process}`); if (c.user) parts.push(`user ${c.user}`);
+  return parts.join("; ") || "—";
+}
+async function loadLabels() {
+  const r = await fetch("/api/integrity/labels"); if (!r.ok) return;
+  labels = (await r.json()).labels || [];
+  document.getElementById("lbl-body").innerHTML = labels.length ? labels.map(l => `<tr${sx(l.enabled ? "" : "opacity:.55")}>
+    <td><span class="lbl">${escapeHtml(l.name)}</span></td><td>${l.expected ? '<span class="state-pill state-ok">expected</span>' : "tag"}</td><td class="u-ws-normal">${escapeHtml(critLabel(l.criteria))}</td><td>${escapeHtml(l.priority)}</td><td>${l.enabled ? "yes" : "no"}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-ledit="${escapeHtml(l.id)}">Edit</button> <button class="tiny danger" data-ldel="${escapeHtml(l.id)}">Delete</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="6">No labels yet.</td></tr>';
+  document.querySelectorAll("[data-ledit]").forEach(b => b.addEventListener("click", () => editLabel(labels.find(l => l.id === b.dataset.ledit))));
+  document.querySelectorAll("[data-ldel]").forEach(b => b.addEventListener("click", () => {
+    const l = labels.find(x => x.id === b.dataset.ldel), row = b.closest("tr");
+    undoable({ text: `Label "${l.name}" deleted`, hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/integrity/labels/${encodeURIComponent(l.id)}`, { method: "DELETE", keepalive: true }); loadLabels(); } });
+  }));
+}
+function editLabel(l) {
+  editingLbl = l ? l.id : null; const c = (l && l.criteria) || {};
+  document.getElementById("lbl-editor-title").textContent = l ? `Edit ${l.name}` : "New label";
+  document.getElementById("l-name").value = l ? l.name : ""; document.getElementById("l-expected").value = l ? String(!!l.expected) : "false";
+  document.getElementById("l-priority").value = l ? l.priority : 0; document.getElementById("l-enabled").value = l ? String(!!l.enabled) : "true";
+  document.getElementById("l-prefix").value = c.path_prefix || ""; document.getElementById("l-suffix").value = c.path_suffix || ""; document.getElementById("l-contains").value = c.path_contains || "";
+  document.getElementById("l-kinds").value = (c.kinds || []).join(", "); document.getElementById("l-weekdays").value = (c.weekdays || []).join(",");
+  document.getElementById("l-start").value = c.start || ""; document.getElementById("l-end").value = c.end || ""; document.getElementById("l-tz").value = c.timezone || "";
+  document.getElementById("l-maint").value = String(!!c.during_maintenance);
+  Array.from(document.getElementById("l-groups").options).forEach(o => { o.selected = !!(c.group_ids || []).includes(o.value); });
+  document.getElementById("l-error").textContent = ""; document.getElementById("l-testout").textContent = "";
+}
+function labelBody() {
+  return { name: document.getElementById("l-name").value, expected: document.getElementById("l-expected").value === "true", priority: +document.getElementById("l-priority").value || 0,
+    enabled: document.getElementById("l-enabled").value === "true", criteria: {
+      path_prefix: document.getElementById("l-prefix").value.trim(), path_suffix: document.getElementById("l-suffix").value.trim(), path_contains: document.getElementById("l-contains").value.trim(),
+      kinds: document.getElementById("l-kinds").value.split(",").map(x => x.trim()).filter(Boolean), group_ids: Array.from(document.getElementById("l-groups").selectedOptions).map(o => o.value),
+      weekdays: document.getElementById("l-weekdays").value.split(",").map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x)),
+      start: document.getElementById("l-start").value.trim(), end: document.getElementById("l-end").value.trim(), timezone: document.getElementById("l-tz").value.trim(),
+      during_maintenance: document.getElementById("l-maint").value === "true" } };
+}
+document.getElementById("l-save").addEventListener("click", async () => {
+  const r = await fetch(editingLbl ? `/api/integrity/labels/${encodeURIComponent(editingLbl)}` : "/api/integrity/labels", { method: editingLbl ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(labelBody()) });
+  if (!r.ok) { document.getElementById("l-error").textContent = await r.text(); return; }
+  editLabel(null); loadLabels();
+});
+document.getElementById("l-test").addEventListener("click", async () => {
+  const r = await fetch("/api/integrity/labels/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(labelBody()) });
+  if (!r.ok) { document.getElementById("l-testout").textContent = await r.text(); return; }
+  const d = await r.json(); document.getElementById("l-testout").textContent = `matches ${d.matched} of the last ${d.of} change(s)${d.sample.length ? ": " + d.sample.slice(0, 3).map(c => c.path).join(", ") : ""}`;
+});
+document.getElementById("l-cancel").addEventListener("click", () => editLabel(null));
+
+
+// --- live events -------------------------------------------------------
+
+const OP_TONE = { create: "added", remove: "removed", write: "modified",
+                  rename: "modified", chmod: "modified", suppressed: "expected" };
+
+async function loadEvents() {
+  const matched = document.getElementById("only-matched").checked;
+  const resp = await fetch(`/api/file-events?limit=300${matched ? "&matched=1" : ""}`);
+  if (!resp.ok) {
+    document.getElementById("ev-body").innerHTML =
+      `<tr><td class="empty" colspan="5">couldn't load events</td></tr>`;
+    return;
+  }
+  const d = await resp.json();
+  const events = d.events || [];
+  const sum = d.summary || {};
+
+  document.getElementById("ev-tiles").innerHTML = [
+    { label: "Events, last 24h", value: sum.last_24h || 0 },
+    { label: "Matched an indicator", value: sum.matched_24h || 0, cls: (sum.matched_24h || 0) ? "off" : "ok" },
+    { label: "Suppressed in bursts", value: sum.suppressed_24h || 0 },
+    { label: "Endpoints reporting", value: sum.endpoints_reporting || 0 },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+
+  document.getElementById("ev-status").textContent =
+    `${events.length} shown · kept ${d.retention_days || 14} days`;
+
+  document.getElementById("ev-body").innerHTML = events.length === 0
+    ? `<tr><td class="empty" colspan="5">nothing yet — real-time events need agent 0.30.0 or newer, and only the watched set is reported</td></tr>`
+    : events.map(e => {
+        if (e.op === "suppressed") {
+          // A burst is a row of its own rather than nothing, so a quiet
+          // looking window is never a lie about what happened.
+          return `<tr>
+            <td data-sort="${escapeHtml(e.at)}">${fmtAgo(e.at)}</td>
+            <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.agent_id)}</a></td>
+            <td colspan="4" class="u-c-text-muted">${escapeHtml(e.count)} more events in this window, not reported individually — too many at once</td>
+          </tr>`;
+        }
+        return `<tr${e.matched_ioc ? ' class="u-bg-off-bg"' : ""}>
+          <td data-sort="${escapeHtml(e.at)}">${fmtAgo(e.at)}</td>
+          <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.agent_id)}</a></td>
+          <td class="mono u-ws-normal u-maxw-320">${escapeHtml(e.path)}</td>
+          <td><span class="k ${escapeHtml(OP_TONE[e.op] || "expected")}">${escapeHtml(e.op)}</span></td>
+          <td>${e.ioc_name ? `<a href="/hunt#findings" class="u-c-off u-fwt-600">${escapeHtml(e.ioc_name)}</a>` : "—"}</td>
+          <td>${(e.labels || []).map(l => `<span class="lbl">${escapeHtml(l)}</span>`).join("") || "—"}</td>
+        </tr>`;
+      }).join("");
+}
+</script>
+</body>
+</html>

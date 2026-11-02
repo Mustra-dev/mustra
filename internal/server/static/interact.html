@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interact — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .ask-bar { display: flex; gap: 8px; align-items: stretch; margin-bottom: 8px; }
+  .ask-bar input {
+    flex: 1; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border-input);
+    background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+  }
+  .ask-bar input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .ask-bar button { padding: 0 20px; font-size: 13.5px; width: auto; flex: 0 0 auto; }
+  /* A phone puts the box on its own line, Run and Build query under it. */
+  @media (max-width: 600px) {
+    .ask-bar { flex-wrap: wrap; }
+    .ask-bar input { flex: 1 1 100%; min-width: 0; }
+    .ask-bar button { flex: 1 1 0; min-height: 40px; justify-content: center; }
+  }
+  .ask-hint { font-size: var(--fs-meta); color: var(--text-muted); margin: 0 0 14px; line-height: 1.55; }
+  .ask-hint code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .suggest { position: relative; }
+  .suggest-list {
+    position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 320px; overflow-y: auto; display: none;
+  }
+  .suggest-list.open { display: block; }
+  .suggest-item { padding: 8px 13px; font-size: 12.5px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
+  .suggest-item:hover, .suggest-item.active { background: var(--surface-2); }
+  .suggest-item .f { font-family: var(--mono); font-size: var(--fs-meta); color: var(--accent); }
+  .suggest-item .d { color: var(--text-muted); font-size: var(--fs-meta); text-align: right; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .example { font-size: var(--fs-meta); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text-muted); cursor: pointer; font-family: var(--mono); }
+  .example:hover { border-color: var(--accent); color: var(--text); }
+  .meter { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; flex-wrap: wrap; }
+  .meter-bar { flex: 1; min-width: 120px; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .meter-fill { height: 100%; width: 0; background: var(--viz-good); }
+  .count-cell { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .no-result { color: var(--text-muted); font-style: italic; }
+  .qrow { cursor: pointer; }
+  .qrow:hover { background: var(--surface-2); }
+  .qrow.picked { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .result-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px;
+    background: var(--surface-2); border-radius: var(--radius-md); margin-bottom: 12px; font-size: 12.5px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .qtext { font-family: var(--mono); font-size: var(--fs-meta); }
+  .q-view-options { display:flex; flex-wrap:wrap; gap:16px; align-items:end; margin:12px 0 18px; }
+  .q-view-options select { padding:8px 10px; border:1px solid var(--border-input); border-radius:var(--radius-md); background:var(--input-bg); color:var(--text); font:inherit; font-size:12.5px; max-width:100%; }
+  .q-view-options > label { display:flex; align-items:center; gap:7px; margin-bottom:8px; font-size:12px; color:var(--text-muted); }
+  .q-view-options input[type="checkbox"] { width:auto; margin:0; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-ask" hidden>
+      <div id="interact-page-head"></div>
+      <div id="interact-quick-links"></div>
+
+      <div class="panel">
+        <h2>Query</h2>
+        <div class="suggest">
+          <div class="ask-bar">
+            <input id="q-input" autocomplete="off" spellcheck="false"
+                   placeholder="get os from all machines with online equals true">
+            <button class="primary" id="q-ask">Run</button>
+            <button class="secondary qb-open" id="q-build" type="button"><span data-icon="filter"></span>Build query</button>
+          </div>
+          <div class="suggest-list" id="q-suggest"></div>
+        </div>
+        <div class="q-view-options"><div class="field"><label for="q-record">Result view</label><select id="q-record"><option value="">Endpoint summary / counted answers</option></select></div><label><input type="checkbox" id="q-same-row"> Conditions for each sensor must match the same record</label><label title="Asks the online endpoints now for processes, services, installed apps and patches, waiting up to 20 seconds. Other sensors, and endpoints that do not answer in time, come from the cache."><input type="checkbox" id="q-live"> Ask live (processes, services, apps, patches)</label></div>
+        <p class="ask-hint">
+          <code>get &lt;field&gt;[ and &lt;field&gt;…] from all machines[ with &lt;field&gt; &lt;operator&gt; &lt;value&gt;]</code>.
+          Query one field and identical answers collapse into a counted row; query several and you get a row per
+          endpoint. Answers come from the inventory mustra already holds, so offline endpoints are included and
+          nothing has to be woken up.
+        </p>
+        <div class="examples" id="q-examples"></div>
+      </div>
+
+      <!-- Explore: everything worth running again, side by side, each list
+           filterable as you type -- the saved queries, the dashboards and
+           the recent queries, so the next thing to ask is one click. -->
+      <div class="explore-grid" id="explore-grid">
+        <div class="panel explore-col" data-explore="saved">
+          <div class="explore-head"><h2>Saved Queries</h2><input type="search" placeholder="Filter" aria-label="Filter saved queries"></div>
+          <div class="explore-count hint"></div><div class="explore-list"></div>
+        </div>
+        <div class="panel explore-col" data-explore="dash">
+          <div class="explore-head"><h2>Dashboards</h2><input type="search" placeholder="Filter" aria-label="Filter dashboards"></div>
+          <div class="explore-count hint"></div><div class="explore-list"></div>
+        </div>
+        <div class="panel explore-col" data-explore="recent">
+          <div class="explore-head"><h2>Recent Queries</h2><input type="search" placeholder="Filter" aria-label="Filter recent queries"></div>
+          <div class="explore-count hint"></div><div class="explore-list"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="q-results-panel" hidden>
+        <div class="panel-header"><h2 id="q-title">Results</h2><span class="scan-status" id="q-status"></span></div>
+        <div class="meter">
+          <span id="q-matched"></span>
+          <div class="meter-bar"><div class="meter-fill" id="q-meter"></div></div>
+          <span id="q-reporting"></span>
+        </div>
+        <div class="result-actions" id="q-actions" hidden>
+          <span id="q-picked">0 rows selected</span>
+          <button class="tiny" id="q-drill">Drill down into these endpoints</button>
+          <button class="tiny go" id="q-deploy">Deploy action…</button>
+          <button class="tiny go" id="q-patch" hidden>Apply patches…</button>
+          <button class="tiny" id="q-clear">Clear selection</button>
+        </div>
+        <!-- Deploy Action from a result: pick rows, pick a package, land
+             in Deploy with the targets already chosen. -->
+        <div class="panel u-m-8-0-10 u-p-12-14" id="q-deploy-panel" hidden>
+          <div class="u-d-flex u-gap-10 u-ai-center u-fw-wrap">
+            <strong id="q-deploy-title">Deploy to the selected endpoints</strong>
+            <input id="q-deploy-filter" placeholder="filter packages" class="u-w-220" autocomplete="off">
+            <button class="tiny" id="q-deploy-cancel">Cancel</button>
+          </div>
+          <div id="q-deploy-list" class="u-mt-8 u-maxh-260 u-ov-auto"></div>
+        </div>
+        <div class="result-merge u-d-flex u-gap-8 u-ai-center u-m-6-0-8 u-fw-wrap">
+          <label for="q-merge" class="u-fs-12 u-c-text-muted">Merge a column</label>
+          <input id="q-merge" list="q-merge-fields" placeholder="add a field to this result" class="u-w-260" autocomplete="off">
+          <datalist id="q-merge-fields"></datalist>
+          <button class="tiny" id="q-merge-go">Add</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead id="q-head"></thead>
+            <tbody id="q-body"></tbody>
+          </table>
+        </div>
+        <div class="panel-actions u-mt-12">
+          <button class="secondary u-w-auto" id="q-save">Save this query</button>
+          <button class="secondary u-w-auto" id="q-export">Export CSV</button>
+          <span class="scan-status" id="q-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-builder" hidden>
+      <div id="builder-page-head"></div>
+      <div class="panel" id="qb-root"><p class="hint">Loading the sensors…</p></div>
+    </div>
+
+    <div class="module-section" id="section-saved" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Saved queries</h2><span class="scan-status" id="saved-status"></span></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Query</th><th>Saved by</th><th>When</th><th>Action</th></tr></thead>
+            <tbody id="saved-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-history" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Query history</h2><span class="scan-status" id="hist-status"></span></div>
+        <p class="ask-hint">Every query anyone has run, and who ran it.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Query</th><th>Run by</th><th>When</th><th>Matched</th><th>Action</th></tr></thead>
+            <tbody id="hist-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/querybuilder.js"></script>
+<script src="/static/app.js"></script>
+<script>
+const OPS = ["equals","not_equals","contains","not_contains","starts_with","ends_with",
+             "greater_than","less_than","matches_regex","exists","not_exists","in","not_in"];
+const EXAMPLES = [
+  "get os from all machines",
+  "get platform from all machines",
+  "get agent_version from all machines",
+  "get hostname and os from all machines with online equals false",
+  "get installed_apps.name from all machines",
+  "get patches.count from all machines with os equals linux",
+  "get privileges.full_rights from all machines",
+  "get disks.used_percent from all machines with disks.used_percent greater_than 80",
+];
+
+let fields = [], lastResult = null, lastRequest = null, picked = new Set();
+
+document.addEventListener("mustra:user", (e) => {
+  initModuleSections([
+    { hash: "ask", label: "Query" },
+    { hash: "builder", label: "Query Builder" },
+    { hash: "saved", label: "Saved Queries" },
+    { hash: "history", label: "Query History" },
+  ]);
+  renderPageHead("interact-page-head", "/interact", { title: "Interact" });
+  renderPageHead("builder-page-head", "/interact", { title: "Query Builder",
+    sub: "Pick the sensors to report and the machines to ask, and the query writes itself." });
+  // The rail's Explore icon lands here: the Query section, scrolled to the
+  // Explore columns under it.
+  if (window.location.hash === "#explore") {
+    history.replaceState(null, "", "#ask");
+    requestAnimationFrame(() => document.getElementById("explore-grid")?.scrollIntoView({ block: "start" }));
+  }
+  renderQuickLinks("interact-quick-links", "/interact", e.detail);
+  // Patching is its own permission, and an action that lands on a page the
+  // viewer may not use is worse than one that is not offered.
+  document.getElementById("q-patch").hidden =
+    !(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("patches.manage")));
+  document.getElementById("q-examples").innerHTML = EXAMPLES
+    .map(x => `<button class="example" data-ex="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("");
+  document.querySelectorAll("[data-ex]").forEach(b => b.addEventListener("click", () => {
+    document.getElementById("q-input").value = b.dataset.ex;
+    ask();
+  }));
+  loadSaved();
+  loadHistory();
+
+  // A query handed over from the home page's bar. Read from the hash
+  // rather than the query string so it survives the hash-based section
+  // routing this page already uses.
+  const handoff = window.location.hash.match(/^#ask\?(?:.*&)?q=([^&]+)/);
+  if (handoff) {
+    input.value = decodeURIComponent(handoff[1]);
+    // loadSaved populates the field catalog that parsing validates
+    // against, so wait for it rather than rejecting a valid field as
+    // unknown on a cold load.
+    loadSaved().then(ask);
+  }
+});
+
+// --- the grammar ---
+//
+// Deliberately forgiving: "os" alone means "get os from all machines",
+// because the shortest useful thing to type should work.
+function parseQuery(text) {
+  let t = text.trim().replace(/\s+/g, " ");
+  if (!t) return null;
+  t = t.replace(/^get\s+/i, "");
+
+  let where = [], matchAll = true, getPart = t;
+  const fromMatch = t.match(/\s+from\s+all\s+(machines|endpoints|devices)\s*/i);
+  if (fromMatch) {
+    getPart = t.slice(0, fromMatch.index);
+    const rest = t.slice(fromMatch.index + fromMatch[0].length).trim();
+    if (rest) {
+      const withMatch = rest.match(/^with\s+(.*)$/i);
+      if (!withMatch) return { error: `expected "with …" after "from all machines", got "${rest}"` };
+      const parsed = parseConditions(withMatch[1]);
+      if (parsed.error) return parsed;
+      where = parsed.rules;
+      matchAll = parsed.all;
+    }
+  }
+
+  const get = splitGetList(getPart);
+  if (get.length === 0) return { error: "nothing to get" };
+  // "installed_apps.name[contains x]" is the field plus a value filter.
+  const unknown = get.map(f => f.split("[")[0].trim()).filter(f => fields.length && !fields.some(s => s.field === f));
+  if (unknown.length) {
+    return { error: `no such field: ${unknown.join(", ")}. Start typing to see what's available.` };
+  }
+  return { get, where: document.getElementById("q-same-row").checked ? sameRowRules(where) : where, record_sensor:document.getElementById("q-record").value, match_all: matchAll, text: text.trim() };
+}
+
+// The words people type for an operator, and the rule engine's name for
+// each. "greater_than" and friends were offered but sent as typed, which
+// the server rejected.
+const OP_ALIASES = { greater_than: "gt", less_than: "lt", matches_regex: "regex",
+  greater_than_or_equal: "gte", less_than_or_equal: "lte" };
+const RULE_OPS = ["equals","not_equals","contains","not_contains","starts_with","ends_with",
+  "gt","gte","lt","lte","regex","exists","not_exists","in","not_in"];
+
+// parseConditions reads the "with" clause: conditions joined by "and" or
+// "or", brackets for a group with its own joiner — "(os equals windows or
+// os equals darwin) and online equals true". One level may not mix "and"
+// with "or": which binds tighter is exactly what people get wrong, so
+// brackets say it. A quoted value may hold spaces, "and" or brackets.
+function parseConditions(text) {
+  const toks = [];
+  const re = /\s*(\(|\)|"[^"]*"|'[^']*'|[^\s()"']+)/y;
+  let pos = 0;
+  for (;;) {
+    re.lastIndex = pos;
+    const m = re.exec(text);
+    if (!m) break;
+    toks.push(m[1]);
+    pos = re.lastIndex;
+  }
+  if (text.slice(pos).trim()) return { error: "couldn't read the conditions: check the quotes" };
+  let i = 0;
+  const isJoin = t => t && /^(and|or)$/i.test(t);
+  function group(depth) {
+    const rules = [];
+    let joiner = "";
+    for (;;) {
+      if (toks[i] === "(") {
+        if (depth >= 4) return { error: "brackets nest at most four deep" };
+        i++;
+        const inner = group(depth + 1);
+        if (inner.error) return inner;
+        if (toks[i] !== ")") return { error: "a bracket is not closed" };
+        i++;
+        rules.push(inner.rules.length === 1 ? inner.rules[0]
+          : { field: "_group", op: "group", value: JSON.stringify({ all: inner.all, rules: inner.rules }) });
+      } else {
+        const parts = [];
+        while (i < toks.length && toks[i] !== ")" && toks[i] !== "(" && !(parts.length >= 2 && isJoin(toks[i]))) parts.push(toks[i++]);
+        if (parts.length < 2) return { error: `couldn't read the condition "${parts.join(" ")}"` };
+        const [field, rawOp, ...rest] = parts;
+        const op = OP_ALIASES[rawOp] || rawOp;
+        if (!RULE_OPS.includes(op)) return { error: `"${rawOp}" isn't an operator — try one of ${OPS.join(", ")}` };
+        const value = rest.join(" ").replace(/^"(.*)"$|^'(.*)'$/, (_, a, b) => a ?? b);
+        rules.push({ field, op, value });
+      }
+      if (i >= toks.length || toks[i] === ")") break;
+      const j = toks[i++].toLowerCase();
+      if (joiner && j !== joiner) return { error: `mixing "and" with "or" needs brackets, for example: (a or b) and c` };
+      joiner = j;
+    }
+    return { rules, all: joiner !== "or" };
+  }
+  const out = group(0);
+  if (out.error) return out;
+  if (i < toks.length) return { error: "there is a closing bracket without an opening one" };
+  return out;
+}
+
+// splitGetList splits the get clause on "and", but not on one inside a
+// [value filter] or quotes: "installed_apps.name[contains "a and b"]".
+function splitGetList(text) {
+  const out = [];
+  let cur = "", depth = 0, quoted = false;
+  const words = text.split(/(\s+and\s+)/i);
+  for (const w of words) {
+    if (/^\s+and\s+$/i.test(w) && depth === 0 && !quoted) { out.push(cur); cur = ""; continue; }
+    for (const ch of w) {
+      if (ch === '"') quoted = !quoted;
+      else if (!quoted && ch === "[") depth++;
+      else if (!quoted && ch === "]") depth = Math.max(0, depth - 1);
+    }
+    cur += w;
+  }
+  out.push(cur);
+  return out.map(x => x.trim()).filter(Boolean);
+}
+
+// rulesText renders rules back as query text, a group in brackets.
+function rulesText(rules, all) {
+  return rules.flatMap(r => r.op === "same_row" ? JSON.parse(r.value) : [r]).map(r => {
+    if (r.op === "group") { const g = JSON.parse(r.value); return `(${rulesText(g.rules, g.all)})`; }
+    const v = /[\s()]/.test(r.value || "") && !/^(in|not_in)$/.test(r.op) ? `"${r.value}"` : (r.value || "");
+    return `${r.field} ${r.op}${v ? " " + v : ""}`;
+  }).join(all ? " and " : " or ");
+}
+
+// --- typeahead over the same field catalog the rule engine uses ---
+
+const input = document.getElementById("q-input");
+const suggest = document.getElementById("q-suggest");
+let activeIdx = -1;
+
+function currentToken() {
+  const upto = input.value.slice(0, input.selectionStart);
+  const m = upto.match(/[^\s]*$/);
+  return { token: m ? m[0] : "", start: upto.length - (m ? m[0].length : 0) };
+}
+
+function showSuggestions() {
+  const { token } = currentToken();
+  if (!token || token.length < 1) { suggest.classList.remove("open"); return; }
+  const q = token.toLowerCase();
+  const hits = fields.filter(f => f.field.toLowerCase().includes(q) || (f.label || "").toLowerCase().includes(q))
+                     .slice(0, 12);
+  if (hits.length === 0) { suggest.classList.remove("open"); return; }
+  activeIdx = -1;
+  suggest.innerHTML = hits.map((f, i) =>
+    `<div class="suggest-item" data-i="${i}" data-field="${escapeHtml(f.field)}">
+       <span class="f">${escapeHtml(f.field)}</span>
+       <span class="d">${escapeHtml(f.label || "")}</span>
+     </div>`).join("");
+  suggest.classList.add("open");
+  suggest.querySelectorAll(".suggest-item").forEach(el =>
+    el.addEventListener("mousedown", ev => { ev.preventDefault(); applySuggestion(el.dataset.field); }));
+}
+
+function applySuggestion(field) {
+  const { start } = currentToken();
+  const before = input.value.slice(0, start);
+  const after = input.value.slice(input.selectionStart);
+  input.value = before + field + after;
+  const pos = (before + field).length;
+  input.setSelectionRange(pos, pos);
+  suggest.classList.remove("open");
+  input.focus();
+}
+
+input.addEventListener("input", showSuggestions);
+input.addEventListener("blur", () => setTimeout(() => suggest.classList.remove("open"), 120));
+input.addEventListener("keydown", e => {
+  const items = [...suggest.querySelectorAll(".suggest-item")];
+  if (suggest.classList.contains("open") && items.length) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      activeIdx = (activeIdx + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      items.forEach((el, i) => el.classList.toggle("active", i === activeIdx));
+      return;
+    }
+    if (e.key === "Tab" || (e.key === "Enter" && activeIdx >= 0)) {
+      e.preventDefault();
+      applySuggestion(items[activeIdx >= 0 ? activeIdx : 0].dataset.field);
+      return;
+    }
+    if (e.key === "Escape") { suggest.classList.remove("open"); return; }
+  }
+  if (e.key === "Enter") ask();
+});
+document.getElementById("q-ask").addEventListener("click", ask);
+// The builder opens on whatever is in the box, so a typed query can be
+// carried on in pickers.
+document.getElementById("q-build").addEventListener("click", () => {
+  const q = input.value.trim();
+  window.location.hash = "builder" + (q ? "?q=" + encodeURIComponent(q) : "");
+});
+
+// --- the query builder (querybuilder.js) ---
+
+let builder = null;
+function mountBuilder() {
+  const select = document.getElementById("q-record");
+  if (builder) { builder.setRecords(select); return; }
+  builder = mountQueryBuilder(document.getElementById("qb-root"), {
+    fields, recordSelect: select,
+    // Running a built query is running it from the box: the text goes in,
+    // so the result can be edited, saved or run again like any other.
+    onRun(text, extra) {
+      window.location.hash = "ask";
+      input.value = text;
+      select.value = extra.record || "";
+      document.getElementById("q-same-row").checked = extra.sameRow;
+      document.getElementById("q-live").checked = !!extra.live;
+      ask();
+    },
+    // Saved through the same parse a run uses, so what is saved is what
+    // runs: the text, the Result view and same-record matching.
+    async onSave(text, extra) {
+      document.getElementById("q-same-row").checked = extra.sameRow;
+      const parsed = parseQuery(text);
+      if (!parsed || parsed.error) { showToast("Could not save: " + (parsed ? parsed.error : "empty query"), "error"); return; }
+      const name = prompt("Name this query:", text);
+      if (!name) return;
+      const resp = await fetch("/api/interact/saved", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, get: parsed.get, where: parsed.where, match_all: parsed.match_all, record_sensor: extra.record || "" }),
+      });
+      if (resp.ok) { showToast(`Saved "${name}"`, "ok"); loadSaved(); }
+      else showToast("Could not save: " + (await resp.text()), "error");
+    },
+  });
+  fillBuilderFromHash();
+}
+// openInBuilder shows a saved query or a history entry in the builder.
+function openInBuilder(get, where, matchAll, record) {
+  if (!builder) return;
+  window.location.hash = "builder";
+  builder.load(get, where, matchAll, { record: record || "", sameRow: (where || []).some(r => r.op === "same_row") });
+}
+// "#builder?q=<query>" opens the builder on that query.
+function fillBuilderFromHash() {
+  const m = window.location.hash.match(/^#builder\?(?:.*&)?q=([^&]+)/);
+  if (!m || !builder) return;
+  const parsed = parseQuery(decodeURIComponent(m[1]));
+  history.replaceState(null, "", "#builder");
+  if (!parsed) return;
+  if (parsed.error) { showToast("The builder could not read that query: " + parsed.error, "error"); return; }
+  builder.load(parsed.get, parsed.where, parsed.match_all, {
+    record: parsed.record_sensor, sameRow: (parsed.where || []).some(r => r.op === "same_row") });
+}
+window.addEventListener("hashchange", fillBuilderFromHash);
+
+// --- running a query ---
+
+async function ask(savedRequest = null) {
+  const parsed = savedRequest?.get ? {...savedRequest,text:renderSaved(savedRequest)} : parseQuery(input.value);
+  const status = document.getElementById("q-status");
+  if (!parsed) return;
+  if (parsed.error) {
+    document.getElementById("q-results-panel").hidden = false;
+    status.innerHTML = `<span class="u-c-off">${escapeHtml(parsed.error)}</span>`;
+    document.getElementById("q-body").innerHTML = "";
+    document.getElementById("q-head").innerHTML = "";
+    return;
+  }
+
+  const live = document.getElementById("q-live").checked;
+  status.textContent = live ? "asking the online endpoints…" : "running…";
+  document.getElementById("q-results-panel").hidden = false;
+  const resp = await fetch("/api/interact/ask", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...parsed, live }),
+  });
+  if (!resp.ok) {
+    status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`;
+    return;
+  }
+  lastRequest = parsed;
+  lastResult = await resp.json();
+  picked = new Set();
+  renderResult();
+  loadHistory();
+}
+
+function renderResult() {
+  const r = lastResult;
+  document.getElementById("q-title").textContent = r.text;
+  document.getElementById("q-status").textContent =
+    r.counting ? `${r.rows.length} distinct answer(s)` : `${r.rows.length} row(s)`;
+  // A live answer says how live it was; sensors without a live query and
+  // endpoints that did not answer in time came from the cache.
+  const live = r.live ? (r.live.sensors && r.live.sensors.length
+    ? ` · live: ${r.live.answered} of ${r.live.asked} online answered (${r.live.sensors.join(", ").replace(/_/g, " ")})`
+    : " · live: nothing in this query has a live sensor, answered from the cache") : "";
+  document.getElementById("q-matched").textContent =
+    `${r.matched} of ${r.total} endpoints matched${live}`;
+  const pct = r.matched ? Math.round((r.reporting / r.matched) * 100) : 0;
+  document.getElementById("q-meter").style.width = pct + "%";
+  document.getElementById("q-reporting").textContent = `${pct}% have reported this`;
+
+  const cols = r.counting
+    ? [r.get[0], "Count"]
+    : ["Endpoint", ...r.get];
+  document.getElementById("q-head").innerHTML =
+    `<tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr>`;
+
+  const cell = v => v === "[no result]"
+    ? '<span class="no-result">no result</span>'
+    : (v === "" ? '<span class="no-result">(empty)</span>' : escapeHtml(v));
+
+  document.getElementById("q-body").innerHTML = r.rows.length === 0
+    ? `<tr><td class="empty" colspan="${escapeHtml(cols.length)}">no endpoint matched</td></tr>`
+    : r.rows.map((row, i) => `
+      <tr class="qrow" data-i="${i}">
+        ${r.counting
+          ? `<td>${cell(row.values[0])}</td><td class="count-cell" data-sort="${escapeHtml(row.count)}">${escapeHtml(row.count)}</td>`
+          : `<td><a href="/endpoint/${escapeHtml(row.agent_ids[0])}">${escapeHtml(row.hostname)}</a></td>` +
+            row.values.map(v => `<td>${cell(v)}</td>`).join("")}
+      </tr>`).join("");
+
+  document.querySelectorAll(".qrow").forEach(tr => tr.addEventListener("click", ev => {
+    if (ev.target.tagName === "A") return;
+    const i = Number(tr.dataset.i);
+    if (picked.has(i)) picked.delete(i); else picked.add(i);
+    tr.classList.toggle("picked", picked.has(i));
+    refreshPicked();
+  }));
+  refreshPicked();
+  const dt = initDataTable(document.getElementById("q-body").closest("table"), { storageKey: "interact-results" });
+  if (dt) dt.refresh();
+}
+
+function pickedAgents() {
+  const out = new Set();
+  for (const i of picked) (lastResult.rows[i].agent_ids || []).forEach(a => out.add(a));
+  return [...out];
+}
+
+function refreshPicked() {
+  const actions = document.getElementById("q-actions");
+  actions.hidden = picked.size === 0;
+  document.getElementById("q-picked").textContent =
+    `${picked.size} row(s) selected — ${pickedAgents().length} endpoint(s)`;
+}
+
+document.getElementById("q-clear").addEventListener("click", () => {
+  picked = new Set();
+  document.querySelectorAll(".qrow").forEach(tr => tr.classList.remove("picked"));
+  refreshPicked();
+});
+
+// Drill down: run a follow-up query scoped to the endpoints behind the selected
+// rows. Rather than embedding one filter per endpoint — which is what makes
+// this expensive — it narrows by the answer that produced the selection,
+// which is both smaller and what the operator actually meant.
+// A per-endpoint result drills by the endpoints themselves — "agent_id in
+// …" — because there is no single answer to narrow by.
+document.getElementById("q-drill").addEventListener("click", () => {
+  if (lastResult.counting) {
+    const values = [...picked].map(i => lastResult.rows[i].values[0]).filter(v => v !== "[no result]");
+    if (values.length === 0) return;
+    const field = lastResult.get[0];
+    const conds = values.map(v => `${field} equals ${v}`).join(" or ");
+    input.value = `get hostname and ${field} from all machines with ${conds}`;
+  } else {
+    const ids = pickedAgents();
+    if (ids.length === 0) return;
+    input.value = `get ${lastResult.get.join(" and ")} from all machines with agent_id in ${ids.join(",")}`;
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  ask();
+});
+
+// Merge: add a column to the result you already have. Answers come from
+// the cache, so this is a re-run with one more field rather than a second
+// round trip to the fleet. Merging turns a counted answer into one row per
+// endpoint, because the combination is now the thing being queried.
+function refreshMergeFields() {
+  document.getElementById("q-merge-fields").innerHTML =
+    fields.map(f => `<option value="${escapeHtml(f.field)}">${escapeHtml(f.label || "")}</option>`).join("");
+}
+document.getElementById("q-merge-go").addEventListener("click", () => {
+  const field = document.getElementById("q-merge").value.trim();
+  if (!field || !lastRequest) return;
+  if (!fields.some(f => f.field === field)) {
+    document.getElementById("q-status").innerHTML = `<span class="u-c-off">no such field: ${escapeHtml(field)}</span>`;
+    return;
+  }
+  if (lastRequest.get.includes(field)) return;
+  const merged = { ...lastRequest, get: [...lastRequest.get, field] };
+  merged.text = renderSaved(merged);
+  input.value = merged.text;
+  document.getElementById("q-merge").value = "";
+  ask(merged);
+});
+document.getElementById("q-merge").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("q-merge-go").click(); });
+
+// Deploy Action: pick a package, then hand the selected endpoints to Deploy
+// with the targets already chosen. The dispatch itself stays on the Deploy
+// page — its review step, parameters and rollout plan are the point of
+// that page, and a second copy of it here would drift.
+let deployPackages = null;
+document.getElementById("q-deploy").addEventListener("click", async () => {
+  const panel = document.getElementById("q-deploy-panel");
+  panel.hidden = false;
+  document.getElementById("q-deploy-title").textContent = `Deploy to ${pickedAgents().length} selected endpoint(s)`;
+  if (!deployPackages) {
+    const resp = await fetch("/api/software");
+    if (!resp.ok) { document.getElementById("q-deploy-list").innerHTML = `<p class="empty">${escapeHtml(await resp.text())}</p>`; return; }
+    deployPackages = ((await resp.json()).packages || []).filter(p => p.enabled !== false);
+  }
+  renderDeployList();
+  document.getElementById("q-deploy-filter").focus();
+});
+document.getElementById("q-deploy-cancel").addEventListener("click", () => { document.getElementById("q-deploy-panel").hidden = true; });
+document.getElementById("q-deploy-filter").addEventListener("input", renderDeployList);
+function renderDeployList() {
+  const q = document.getElementById("q-deploy-filter").value.trim().toLowerCase();
+  const list = (deployPackages || []).filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.vendor || "").toLowerCase().includes(q));
+  const el = document.getElementById("q-deploy-list");
+  el.innerHTML = list.length === 0
+    ? '<p class="empty">no enabled packages match</p>'
+    : `<table class="data"><thead><tr><th>Package</th><th>Kind</th><th>Vendor</th><th>Action</th></tr></thead><tbody>${list.map(p => `
+        <tr>
+          <td><strong>${escapeHtml(p.name)}</strong></td>
+          <td>${escapeHtml(p.kind === "action" ? "action" : "software")}</td>
+          <td>${escapeHtml(p.vendor || "—")}</td>
+          <td class="row-actions"><button class="tiny go" data-pkg="${escapeHtml(p.id)}" data-kind="${escapeHtml(p.kind || "")}" data-published="${p.deploy_revision ? "1" : ""}">choose</button></td>
+        </tr>`).join("")}</tbody></table>`;
+  el.querySelectorAll("[data-pkg]").forEach(b => b.addEventListener("click", () => {
+    const ids = pickedAgents();
+    const params = new URLSearchParams({ package: b.dataset.pkg, agents: ids.join(",") });
+    // Published Deploy revisions open in the versioned editor; a package
+    // with none opens in the applicability drawer on the same page. Both
+    // read the same handoff.
+    const hash = b.dataset.kind === "action" ? "#actions" : "#catalog";
+    window.location.href = `/software?${params}${hash}`;
+  }));
+}
+
+// Apply patches to an answer: the same handoff as Deploy Action, aimed at
+// Patches instead of a package. The dispatch stays over there, where the
+// patch lists, maintenance windows and the preview of what would actually
+// be installed live.
+document.getElementById("q-patch").addEventListener("click", () => {
+  const ids = pickedAgents();
+  if (ids.length === 0) return;
+  window.location.href = `/patches?agents=${encodeURIComponent(ids.join(","))}#deploy`;
+});
+
+document.getElementById("q-export").addEventListener("click", () => {
+  const r = lastResult;
+  const head = r.counting ? [r.get[0], "count"] : ["hostname", ...r.get];
+  const lines = [csvRow(head)].concat(r.rows.map(row =>
+    csvRow(r.counting ? [row.values[0], row.count] : [row.hostname, ...row.values])));
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "mustra-query.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById("q-save").addEventListener("click", async () => {
+  const name = prompt("Name this query:", lastResult.text);
+  if (!name) return;
+  const status = document.getElementById("q-save-status");
+  const resp = await fetch("/api/interact/saved", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name, get: lastRequest.get, where: lastRequest.where, match_all: lastRequest.match_all, record_sensor:lastRequest.record_sensor,
+    }),
+  });
+  status.innerHTML = resp.ok
+    ? '<span class="u-c-ok">saved</span>'
+    : `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`;
+  loadSaved();
+});
+
+// --- explore columns ---
+//
+// Favourites are per browser (a star pins a row to the top of its column);
+// the lists themselves are the same saved queries, dashboards and history
+// the sections below hold.
+const FAV_KEY = "mustra-interact-favs";
+let exploreRows = { saved: [], dash: [], recent: [] };
+function favs() { try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]")); } catch (e) { return new Set(); } }
+function toggleFav(key) {
+  const f = favs();
+  f.has(key) ? f.delete(key) : f.add(key);
+  try { localStorage.setItem(FAV_KEY, JSON.stringify([...f])); } catch (e) {}
+}
+
+async function loadExplore() {
+  const get = url => fetch(url).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  const [saved, dash, hist] = await Promise.all([get("/api/interact/saved"), get("/api/dashboards"), get("/api/interact/history")]);
+  exploreRows.saved = (saved.questions || []).map(q => ({ key: "q:" + q.id, label: q.name, sub: renderSaved(q), run: () => runSavedQuestion(q) }));
+  exploreRows.dash = (dash.dashboards || []).map(d => ({ key: "d:" + d.id, label: d.name, sub: d.description || "",
+    href: `/dashboards#view/${encodeURIComponent(d.id)}` }));
+  // History repeats itself; one row per distinct query, newest first.
+  const seen = new Set();
+  exploreRows.recent = (hist.history || []).filter(h => !seen.has(h.text) && seen.add(h.text)).slice(0, 100)
+    .map(h => ({ key: "h:" + h.text, label: h.text, sub: `${h.asked_by || "—"} · ${fmtAgo(h.asked_at)}`, mono: true,
+      run: () => { input.value = h.text; ask(); } }));
+  document.querySelectorAll("[data-explore]").forEach(col => {
+    col.querySelector("input").oninput = () => drawExplore(col);
+    drawExplore(col);
+  });
+}
+
+function drawExplore(col) {
+  const all = exploreRows[col.dataset.explore] || [];
+  const term = col.querySelector("input").value.trim().toLowerCase();
+  const f = favs();
+  const rows = all.filter(r => !term || (r.label + " " + r.sub).toLowerCase().includes(term))
+    .sort((a, b) => (f.has(b.key) ? 1 : 0) - (f.has(a.key) ? 1 : 0));
+  col.querySelector(".explore-count").textContent = `${rows.length} of ${all.length} items`;
+  const list = col.querySelector(".explore-list");
+  list.innerHTML = rows.length === 0 ? `<div class="explore-empty hint">${all.length ? "nothing matches" : "nothing here yet"}</div>` : rows.map((r, i) => `
+    <div class="explore-row">
+      ${r.href ? `<a class="explore-link" href="${escapeHtml(safeUrl(r.href))}">` : `<button type="button" class="explore-link" data-i="${i}">`}
+        <span class="explore-label ${r.mono ? "mono" : ""}">${escapeHtml(r.label)}</span>
+        ${r.sub && !r.mono ? `<span class="explore-sub">${escapeHtml(r.sub)}</span>` : ""}
+        ${r.mono ? `<span class="explore-sub">${escapeHtml(r.sub)}</span>` : ""}
+      ${r.href ? "</a>" : "</button>"}
+      <button type="button" class="explore-star ${f.has(r.key) ? "on" : ""}" data-fav="${i}"
+              aria-pressed="${f.has(r.key)}" title="${f.has(r.key) ? "Remove from favorites" : "Add to favorites"}">${icon("star")}</button>
+    </div>`).join("");
+  list.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => rows[Number(b.dataset.i)].run()));
+  list.querySelectorAll("[data-fav]").forEach(b => b.addEventListener("click", () => { toggleFav(rows[Number(b.dataset.fav)].key); drawExplore(col); }));
+}
+
+function runSavedQuestion(q) {
+  window.location.hash = "ask";
+  input.value = renderSaved(q);
+  document.getElementById("q-record").value = q.record_sensor || "";
+  document.getElementById("q-same-row").checked = (q.where || []).some(r => r.op === "same_row");
+  ask(q);
+}
+
+// --- saved & history ---
+
+async function loadSaved() {
+  const resp = await fetch("/api/interact/saved");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const data = await resp.json();
+  fields = data.fields || [];
+  refreshMergeFields();
+  const select=document.getElementById('q-record'),previous=select.value;
+  const sensors=[...new Set(fields.filter(f=>f.field.includes('.')).map(f=>f.field.split('.')[0]))];
+  select.innerHTML='<option value="">Endpoint summary / counted answers</option>'+sensors.map(sensor=>`<option value="${escapeHtml(sensor)}">Records: ${escapeHtml(sensor.startsWith('custom_') ? fields.find(f=>f.field.startsWith(sensor+'.'))?.label.split(' · ')[0] : sensor.replaceAll('_',' '))}</option>`).join('');select.value=previous;
+  mountBuilder();
+  loadExplore();
+  const saved = data.questions || [];
+  document.getElementById("saved-status").textContent = saved.length ? `${saved.length} saved` : "";
+  const body = document.getElementById("saved-body");
+  body.innerHTML = saved.length === 0
+    ? '<tr><td class="empty" colspan="5">nothing saved yet — run a query and save it</td></tr>'
+    : saved.map(q => `
+      <tr>
+        <td><strong>${escapeHtml(q.name)}</strong></td>
+        <td class="qtext u-ws-normal u-maxw-420">${escapeHtml(renderSaved(q))}</td>
+        <td>${escapeHtml(q.created_by || "—")}</td>
+        <td data-sort="${escapeHtml(q.created_at || "")}">${fmtAgo(q.created_at)}</td>
+        <td class="row-actions">
+          <button class="tiny" data-run="${escapeHtml(q.id)}">run</button>
+          <button class="tiny" data-build="${escapeHtml(q.id)}">open in builder</button>
+          <button class="tiny danger" data-del="${escapeHtml(q.id)}">delete</button>
+        </td>
+      </tr>`).join("");
+  body.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", () => {
+    runSavedQuestion(saved.find(q => q.id === b.dataset.run));
+  }));
+  body.querySelectorAll("[data-build]").forEach(b => b.addEventListener("click", () => {
+    const q = saved.find(x => x.id === b.dataset.build);
+    if (q) openInBuilder(q.get, Array.isArray(q.where) ? q.where : [], q.match_all, q.record_sensor);
+  }));
+  body.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    await fetch(`/api/interact/saved/${b.dataset.del}`, { method: "DELETE" });
+    loadSaved();
+  }));
+}
+
+function renderSaved(q) {
+  let t = "get " + (q.get || []).join(" and ") + " from all machines";
+  const where = Array.isArray(q.where) ? q.where : [];
+  if (where.length) {
+    t += " with " + rulesText(where, q.match_all);
+  }
+  return t;
+}
+
+async function loadHistory() {
+  const resp = await fetch("/api/interact/history");
+  if (!resp.ok) return;
+  const history = (await resp.json()).history || [];
+  document.getElementById("hist-status").textContent = history.length ? `${history.length} quer${history.length === 1 ? "y" : "ies"}` : "";
+  const body = document.getElementById("hist-body");
+  body.innerHTML = history.length === 0
+    ? '<tr><td class="empty" colspan="5">no queries run yet</td></tr>'
+    : history.map(h => `
+      <tr>
+        <td class="qtext u-ws-normal u-maxw-460">${escapeHtml(h.text)}</td>
+        <td>${escapeHtml(h.asked_by || "—")}</td>
+        <td data-sort="${escapeHtml(h.asked_at || "")}">${fmtAgo(h.asked_at)}</td>
+        <td data-sort="${escapeHtml(h.matched)}">${escapeHtml(h.matched)} / ${escapeHtml(h.total)}</td>
+        <td class="row-actions"><button class="tiny" data-hrun="${escapeHtml(h.text)}">run</button>
+          <button class="tiny" data-hbuild="${escapeHtml(h.text)}">open in builder</button></td>
+      </tr>`).join("");
+  // History keeps the text, so both go back through the parser.
+  body.querySelectorAll("[data-hrun]").forEach(b => b.addEventListener("click", () => {
+    window.location.hash = "ask"; input.value = b.dataset.hrun; ask();
+  }));
+  body.querySelectorAll("[data-hbuild]").forEach(b => b.addEventListener("click", () => {
+    window.location.hash = "builder?q=" + encodeURIComponent(b.dataset.hbuild);
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "question-history" });
+  if (dt) dt.refresh();
+}
+</script>
+</body>
+</html>

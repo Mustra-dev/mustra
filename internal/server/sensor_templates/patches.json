@@ -1,0 +1,37 @@
+{
+  "notes": "Lists updates as text using host configuration. Linux uses the existing APT cache (does not refresh it) or DNF, without mustra patch-list repository scoping. No post-install refresh hook.",
+  "commands": {
+    "linux": "# Standalone example: Lists updates as text using host configuration. Linux uses the existing APT cache (does not refresh it) or DNF, without mustra patch-list repository scoping. No post-install refresh hook.\nif command -v apt >/dev/null 2>&1; then\n  apt list --upgradable\nelse\n  dnf check-update\n  result=$?\n  if [ \"$result\" -ne 0 ] && [ \"$result\" -ne 100 ]; then exit \"$result\"; fi\nfi\n",
+    "darwin": "# Standalone example: Lists updates as text using host configuration. Linux uses the existing APT cache (does not refresh it) or DNF, without mustra patch-list repository scoping. No post-install refresh hook.\nsoftwareupdate -l\n",
+    "windows": "# Standalone example: Lists updates as text using host configuration. Linux uses the existing APT cache (does not refresh it) or DNF, without mustra patch-list repository scoping. No post-install refresh hook.\n$ErrorActionPreference = \"Stop\"\n$session = New-Object -ComObject Microsoft.Update.Session\n$searcher = $session.CreateUpdateSearcher()\n$searcher.Search('IsInstalled=0 and IsHidden=0').Updates | ForEach-Object { $_.Title }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 600,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

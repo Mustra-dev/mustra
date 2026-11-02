@@ -1,0 +1,37 @@
+{
+  "notes": "Package names and versions as text. macOS lists application bundle paths only; Windows reads machine-wide uninstall registry entries.",
+  "commands": {
+    "linux": "# Standalone example: Package names and versions as text. macOS lists application bundle paths only; Windows reads machine-wide uninstall registry entries.\nif command -v dpkg-query >/dev/null 2>&1; then\n  dpkg-query -W '-f=${Package} ${Version}\\n'\nelse\n  rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\\n'\nfi\n",
+    "darwin": "# Standalone example: Package names and versions as text. macOS lists application bundle paths only; Windows reads machine-wide uninstall registry entries.\nfind /Applications -maxdepth 2 -type d -name '*.app' -prune\n",
+    "windows": "# Standalone example: Package names and versions as text. macOS lists application bundle paths only; Windows reads machine-wide uninstall registry entries.\n$ErrorActionPreference = \"Stop\"\nGet-ItemProperty 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName } | ForEach-Object { '{0} {1}' -f $_.DisplayName, $_.DisplayVersion }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

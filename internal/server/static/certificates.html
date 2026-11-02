@@ -1,0 +1,1520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certificates — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  .st { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
+  .st.expired  { background: var(--off-bg); color: var(--off); }
+  .st.critical { background: var(--off-bg); color: var(--off); }
+  .st.warning  { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .st.notice   { background: var(--surface-2); color: var(--text-muted); }
+  .st.ok       { background: var(--ok-bg); color: var(--ok); }
+  .days { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .days.bad { color: var(--off); }
+  .days.warn { color: var(--warn); }
+  .cert-row { cursor: pointer; }
+  .cert-row:hover { background: var(--surface-2); }
+  .locs { font-size: var(--fs-meta); color: var(--text-muted); }
+  .names { font-size: var(--fs-meta); color: var(--text-muted); white-space: normal; max-width: 300px; }
+  .drawer-overlay { position: fixed; inset: 0; background: var(--scrim); z-index: 200; display: none; }
+  .drawer-overlay.open { display: block; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 100vw); background: var(--surface);
+    border-left: 1px solid var(--border); z-index: 201; transform: translateX(100%);
+    transition: transform .18s ease; display: flex; flex-direction: column; }
+  .drawer.open { transform: translateX(0); }
+  @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+  .drawer-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex;
+    align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .drawer-header h3 { margin: 0 0 6px; font-size: 15px; word-break: break-all; }
+  .drawer-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 2px 6px; }
+  .drawer-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+  .detail-row { display: flex; justify-content: space-between; gap: 14px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .detail-row .k { color: var(--text-muted); flex: 0 0 40%; }
+  .detail-row .v { text-align: right; word-break: break-all; }
+  .sec-title { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 18px 0 8px; }
+  .trust-root { margin-top: 10px; }
+  .trust-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .trust-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12.5px; }
+  .trust-actions .bad { color: var(--viz-danger, #e5484d); }
+  .trust-state { font-size: 11.5px; padding: 1px 7px; border-radius: 9px; background: var(--surface-2); }
+  .trust-installed { color: var(--viz-success, #30a46c); }
+  .trust-failed { color: var(--viz-danger, #e5484d); }
+  /* The form grid the other pages use: fields side by side, wrapping. */
+  .form-grid[hidden] { display: none; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 16px; align-items: end; margin-bottom: 6px; }
+  .form-grid .field { margin: 0; }
+  .form-grid label { display: flex; align-items: center; gap: 6px; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 5px; }
+  .form-grid input:not([type=checkbox]), .form-grid select { padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; min-height: 36px; }
+  .form-grid .help-q { margin-left: 0; }
+  /* Long option text (an endpoint with its platform) must not widen a phone. */
+  #section-new .form-grid .field, #section-authorities .form-grid .field { min-width: 0; }
+  #section-new .form-grid select, #section-new .form-grid input:not([type=checkbox]),
+  #section-authorities .form-grid select { width: 100%; max-width: 100%; min-width: 0; }
+  .nc-step { display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; }
+  .nc-step h3 { margin: 0; font-size: 14px; }
+  .nc-num { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--accent); font-weight: 700; font-size: 12.5px; flex: none; }
+  .nc-upload { border: 1px dashed var(--border-strong); border-radius: var(--radius-md); padding: 10px 12px 4px; margin: 6px 0 4px; }
+  .nc-file { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+  .nc-file .nc-pick { width: auto; min-height: 34px; padding: 4px 14px; }
+  .nc-fname { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nc-preview { font-size: 12.5px; margin: 6px 0 8px; line-height: 1.5; }
+  .nc-preview.ok { color: var(--ok); }
+  .nc-preview.bad { color: var(--off); }
+  .nc-ca-note { font-size: 12.5px; color: var(--text-muted); margin: -4px 0 6px; line-height: 1.55; }
+  .nc-ca-note.warn { color: var(--warn); }
+  .nc-check { display: flex !important; align-items: center; gap: 8px; min-height: 36px; margin: 0 !important; font-size: 13px !important; color: var(--text) !important; }
+  .nc-steps { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+  .nc-steps li { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--text-muted); }
+  .nc-steps li::before { content: "○"; width: 18px; text-align: center; }
+  .nc-steps li.done { color: var(--text); }
+  .nc-steps li.done::before { content: "✓"; color: var(--ok); }
+  .nc-steps li.now { color: var(--text); font-weight: 600; }
+  .nc-steps li.now::before { content: "●"; color: var(--accent); }
+  .nc-steps li.bad { color: var(--off); }
+  .nc-steps li.bad::before { content: "✕"; }
+  .nc-detail { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 10px 12px; max-height: 260px; overflow: auto; margin: 0 0 10px; }
+  .nc-detail:empty { display: none; }
+  .ca-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .ca-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; background: var(--surface-2); }
+  .ca-card h3 { margin: 0 0 6px; font-size: 13px; }
+  .ca-card p { margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+  /* A fixed deep red: --off turns pink in the dark theme, and white on it is unreadable. */
+  button.danger-fill { background: #b4151f; border-color: #b4151f; color: #fff; width: auto; }
+  button.danger-fill:hover:not(:disabled) { filter: brightness(1.1); background: var(--off); border-color: var(--off); }
+  .ac-modes { display: grid; gap: 8px; margin: 4px 0 12px; }
+  .ac-mode { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 12px; cursor: pointer; }
+  .ac-mode:has(input:checked) { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 8%, transparent); }
+  .ac-mode input { margin-top: 3px; }
+  .ac-mode b { display: block; font-size: 13px; }
+  .ac-mode span { font-size: 12.5px; color: var(--text-muted); }
+  .ac-modal { width: min(720px, calc(100vw - 32px)); }
+  .ac-modal .form-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .ac-modal textarea { width: 100%; min-height: 110px; font-family: var(--mono); font-size: 12px; padding: 8px 10px; border-radius: var(--radius-md);
+    border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); }
+  .ac-found { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .ac-found label { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .ac-found label:last-child { border-bottom: 0; }
+  .ac-found .hint { margin: 0; }
+  .al-src { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .al-payload { margin-top: 12px; }
+  .al-payload summary { color: var(--accent); font-size: 13px; cursor: pointer; }
+  .al-payload pre { margin-top: 8px; max-height: none; }
+  .st.revoked { background: var(--off-bg); color: var(--off); }
+  .st.superseded { background: var(--surface-2); color: var(--text-muted); }
+  .trust-detail { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <h1 class="sr-only">Certificate Manager</h1>
+
+    <!-- Overview: what is out there and what breaks next. -->
+    <div class="module-section" id="section-overview" hidden>
+      <div id="certificates-page-head"></div>
+      <div class="stat-tiles" id="cert-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>What expires next</h2><span class="scan-status" id="cert-status"></span></div>
+        <p class="hint">
+          Every certificate found on your endpoints, soonest to expire first. The same certificate on several hosts is one
+          row — one renewal, not five. Click a row to see where it is installed and to start managing its renewal.
+        </p>
+        <div class="query-row">
+          <select class="select u-w-auto" id="filter" aria-label="Certificates to show">
+            <option value="service">Service certificates (what you renew)</option>
+            <option value="attention">Needs attention (90 days or less)</option>
+            <option value="expired">Expired only</option>
+            <option value="trust">OS trust store</option>
+            <option value="all">Everything</option>
+          </select>
+          <button class="secondary u-w-auto" id="refresh">Refresh</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Subject</th><th>Hostnames</th><th>Issuer</th><th>Days left</th><th>Expires</th><th>On</th><th>Status</th></tr></thead>
+            <tbody id="cert-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- New certificate: issue one and install it on an endpoint. Also the
+         editor for an existing managed certificate. -->
+    <div class="module-section" id="section-new" hidden>
+      <div class="panel" id="nc-panel">
+        <div class="panel-header"><h2 id="nc-title">New certificate</h2><span class="scan-status" id="nc-status"></span></div>
+        <p class="hint" id="nc-intro">
+          Issue a certificate and install it on a server in one go. The server makes its own private key (it never
+          leaves the machine), the authority you pick signs it, and the agent writes the files, reloads the service and
+          checks the service now presents it — putting the old one back if anything fails. Once installed it shows up
+          under <a href="#inventory">Inventory</a> and is renewed automatically before it expires.
+        </p>
+
+        <div class="nc-step"><span class="nc-num">1</span><h3>Where it goes</h3></div>
+        <div class="form-grid">
+          <div class="field"><label for="mc-agent">Endpoint <button type="button" class="help-q" data-help="The server the certificate is installed on. The private key is made there and never leaves it.">?</button></label><select id="mc-agent"></select></div>
+          <div class="field"><label for="nc-preset">Service <button type="button" class="help-q" data-help="Fills in the usual file locations, reload command and port for common services. Choose Other to type your own.">?</button></label>
+            <select id="nc-preset">
+              <option value="custom">Other (type the paths)</option>
+              <option value="nginx">nginx</option>
+              <option value="apache">Apache (Debian/Ubuntu)</option>
+              <option value="haproxy">HAProxy (one combined file)</option>
+              <option value="pihole">Pi-hole web interface</option>
+              <option value="pve">Proxmox VE web interface</option>
+              <option value="pbs">Proxmox Backup Server</option>
+              <option value="winstore">Windows certificate store (IIS, Remote Desktop)</option>
+              <option value="windows">Windows (PEM files only)</option>
+            </select></div>
+        </div>
+
+        <div class="nc-step"><span class="nc-num">2</span><h3>What it covers and who signs it</h3></div>
+        <div class="form-grid">
+          <div class="field"><label for="mc-names">Names <button type="button" class="help-q" data-help="The host names and IP addresses the certificate is valid for, comma separated. The first one is its main (common) name. Let's Encrypt only accepts public domain names you control in Cloudflare.">?</button></label><input id="mc-names" placeholder="pi.hole, 192.0.2.15"></div>
+          <div class="field"><label for="mc-ca">Certificate authority <button type="button" class="help-q" data-help="Who signs the certificate. The description under the form says when to use each one; set them up under Authorities.">?</button></label><select id="mc-ca"></select></div>
+        </div>
+        <p class="nc-ca-note" id="nc-ca-note"></p>
+        <div class="nc-upload" id="nc-upload" hidden>
+          <div class="form-grid">
+            <div class="field"><label>Certificate file <button type="button" class="help-q" data-help="The certificate you were given: .crt, .cer or .pem, in PEM or DER. If it includes the intermediate certificates (the chain), they are installed with it.">?</button></label>
+              <div class="nc-file"><button type="button" class="secondary nc-pick" data-for="nc-f-cert">Upload certificate…</button><span class="nc-fname" id="nc-f-cert-name">no file chosen</span>
+              <input type="file" id="nc-f-cert" accept=".pem,.crt,.cer,.der,.txt" hidden></div></div>
+            <div class="field"><label>Key file <button type="button" class="help-q" data-help="The private key that goes with the certificate: .key or .pem, not password protected. It is sent straight to the endpoint and not kept by Mustra.">?</button></label>
+              <div class="nc-file"><button type="button" class="secondary nc-pick" data-for="nc-f-key">Upload key…</button><span class="nc-fname" id="nc-f-key-name">no file chosen</span>
+              <input type="file" id="nc-f-key" accept=".key,.pem,.txt" hidden></div></div>
+          </div>
+          <p class="hint u-m-8-0-6">— or one PFX / PKCS#12 file, which holds the certificate and key together —</p>
+          <div class="form-grid">
+            <div class="field"><label>PFX file <button type="button" class="help-q" data-help="A .pfx or .p12 file, as Windows and many certificate vendors export them, with its password.">?</button></label>
+              <div class="nc-file"><button type="button" class="secondary nc-pick" data-for="nc-f-pfx">Upload .pfx…</button><span class="nc-fname" id="nc-f-pfx-name">no file chosen</span>
+              <input type="file" id="nc-f-pfx" accept=".pfx,.p12" hidden></div></div>
+            <div class="field"><label for="nc-pfx-pass">PFX password</label><input id="nc-pfx-pass" type="password" autocomplete="off"></div>
+          </div>
+          <p class="nc-preview" id="nc-preview"></p>
+        </div>
+
+        <div class="nc-step"><span class="nc-num">3</span><h3>Where it goes on the server</h3></div>
+        <div class="form-grid">
+          <div class="field"><label for="mc-cert">Write the certificate to <button type="button" class="help-q" data-help="The path on the endpoint where the certificate (and its chain) is written — not a file to upload. Missing folders are created; an existing file is backed up next to it first.">?</button></label><input id="mc-cert" placeholder="/etc/nginx/ssl/site.crt"></div>
+          <div class="field"><label for="mc-key">Write the key to <button type="button" class="help-q" data-help="The path on the endpoint where the private key is written, readable only by its owner. Leave blank to put the key and certificate in one file, as Pi-hole and HAProxy expect.">?</button></label><input id="mc-key" placeholder="/etc/nginx/ssl/site.key"></div>
+          <div class="field"><label for="mc-reload">Reload command <button type="button" class="help-q" data-help="Run after the files are written so the service picks up the new certificate, for example systemctl reload nginx. Leave blank if nothing needs reloading.">?</button></label><input id="mc-reload" placeholder="systemctl reload nginx"></div>
+          <div class="field nc-win" hidden><label for="nc-bind">Bind to <button type="button" class="help-q" data-help="After installing it in the machine's certificate store, use it for an IIS site's https binding or for Remote Desktop. The binding switches to each renewed certificate, and the one it replaced is removed.">?</button></label>
+            <select id="nc-bind"><option value="">Nothing (store only)</option><option value="iis">IIS site</option><option value="rdp">Remote Desktop</option></select></div>
+          <div class="field nc-iis" hidden><label for="nc-site">IIS site <button type="button" class="help-q" data-help="The site name exactly as IIS Manager shows it, for example Default Web Site. Its https binding on the port beside is created if it doesn't exist.">?</button></label><input id="nc-site" placeholder="Default Web Site"></div>
+          <div class="field"><label for="mc-port">Check port <button type="button" class="help-q" data-help="After reloading, the agent connects to this port on the endpoint and checks it now serves the new certificate. If it doesn't, the old one is put back. 0 skips the check.">?</button></label><input id="mc-port" type="number" min="0" max="65535" value="443"></div>
+        </div>
+
+        <div class="nc-step"><span class="nc-num">4</span><h3>Renewal</h3></div>
+        <p class="hint nc-upload-note" hidden>Mustra cannot renew a certificate it did not issue. Expiry alerts remind you (Cert Manager → Alerts), and <b>Upload new version</b> under Renewals installs the replacement the same way.</p>
+        <div class="form-grid nc-renew-grid">
+          <div class="field"><label for="mc-days">Renew before expiry <button type="button" class="help-q" data-help="How long before the certificate expires Mustra replaces it. 30 days leaves time to notice and fix a failed renewal.">?</button></label>
+            <select id="mc-days"><option value="14">14 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></div>
+          <div class="field"><label for="mc-approval">When due <button type="button" class="help-q" data-help="Renew automatically, or wait until someone approves it under Renewals (you get a notification when one is waiting).">?</button></label>
+            <select id="mc-approval"><option value="auto">Renew automatically</option><option value="approve">Wait for approval</option></select></div>
+          <div class="field"><label class="nc-check"><input type="checkbox" id="mc-enabled" checked> Keep it renewed <button type="button" class="help-q" data-help="Turn off to stop automatic renewals without forgetting the certificate; you can still renew it by hand.">?</button></label></div>
+        </div>
+
+        <div class="save-row">
+          <button class="primary" id="nc-issue">Create and install now</button>
+          <button class="secondary u-w-auto" id="mc-save">Save without installing</button>
+          <button class="secondary u-w-auto" id="mc-cancel" hidden>Cancel</button>
+          <span class="save-status" id="mc-save-status"></span>
+        </div>
+        <p class="hint" id="nc-readonly" hidden>You can see this form, but creating certificates needs the Deploy permission.</p>
+      </div>
+
+      <div class="panel" id="nc-progress" hidden>
+        <div class="panel-header"><h2>Installing</h2><span class="scan-status" id="nc-progress-status"></span></div>
+        <ol class="nc-steps" id="nc-steps"></ol>
+        <pre class="nc-detail" id="nc-detail"></pre>
+        <div class="save-row"><a class="button-link" href="#inventory" id="nc-to-inventory" hidden>See it in Inventory</a>
+          <button class="secondary u-w-auto" id="nc-another" hidden>Create another</button></div>
+      </div>
+    </div>
+
+    <!-- Renewals: what Mustra keeps renewed. -->
+    <div class="module-section" id="section-renewal" hidden>
+      <div class="panel" id="renewal">
+        <div class="panel-header"><h2>Renewals</h2>
+          <div class="u-d-flex u-gap-8 u-ai-center"><span class="scan-status" id="mc-status"></span><a class="button-link" href="#new" id="mc-add" hidden>New certificate</a></div></div>
+        <p class="hint">
+          Certificates Mustra keeps renewed. Each is renewed when it gets within its renewal window — automatically, or
+          once someone presses <b>Approve</b> when it asks for approval. <b>Renew now</b> replaces it straight away, which
+          is also how you renew one early. To take over a certificate you already have, open it on the
+          <a href="#overview">Overview</a> and choose <b>Manage renewal</b> where it is installed.
+        </p>
+        <div class="table-scroll table-scroll-y rows-10 no-cards">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th>Certificate</th><th>Endpoint</th><th>Path</th><th>Authority</th><th>Expires</th><th>Renews</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="mc-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inventory: what Mustra issued, and which endpoints report. -->
+    <div class="module-section" id="section-inventory" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Issued by Mustra</h2><span class="scan-status" id="iss-status"></span></div>
+        <p class="hint">
+          Every certificate Mustra has issued and installed, newest first, and what became of it: <b>active</b> (in use),
+          <b>superseded</b> (replaced by a renewal), <b>expired</b> or <b>revoked</b>. Certificates that were already on a
+          server when Mustra started managing them are listed as <b>found on endpoint</b>.
+        </p>
+        <div class="query-row">
+          <select class="select u-w-auto" id="iss-filter" aria-label="Issued certificates to show">
+            <option value="current">Active and recently replaced</option>
+            <option value="active">Active only</option>
+            <option value="revoked">Revoked</option>
+            <option value="all">Everything</option>
+          </select>
+        </div>
+        <div class="table-scroll table-scroll-y rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Certificate</th><th>Endpoint</th><th>Authority</th><th>Serial</th><th>Issued</th><th>Expires</th><th>Status</th></tr></thead>
+            <tbody id="iss-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Endpoint coverage</h2><span class="scan-status" id="cov-status"></span></div>
+        <p class="hint">
+          Which endpoints have reported their certificates. One that hasn't is a blind spot, not a clean bill of
+          health — the two look identical from a summary and only one of them is fine.
+        </p>
+        <div class="table-scroll table-scroll-y rows-10">
+          <table>
+            <thead><tr><th>Endpoint</th><th>OS</th><th>Certificates found</th><th>State</th></tr></thead>
+            <tbody id="cov-body"><tr><td class="empty" colspan="4">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Revoke: withdraw trust in a certificate before it expires. -->
+    <div class="module-section" id="section-revoke" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Revoke a certificate</h2><span class="scan-status" id="rv-status"></span></div>
+        <p class="hint">
+          Revoking tells everyone who checks that a certificate must no longer be trusted, even though it hasn't expired —
+          for example when its private key may have leaked or the server is being retired. It cannot be undone. Choose
+          <b>Install a replacement first</b> to keep the service working: Mustra installs a new certificate, then revokes the
+          old one.
+        </p>
+        <div class="table-scroll table-scroll-y rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Certificate</th><th>Endpoint</th><th>Authority</th><th>Serial</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="rv-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Revoked certificates</h2><span class="scan-status" id="rvd-status"></span></div>
+        <p class="hint" id="rvd-crl">
+          Mustra Private CA publishes what it has revoked in a revocation list (CRL) that its certificates point to:
+          <a href="/pki/mustra-ca.crl" id="crl-link">mustra-ca.crl</a>. The other authorities publish their own.
+        </p>
+        <div class="table-scroll table-scroll-y rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Certificate</th><th>Endpoint</th><th>Authority</th><th>Serial</th><th>Revoked</th><th>By</th><th>Reason</th></tr></thead>
+            <tbody id="rvd-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- App credentials: secrets and certificates at identity providers. -->
+    <div class="module-section" id="section-apps" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Application credentials</h2>
+          <div class="u-d-flex u-gap-8 u-ai-center"><span class="scan-status" id="ac-status"></span>
+            <button class="tiny go" id="ac-add-manual" type="button">Add by hand</button></div></div>
+        <p class="hint">
+          Client secrets, client certificates, SAML signing certificates and service-account keys that your applications use
+          to sign in through Microsoft Entra ID, Authentik, Okta or Google Cloud. Each one can <b>remind</b> you before it
+          expires, <b>renew and keep it for download</b>, or <b>renew and push</b> it straight into the application's config on
+          an endpoint. The one it replaces keeps working for a grace period, then is removed at the provider.
+        </p>
+        <div class="table-scroll table-scroll-y rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Application</th><th>Provider</th><th>Credential</th><th>Expires</th><th>Mode</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="ac-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Provider connections</h2>
+          <div class="u-d-flex u-gap-8 u-ai-center"><span class="scan-status" id="acc-status"></span>
+            <button class="tiny go" id="acc-add" type="button">Add connection</button></div></div>
+        <p class="hint">
+          An API login Mustra uses to list an identity provider's applications and renew their credentials. Its secret is
+          stored encrypted and never shown again. Choose <b>Import</b> on a connection to pick the credentials to track.
+        </p>
+        <div class="table-scroll">
+          <table class="table-compact">
+            <thead><tr><th>Name</th><th>Provider</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="acc-body"><tr><td class="empty" colspan="4">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts: expiry reminders to the console, chat, webhooks, ServiceNow. -->
+    <div class="module-section" id="section-alerts" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Expiry alerts</h2><span class="scan-status" id="al-status"></span></div>
+        <p class="hint">
+          Mustra checks every hour and announces each certificate or credential once as it crosses each threshold — in the
+          console's notifications and to every integration that takes <b>expiry</b> events (Teams, Discord, Slack, a webhook
+          for your own automations, ServiceNow incidents). Renewing it gives it a new expiry, and its alerts start over.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="al-th">Thresholds (days before expiry) <button type="button" class="help-q" data-help="Comma separated, for example 60,30,14,7,1. Something that has already expired is always announced once too.">?</button></label><input id="al-th" placeholder="60,30,14,7,1"></div>
+          <div class="field u-gc-span2"><label>Watch <button type="button" class="help-q" data-help="Managed certificates are the ones Mustra renews. Service certificates are every certificate found on your endpoints (not OS trust stores or CAs). App credentials are the secrets and certificates under App Credentials.">?</button></label>
+            <div class="al-src"><label class="nc-check"><input type="checkbox" value="managed" class="al-src-cb"> Managed certificates</label>
+            <label class="nc-check"><input type="checkbox" value="fleet" class="al-src-cb"> Every service certificate on endpoints</label>
+            <label class="nc-check"><input type="checkbox" value="apps" class="al-src-cb"> App credentials</label></div></div>
+        </div>
+        <div class="save-row"><button class="primary" id="al-save">Save</button><span class="save-status" id="al-save-status"></span></div>
+        <p class="hint" id="al-readonly" hidden>Changing alerts needs the Settings permission.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Where they go</h2>
+          <div class="u-d-flex u-gap-8 u-ai-center"><a class="button-link" href="/settings#integrations">Manage integrations</a><button class="tiny" id="al-test" type="button">Send a test</button></div></div>
+        <p class="hint">
+          Integrations with the <b>Certificate &amp; credential expiry</b> event ticked (Administration → Integrations). Each can
+          take every threshold, or only some — for example one ServiceNow incident per item at 60 days, and a Teams message
+          at every step.
+        </p>
+        <div class="table-scroll"><table class="table-compact"><thead><tr><th>Integration</th><th>Type</th><th>Thresholds</th></tr></thead>
+          <tbody id="al-subs"><tr><td class="empty" colspan="3">loading…</td></tr></tbody></table></div>
+        <details class="al-payload"><summary>What a webhook receives (for automations)</summary>
+<pre class="nc-detail">{
+  "type": "expiry",
+  "time": "2026-10-20T12:00:00Z",
+  "title": "Certificate expires in 60 day(s): grafana.example.com",
+  "severity": "notice",            // notice over 30 days, warning to 8, critical 7 or fewer
+  "body": "web01 /etc/nginx/ssl/grafana.crt · expires 2026-12-19",
+  "link": "https://mustra.example.com/certificates#renewal",
+  "detail": {
+    "key": "mc:mc-1a2b…",          // stable per item: managed (mc:), found (fp:), app credential (ac:)
+    "item_type": "managed_certificate",   // or certificate, app_credential, app_credential_rotation
+    "name": "grafana.example.com",
+    "where": "web01 /etc/nginx/ssl/grafana.crt",
+    "expires_at": "2026-12-19T00:00:00Z",
+    "days_left": 60,
+    "thresholds": [60],            // newly crossed by this alert
+    "threshold": 60
+  }
+}
+With a webhook secret, X-Mustra-Signature carries sha256=HMAC of the body. ServiceNow incidents get
+correlation_id "mustra:&lt;key&gt;:&lt;expires_at&gt;".</pre></details>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Coming up</h2><span class="scan-status" id="al-up-status"></span></div>
+        <p class="hint">What expires next, from what is being watched.</p>
+        <div class="table-scroll table-scroll-y rows-10"><table class="table-compact"><thead><tr><th>Item</th><th>Where</th><th>Expires</th><th>Days left</th></tr></thead>
+          <tbody id="al-up"><tr><td class="empty" colspan="4">loading…</td></tr></tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Sent recently</h2></div>
+        <p class="hint">The latest alert for each item, and the tightest threshold it has reached.</p>
+        <div class="table-scroll table-scroll-y rows-10"><table class="table-compact"><thead><tr><th>Item</th><th>Threshold</th><th>Days left then</th><th>Sent</th></tr></thead>
+          <tbody id="al-recent"><tr><td class="empty" colspan="4">loading…</td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-trust" hidden>
+      <div class="panel" id="trust">
+        <div class="panel-header"><h2>Trusted roots</h2><span class="scan-status" id="trust-status"></span></div>
+        <p class="hint">
+          Put a certificate authority's root into every endpoint's trust store, so the certificates it signs open without
+          a warning. <b>Every endpoint</b> also covers endpoints enrolled later; <b>Remove</b> takes it back out. Linux and
+          Windows change their own store; Macs only trust a new root from an MDM profile, so they go through Fleet. Browsers
+          with their own store (Firefox) are not covered.
+        </p>
+        <div id="trust-body"><p class="hint">loading…</p></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-authorities" hidden>
+      <div class="panel" id="authorities">
+        <div class="panel-header"><h2>Certificate authorities</h2><span class="scan-status" id="ca-status"></span></div>
+        <p class="hint">The authorities Mustra can get certificates from. Each one below says what it is for.</p>
+        <div class="ca-cards">
+          <div class="ca-card"><h3>Mustra Private CA</h3><p>For internal names and addresses (pi.hole, a Proxmox node). Free, renewed as often as you like, trusted wherever its root is installed (see Trusted roots). Nothing to set up. <a href="/api/certificates/ca.crt" id="ca-download">Download the root certificate</a>.</p></div>
+          <div class="ca-card"><h3>Let's Encrypt</h3><p>Publicly trusted certificates for names under your Cloudflare domains; ownership is proved with a DNS record through the Cloudflare API. Needs the account email and a Cloudflare token below.</p></div>
+          <div class="ca-card"><h3>Cloudflare Origin CA</h3><p>Certificates only Cloudflare's proxy trusts, for servers behind it. Needs the Cloudflare token below.</p></div>
+          <div class="ca-card"><h3>Active Directory Certificate Services</h3><p>Your domain's enterprise CA, which domain-joined Windows machines already trust. A Windows endpoint in the domain (normally the CA server) submits each request and carries out revocations, so its computer account needs Enroll on the template and Issue and Manage Certificates on the CA.</p></div>
+          <div class="ca-card"><h3>Tailscale</h3><p>A publicly trusted certificate for an endpoint's own tailnet name. Needs HTTPS certificates turned on for the tailnet; cannot be revoked from Mustra.</p></div>
+        </div>
+        <div class="form-grid" id="ca-form">
+          <div class="field"><label for="ca-email">ACME account email <button type="button" class="help-q" data-help="Let's Encrypt sends expiry and account notices here.">?</button></label><input id="ca-email" type="email" placeholder="you@example.com"></div>
+          <div class="field"><label for="ca-token">Cloudflare API token <button type="button" class="help-q" data-help="A token with Zone → DNS → Edit (Let's Encrypt) and SSL and Certificates → Edit (Origin CA). Stored encrypted; it is never shown again.">?</button></label><input id="ca-token" type="password" autocomplete="off"></div>
+          <div class="field"><label class="nc-check"><input type="checkbox" id="ca-staging"> Let's Encrypt staging <button type="button" class="help-q" data-help="For testing only: staging certificates are not trusted by anything.">?</button></label></div>
+          <div class="field"><label for="ca-adcs-agent">AD CS endpoint <button type="button" class="help-q" data-help="The Windows endpoint that submits requests to the enterprise CA and runs revocations. Normally the CA server itself.">?</button></label><select id="ca-adcs-agent"><option value="">— not set —</option></select></div>
+          <div class="field"><label for="ca-adcs-config">AD CS CA <button type="button" class="help-q" data-help="The CA's config string: its host name, a backslash, and the CA name, as certutil shows it.">?</button></label><input id="ca-adcs-config" placeholder="ca01.example.com\Example Enterprise CA"></div>
+          <div class="field"><label for="ca-adcs-template">AD CS template <button type="button" class="help-q" data-help="The certificate template to request, normally WebServer.">?</button></label><input id="ca-adcs-template" placeholder="WebServer"></div>
+        </div>
+        <div class="save-row"><button class="primary" id="ca-save">Save</button><span class="save-status" id="ca-save-status"></span></div>
+        <p class="hint" id="ca-readonly" hidden>Changing the certificate authorities needs the <b>Manage integrations</b> permission.</p>
+      </div>
+    </div>
+    </main>
+  </div>
+
+  <div class="drawer-overlay" id="c-overlay"></div>
+  <aside class="drawer" id="c-drawer" aria-label="Certificate detail">
+    <div class="drawer-header">
+      <div><div id="c-pills" class="u-mb-6"></div><h3 id="c-title">—</h3></div>
+      <button class="drawer-close" id="c-close" aria-label="Close">✕</button>
+    </div>
+    <div class="drawer-body" id="c-body"></div>
+  </aside>
+
+<script src="/static/app.js"></script>
+<script>
+let certs = [], meta = {};
+
+let mcCanManage = false, mcIsAdmin = false, managed = [], mcAgents = [], mcEditing = null, caInfo = {};
+// Every endpoint, for the pickers and for OS pills that name the platform
+// ("Debian 13.7"), the way Patches and Risk show it.
+let agentsById = {};
+const agentsReady = fetch("/api/agents").then(r => r.ok ? r.json() : []).then(d => {
+  mcAgents = (Array.isArray(d) ? d : d.agents || []).sort((a, b) => a.hostname.localeCompare(b.hostname));
+  agentsById = Object.fromEntries(mcAgents.map(a => [a.agent_id, a]));
+}).catch(() => {});
+
+// osPillFor draws an endpoint's OS the way every other list does.
+function osPillFor(agentID, os) {
+  const a = agentsById[agentID];
+  const label = a ? osDisplay(a) : osLabel(os);
+  return `<span class="os-pill" title="${escapeHtml(a ? a.os : os || "")}">${escapeHtml(label || "—")}</span>`;
+}
+
+document.addEventListener("mustra:user", async (e) => {
+  const perms = (e.detail && e.detail.permissions) || [];
+  // mcIsAdmin: may change the certificate authorities (an administrator,
+  // or integrations.manage).
+  mcIsAdmin = !!(e.detail && (e.detail.is_admin || perms.includes("integrations.manage")));
+  mcCanManage = mcIsAdmin || perms.includes("deploy.manage");
+  renderPageHead("certificates-page-head", "/certificates", { title: "Certificate Manager" });
+  initModuleSections([
+    { hash: "overview", label: "Overview" },
+    { hash: "new", label: "New Certificate" },
+    { hash: "renewal", label: "Renewals" },
+    { hash: "inventory", label: "Inventory" },
+    { hash: "revoke", label: "Revoke" },
+    { hash: "apps", label: "App Credentials" },
+    { hash: "alerts", label: "Alerts" },
+    { hash: "trust", label: "Trusted Roots" },
+    { hash: "authorities", label: "Authorities" },
+  ]);
+  await agentsReady;
+  fillAgentPicker();
+  load(); loadCoverage(); loadManaged(); loadTrust(); loadIssued(); loadAppCreds(); loadAlerts();
+  alCanEdit = mcIsAdmin || perms.includes("settings.manage");
+  if (!mcCanManage) {
+    document.getElementById("nc-readonly").hidden = false;
+    ["nc-issue", "mc-save"].forEach(id => { document.getElementById(id).disabled = true; });
+  }
+});
+document.getElementById("refresh").addEventListener("click", () => { load(); loadCoverage(); });
+document.getElementById("filter").addEventListener("change", render);
+// Leaving the editor by the sidebar resets it to a blank new certificate.
+window.addEventListener("hashchange", () => { if (location.hash === "#new" && mcEditing) resetForm(); });
+
+async function load() {
+  const resp = await fetch("/api/certificates");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  meta = await resp.json();
+  certs = meta.certificates || [];
+  render();
+}
+
+function render() {
+  const c = meta.counts || {};
+  document.getElementById("cert-tiles").innerHTML = [
+    { label: "Expired", value: c.expired || 0, cls: (c.expired || 0) ? "bad" : "" },
+    { label: "Under 7 days", value: c.critical || 0, cls: (c.critical || 0) ? "bad" : "" },
+    { label: "Under 30 days", value: c.warning || 0, cls: (c.warning || 0) ? "bad" : "" },
+    { label: "Expiring CAs", value: meta.expiring_cas || 0, cls: (meta.expiring_cas || 0) ? "bad" : "" },
+    { label: "Service certificates", value: meta.service_certs || 0 },
+    { label: "Trust store", value: meta.trust_store || 0 },
+  ].map(t => `<div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div>
+    </div>`).join("");
+
+  const mode = document.getElementById("filter").value;
+  // Service certificates first by default: a host's bundled CA list is
+  // ~150 healthy roots nobody renews, and showing them by default buries
+  // the handful that someone actually has to act on.
+  const shown = certs.filter(x =>
+    mode === "all" ? true :
+    mode === "trust" ? x.trust_store :
+    mode === "expired" ? (x.days_left < 0 && !x.trust_store) :
+    mode === "attention" ? (x.days_left <= 90 && !x.trust_store) :
+    !x.trust_store);
+
+  document.getElementById("cert-status").textContent = `${shown.length} shown of ${certs.length}`;
+  const body = document.getElementById("cert-body");
+  body.innerHTML = shown.length === 0
+    ? `<tr><td class="empty" colspan="7">${certs.length === 0
+        ? "no certificates reported yet — endpoints report on their sensor interval, and this needs agent 0.8.0 or newer"
+        : "nothing matches that filter — try Everything"}</td></tr>`
+    : shown.map((x, i) => `
+      <tr class="cert-row" data-i="${certs.indexOf(x)}">
+        <td>${escapeHtml(x.subject || "(no common name)")}${x.is_ca ? ' <span class="st notice">CA</span>' : ""}${x.trust_store ? ' <span class="st notice">trust store</span>' : ""}</td>
+        <td class="names">${escapeHtml((x.dns_names || []).slice(0, 3).join(", ") || "—")}${(x.dns_names || []).length > 3 ? ` +${x.dns_names.length - 3}` : ""}</td>
+        <td>${escapeHtml(x.issuer || "—")}${x.self_signed ? ' <span class="st notice">self-signed</span>' : ""}</td>
+        <td class="days ${x.days_left < 0 ? "bad" : x.days_left <= 30 ? "warn" : ""}" data-sort="${escapeHtml(x.days_left)}">${escapeHtml(x.days_left)}</td>
+        <td data-sort="${escapeHtml(x.not_after)}">${escapeHtml((x.not_after || "").slice(0, 10))}</td>
+        <td class="locs" data-sort="${escapeHtml(x.deployments)}">${escapeHtml(x.deployments)} host(s)</td>
+        <td><span class="st ${escapeHtml(x.status)}">${escapeHtml(x.status)}</span></td>
+      </tr>`).join("");
+
+  body.querySelectorAll(".cert-row").forEach(tr =>
+    tr.addEventListener("click", () => openCert(Number(tr.dataset.i))));
+  const dt = initDataTable(body.closest("table"), { storageKey: "certificates" });
+  if (dt) dt.refresh();
+}
+
+async function openCert(i) {
+  const x = certs[i];
+  if (!x) return;
+  document.getElementById("c-drawer").classList.add("open");
+  document.getElementById("c-overlay").classList.add("open");
+  document.getElementById("c-title").textContent = x.subject || "(no common name)";
+  document.getElementById("c-pills").innerHTML =
+    `<span class="st ${escapeHtml(x.status)}">${escapeHtml(x.status)}</span>` +
+    (x.is_ca ? ' <span class="st notice">CA</span>' : "") +
+    (x.self_signed ? ' <span class="st notice">self-signed</span>' : "");
+
+  const rows = [
+    ["Days remaining", x.days_left],
+    ["Expires", x.not_after],
+    ["Valid from", x.not_before],
+    ["Issuer", x.issuer || "—"],
+    ["Key algorithm", x.key_algorithm || "—"],
+    ["Signature algorithm", x.sig_algorithm || "—"],
+    ["Fingerprint (SHA-256)", x.fingerprint],
+  ];
+  document.getElementById("c-body").innerHTML = `
+    ${rows.map(([k, v]) => `<div class="detail-row"><span class="k">${escapeHtml(k)}</span><span class="v mono">${escapeHtml(String(v))}</span></div>`).join("")}
+    ${(x.dns_names || []).length ? `<div class="sec-title">Covers</div>
+      <div class="mono u-lh-1_7">${x.dns_names.map(n => escapeHtml(n)).join("<br>")}</div>` : ""}
+    <div class="sec-title">Installed on ${escapeHtml(x.deployments)} host(s)</div>
+    <table><thead><tr><th>Endpoint</th><th>Path</th><th></th></tr></thead>
+      <tbody id="c-locations"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
+    </table>`;
+
+  // Where a certificate lives is fetched per certificate rather than
+  // shipped with the list. A root CA sits on every endpoint, so its
+  // locations alone were larger than the whole list without them.
+  const body = document.getElementById("c-locations");
+  try {
+    const resp = await fetch(`/api/certificates/${encodeURIComponent(x.fingerprint)}`);
+    if (!resp.ok) throw new Error(await resp.text());
+    const locations = ((await resp.json()).certificate || {}).locations || [];
+    // The drawer may have been closed or moved on while this was in flight.
+    if (document.getElementById("c-locations") !== body) return;
+    body.innerHTML = locations.length === 0
+      ? `<tr><td colspan="2" class="empty">no locations reported</td></tr>`
+      : locations.map((l, li) => `<tr>
+          <td><a href="/endpoint/${escapeHtml(l.agent_id)}">${escapeHtml(l.hostname)}</a></td>
+          <td class="mono u-ws-normal u-wb-all">${escapeHtml(l.path)}</td>
+          <td>${mcCanManage && !l.path.startsWith("tls://") && (!l.path.startsWith("Cert:") || /^Cert:\\LocalMachine\\My\\/i.test(l.path)) && !l.path.startsWith("keychain:") && !x.is_ca
+            ? `<button class="tiny" data-manage="${escapeHtml(li)}">Manage renewal</button>` : ""}</td>
+        </tr>`).join("");
+    body.querySelectorAll("[data-manage]").forEach(b => b.addEventListener("click", () => {
+      const l = locations[+b.dataset.manage];
+      closeDrawer();
+      mcOpenForm(null, Object.assign(mcPreset(l.path), { agent_id: l.agent_id, names: x.dns_names && x.dns_names.length ? x.dns_names : [x.subject] }), "Manage renewal");
+    }));
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="2" class="empty">couldn't load where this is installed: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function closeDrawer() {
+  document.getElementById("c-drawer").classList.remove("open");
+  document.getElementById("c-overlay").classList.remove("open");
+}
+document.getElementById("c-close").addEventListener("click", closeDrawer);
+document.getElementById("c-overlay").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+// --- New certificate / editor ---------------------------------------------
+
+// Service presets: where each kind of service keeps its certificate, how to
+// reload it, and which port to check. name is the certificate's first name.
+const PRESETS = {
+  nginx:   n => ({ cert_path: `/etc/nginx/ssl/${n}.crt`, key_path: `/etc/nginx/ssl/${n}.key`, reload_cmd: "systemctl reload nginx", verify_port: 443 }),
+  apache:  n => ({ cert_path: `/etc/ssl/certs/${n}.crt`, key_path: `/etc/ssl/private/${n}.key`, reload_cmd: "systemctl reload apache2", verify_port: 443 }),
+  haproxy: n => ({ cert_path: `/etc/haproxy/certs/${n}.pem`, key_path: "", reload_cmd: "systemctl reload haproxy", verify_port: 443 }),
+  pihole:  () => ({ cert_path: "/etc/pihole/tls.pem", key_path: "", reload_cmd: "systemctl restart pihole-FTL", verify_port: 443 }),
+  pve:     () => ({ cert_path: "/etc/pve/local/pveproxy-ssl.pem", key_path: "/etc/pve/local/pveproxy-ssl.key", reload_cmd: "systemctl restart pveproxy", verify_port: 8006 }),
+  pbs:     () => ({ cert_path: "/etc/proxmox-backup/proxy.pem", key_path: "/etc/proxmox-backup/proxy.key", reload_cmd: "systemctl reload proxmox-backup-proxy", verify_port: 8007 }),
+  windows: n => ({ cert_path: `C:\\ProgramData\\mustra\\certs\\${n}.crt`, key_path: `C:\\ProgramData\\mustra\\certs\\${n}.key`, reload_cmd: "", verify_port: 0 }),
+  // The key is made in the machine key store by certreq and never exported.
+  winstore: () => ({ cert_path: "Cert:\\LocalMachine\\My", key_path: "", reload_cmd: "", verify_port: 443 }),
+};
+
+// What each authority is for, shown under the picker, and what it needs.
+function caNote(ca) {
+  const d = caInfo;
+  switch (ca) {
+    case "private": return ["Mustra's own CA: for internal names and IP addresses. Endpoints trust it once its root is pushed under Trusted roots.", ""];
+    case "acme": return ["Let's Encrypt: publicly trusted, for public domain names in your Cloudflare account. Valid 90 days and renewed automatically.",
+      !d.cloudflare_token_set || !d.acme_email ? "Not set up yet: add the ACME email and Cloudflare token under Authorities." : ""];
+    case "cloudflare_origin": return ["Cloudflare Origin CA: only Cloudflare's proxy trusts it — for servers that are only reached through Cloudflare.",
+      !d.cloudflare_token_set ? "Not set up yet: add a Cloudflare token under Authorities." : ""];
+    case "adcs": return ["Your Active Directory enterprise CA: trusted by every domain-joined Windows machine.",
+      !d.adcs_config ? "Not set up yet: choose the AD CS endpoint and CA under Authorities." : ""];
+    case "tailscale": return ["Tailscale: a publicly trusted certificate for the endpoint's own tailnet name (its names must be the tailnet name).", ""];
+    case "upload": return ["A certificate you already have — bought from a public CA or exported from another server. Upload it below with its key, or as a PFX.", ""];
+  }
+  return ["", ""];
+}
+function showCANote() {
+  const [text, warn] = caNote(document.getElementById("mc-ca").value);
+  const el = document.getElementById("nc-ca-note");
+  el.textContent = warn || text;
+  el.classList.toggle("warn", !!warn);
+}
+document.getElementById("mc-ca").addEventListener("change", () => { showCANote(); syncUpload(); });
+
+// --- Uploading a certificate you already have (certs_upload.go) ---
+const uploaded = { cert: "", key: "", pfx: "" };
+// PEM stays text; anything binary (DER, PFX) travels as base64.
+function readUpload(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const bytes = new Uint8Array(r.result);
+      const head = new TextDecoder().decode(bytes.slice(0, 64));
+      if (head.includes("-----BEGIN")) { resolve(new TextDecoder().decode(bytes)); return; }
+      let bin = ""; bytes.forEach(b => { bin += String.fromCharCode(b); });
+      resolve(btoa(bin));
+    };
+    r.onerror = () => reject(r.error);
+    r.readAsArrayBuffer(file);
+  });
+}
+const isUpload = () => document.getElementById("mc-ca").value === "upload";
+function syncUpload() {
+  const up = isUpload();
+  document.getElementById("nc-upload").hidden = !up;
+  document.querySelector(".nc-upload-note").hidden = !up;
+  document.querySelector(".nc-renew-grid").hidden = up;
+  document.getElementById("nc-issue").textContent = up ? (mcEditing ? "Install new version" : "Install now") : (mcEditing ? "Save and renew now" : "Create and install now");
+}
+document.querySelectorAll(".nc-pick").forEach(b => b.addEventListener("click", () => document.getElementById(b.dataset.for).click()));
+[["nc-f-cert", "cert"], ["nc-f-key", "key"], ["nc-f-pfx", "pfx"]].forEach(([id, slot]) => document.getElementById(id).addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 900 * 1024) { showToast("That file is too large for a certificate", "error"); return; }
+  uploaded[slot] = await readUpload(f);
+  document.getElementById(id + "-name").textContent = f.name;
+  previewUpload();
+}));
+document.getElementById("nc-pfx-pass").addEventListener("change", previewUpload);
+function clearUpload() {
+  Object.keys(uploaded).forEach(k => { uploaded[k] = ""; });
+  ["nc-f-cert", "nc-f-key", "nc-f-pfx"].forEach(id => { document.getElementById(id).value = ""; document.getElementById(id + "-name").textContent = "no file chosen"; });
+  document.getElementById("nc-pfx-pass").value = "";
+  const p = document.getElementById("nc-preview"); p.textContent = ""; p.className = "nc-preview";
+}
+function uploadBody() { return { cert: uploaded.cert, key: uploaded.key, pfx: uploaded.pfx, pfx_password: document.getElementById("nc-pfx-pass").value }; }
+// Checks the files as soon as there is enough to check, and fills in the names.
+async function previewUpload() {
+  const p = document.getElementById("nc-preview");
+  if (!(uploaded.pfx || (uploaded.cert && uploaded.key))) { p.textContent = uploaded.cert ? "Now upload its key file." : ""; p.className = "nc-preview"; return; }
+  const r = await fetch("/api/certificates/upload/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(uploadBody()) });
+  if (!r.ok) { p.textContent = await r.text(); p.className = "nc-preview bad"; return false; }
+  const d = await r.json();
+  p.textContent = `✓ ${d.subject || d.names[0]} · issued by ${d.issuer || "?"} · expires ${day(d.not_after)} (${d.days_left} days)` +
+    `${d.chain ? ` · ${d.chain} chain certificate(s)` : ""} · the key matches.`;
+  p.className = "nc-preview ok";
+  const names = document.getElementById("mc-names");
+  if (!names.value.trim()) { names.value = d.names.join(", "); names.dispatchEvent(new Event("change")); }
+  return true;
+}
+
+function fillAgentPicker() {
+  document.getElementById("mc-agent").innerHTML = '<option value="">Choose an endpoint…</option>' + mcAgents.map(a =>
+    `<option value="${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)} · ${escapeHtml(osDisplay(a))}${a.online ? "" : " (offline)"}</option>`).join("");
+}
+
+// Picking a service, or a Windows endpoint, fills in the usual locations.
+function applyPreset() {
+  const key = document.getElementById("nc-preset").value;
+  if (!PRESETS[key]) return;
+  const name = (document.getElementById("mc-names").value.split(",")[0] || "").trim().replace(/[^A-Za-z0-9.-]/g, "") || "site";
+  const p = PRESETS[key](name);
+  document.getElementById("mc-cert").value = p.cert_path;
+  document.getElementById("mc-key").value = p.key_path;
+  document.getElementById("mc-reload").value = p.reload_cmd;
+  document.getElementById("mc-port").value = p.verify_port;
+  if (key === "winstore" && !document.getElementById("nc-bind").value) document.getElementById("nc-bind").value = "iis";
+  syncWinFields();
+}
+document.getElementById("nc-preset").addEventListener("change", applyPreset);
+
+// The Windows store has no key file or reload command; it has a binding.
+const isStorePath = p => /^cert:\\localmachine\\my\\?$/i.test((p || "").trim());
+function syncWinFields() {
+  const store = isStorePath(document.getElementById("mc-cert").value);
+  const bind = document.getElementById("nc-bind").value;
+  document.querySelectorAll(".nc-win").forEach(el => { el.hidden = !store; });
+  document.querySelectorAll(".nc-iis").forEach(el => { el.hidden = !store || bind !== "iis"; });
+  document.getElementById("mc-key").closest(".field").hidden = store;
+  document.getElementById("mc-reload").closest(".field").hidden = store;
+  document.getElementById("mc-port").closest(".field").hidden = store && bind !== "iis";
+}
+document.getElementById("nc-bind").addEventListener("change", syncWinFields);
+document.getElementById("mc-cert").addEventListener("input", syncWinFields);
+document.getElementById("mc-agent").addEventListener("change", () => {
+  const a = agentsById[document.getElementById("mc-agent").value];
+  if (a && a.os === "windows" && document.getElementById("nc-preset").value === "custom") {
+    document.getElementById("nc-preset").value = "winstore"; applyPreset();
+  }
+});
+document.getElementById("mc-names").addEventListener("change", () => {
+  const key = document.getElementById("nc-preset").value;
+  if (["nginx", "apache", "haproxy", "windows"].includes(key)) applyPreset();
+});
+
+// mcPreset fills the form from where an existing certificate lives.
+function mcPreset(path) {
+  const p = { cert_path: path, key_path: "", reload_cmd: "", verify_port: 443 };
+  if (/^Cert:\\LocalMachine\\My/i.test(path)) return Object.assign(p, PRESETS.winstore(), { win_bind: "" });
+  if (path.startsWith("/etc/pihole/")) return Object.assign(p, PRESETS.pihole());
+  if (path.startsWith("/etc/pve/")) return Object.assign(p, PRESETS.pve());
+  if (path.startsWith("/etc/proxmox-backup/")) return Object.assign(p, PRESETS.pbs());
+  p.key_path = path.replace(/\.(pem|crt|cer|cert)$/, ".key");
+  if (path.includes("/nginx/")) p.reload_cmd = "systemctl reload nginx";
+  else if (path.includes("/apache2/")) p.reload_cmd = "systemctl reload apache2";
+  else if (path.includes("/httpd/")) p.reload_cmd = "systemctl reload httpd";
+  else if (path.includes("/haproxy/")) p.reload_cmd = "systemctl reload haproxy";
+  return p;
+}
+
+function resetForm() { mcOpenForm(null, { verify_port: 443 }, null, true); }
+
+// mcOpenForm shows the form: blank for a new certificate, filled for one
+// being edited (m) or taken over from discovery (preset).
+function mcOpenForm(m, preset, title, stay) {
+  const v = m || Object.assign({ ca: "private", renew_days: 30, approval: "auto", enabled: true }, preset || {});
+  mcEditing = m ? m.id : null;
+  document.getElementById("nc-title").textContent = m ? `Edit ${m.name}` : (title || "New certificate");
+  document.getElementById("nc-intro").hidden = !!m;
+  document.getElementById("nc-issue").textContent = m ? "Save and renew now" : "Create and install now";
+  document.getElementById("mc-save").textContent = m ? "Save" : "Save without installing";
+  document.getElementById("mc-cancel").hidden = !m && !preset;
+  document.getElementById("mc-agent").value = v.agent_id || "";
+  document.getElementById("mc-names").value = (v.names || []).join(", ");
+  document.getElementById("nc-preset").value = "custom";
+  document.getElementById("mc-cert").value = v.cert_path || "";
+  document.getElementById("mc-key").value = v.key_path || "";
+  document.getElementById("mc-reload").value = v.reload_cmd || "";
+  document.getElementById("mc-port").value = v.verify_port ?? 443;
+  document.getElementById("nc-bind").value = v.win_bind || "";
+  document.getElementById("nc-site").value = v.iis_site || "";
+  if (isStorePath(v.cert_path)) document.getElementById("nc-preset").value = "winstore";
+  syncWinFields();
+  document.getElementById("mc-ca").value = v.ca || "private";
+  const days = document.getElementById("mc-days");
+  if (![...days.options].some(o => o.value === String(v.renew_days))) days.append(new Option(`${v.renew_days} days`, v.renew_days));
+  days.value = String(v.renew_days || 30);
+  document.getElementById("mc-approval").value = v.approval || "auto";
+  document.getElementById("mc-enabled").checked = v.enabled !== false;
+  document.getElementById("mc-save-status").textContent = "";
+  clearUpload();
+  syncUpload();
+  document.getElementById("nc-panel").hidden = false;
+  document.getElementById("nc-progress").hidden = true;
+  showCANote();
+  if (!stay) location.hash = "new";
+}
+document.getElementById("mc-cancel").addEventListener("click", () => { resetForm(); location.hash = "renewal"; });
+
+function formBody() {
+  return {
+    agent_id: document.getElementById("mc-agent").value,
+    names: document.getElementById("mc-names").value.split(",").map(x => x.trim()).filter(Boolean),
+    cert_path: document.getElementById("mc-cert").value, key_path: document.getElementById("mc-key").value,
+    reload_cmd: document.getElementById("mc-reload").value, verify_port: +document.getElementById("mc-port").value || 0,
+    ca: document.getElementById("mc-ca").value, renew_days: +document.getElementById("mc-days").value,
+    approval: document.getElementById("mc-approval").value, enabled: document.getElementById("mc-enabled").checked,
+    win_bind: document.getElementById("nc-bind").value, iis_site: document.getElementById("nc-site").value.trim(),
+  };
+}
+
+// saveForm saves the certificate; issue also issues and installs it now.
+async function saveForm(issue) {
+  const st = document.getElementById("mc-save-status");
+  const body = formBody();
+  if (!body.agent_id || !body.names.length || !body.cert_path) {
+    st.textContent = "Choose an endpoint, give at least one name and a certificate file.";
+    return;
+  }
+  const editing = mcEditing;
+  if (issue && body.ca === "upload") { await installUpload(body, editing); return; }
+  if (issue && !confirm(`${editing ? "Renew" : "Issue"} ${body.names[0]} on ${(agentsById[body.agent_id] || {}).hostname || "the endpoint"} now?\n\n` +
+      `The files are written${body.reload_cmd ? " and the service reloaded (" + body.reload_cmd + ")" : ""}.`)) return;
+  st.textContent = "saving…";
+  const url = editing ? `/api/certificates/managed/${encodeURIComponent(editing)}` : "/api/certificates/managed";
+  const r = await fetch(url + (issue ? "?issue=1" : ""), {
+    method: editing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { st.textContent = "Could not save: " + (await r.text()); return; }
+  const saved = await r.json();
+  st.textContent = "";
+  loadManaged();
+  if (!issue) { showToast(`Saved ${saved.name}`, "ok"); if (!editing) resetForm(); location.hash = "renewal"; return; }
+  followIssue(saved.id, saved.name);
+}
+document.getElementById("nc-issue").addEventListener("click", () => saveForm(true));
+document.getElementById("mc-save").addEventListener("click", () => saveForm(false));
+
+// installUpload saves the certificate's settings and installs the files
+// that were uploaded; nothing is renewed later, so it is not "issued".
+async function installUpload(body, editing) {
+  const st = document.getElementById("mc-save-status");
+  if (!(uploaded.pfx || (uploaded.cert && uploaded.key))) { st.textContent = "Upload the certificate and key files, or a PFX."; return; }
+  if (await previewUpload() === false) { st.textContent = "Fix the files first (see above)."; return; }
+  if (!confirm(`Install ${body.names[0]} on ${(agentsById[body.agent_id] || {}).hostname || "the endpoint"} now?`)) return;
+  body.renew_days = 30; body.approval = "auto";
+  st.textContent = "saving…";
+  const r = await fetch(editing ? `/api/certificates/managed/${encodeURIComponent(editing)}` : "/api/certificates/managed",
+    { method: editing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { st.textContent = "Could not save: " + await r.text(); return; }
+  const saved = await r.json();
+  st.textContent = "installing on the endpoint…";
+  const ur = await fetch(`/api/certificates/managed/${encodeURIComponent(saved.id)}/upload`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(uploadBody()) });
+  st.textContent = "";
+  document.getElementById("nc-panel").hidden = true;
+  document.getElementById("nc-progress").hidden = false;
+  document.getElementById("nc-progress-status").textContent = ur.ok ? "done" : "failed — the previous certificate was kept";
+  const detail = ur.ok ? ((await ur.json()).last_detail || "") : await ur.text();
+  document.getElementById("nc-steps").innerHTML = ["Checked the certificate and key", "Installed on the endpoint and reloaded", "Recorded in the inventory"]
+    .map((l, i) => `<li class="${ur.ok ? "done" : i === 0 ? "done" : i === 1 ? "bad" : ""}">${escapeHtml(l)}</li>`).join("");
+  document.getElementById("nc-detail").textContent = detail;
+  document.getElementById("nc-to-inventory").hidden = !ur.ok;
+  document.getElementById("nc-another").hidden = false;
+  clearUpload();
+  loadManaged(); loadIssued(); load();
+  if (ur.ok) showToast(`${saved.name} is installed`, "ok");
+}
+
+// followIssue shows an issuance's steps while the server works through
+// them, reading the certificate's state until it is done or failed.
+const ISSUE_STEPS = [
+  ["key", "The endpoint makes a private key and a request"],
+  ["sign", "The authority signs it"],
+  ["install", "The agent installs it and reloads the service"],
+  ["done", "Installed and recorded in the inventory"],
+];
+async function followIssue(id, name) {
+  document.getElementById("nc-panel").hidden = true;
+  const panel = document.getElementById("nc-progress");
+  panel.hidden = false;
+  document.getElementById("nc-to-inventory").hidden = true;
+  document.getElementById("nc-another").hidden = true;
+  const draw = (stage, failed, detail) => {
+    const at = ISSUE_STEPS.findIndex(s => s[0] === stage);
+    document.getElementById("nc-steps").innerHTML = ISSUE_STEPS.map(([key, label], i) => {
+      const cls = failed && i === at ? "bad" : i < at || (stage === "done" && !failed) ? "done" : i === at ? "now" : "";
+      return `<li class="${cls}">${escapeHtml(label)}</li>`;
+    }).join("");
+    document.getElementById("nc-detail").textContent = detail || "";
+  };
+  document.getElementById("nc-progress-status").textContent = name;
+  draw("key", false, "");
+  const started = Date.now();
+  while (Date.now() - started < 6 * 60 * 1000) {
+    await new Promise(r => setTimeout(r, 2000));
+    const r = await fetch("/api/certificates/managed");
+    if (!r.ok) continue;
+    const m = ((await r.json()).managed || []).find(x => x.id === id);
+    if (!m) continue;
+    const d = m.last_detail || "";
+    const stage = /Signing|Asking Tailscale/.test(d) ? "sign" : /Installing/.test(d) ? "install" : "key";
+    if (m.state === "renewing") { draw(stage, false, d); continue; }
+    if (m.state === "failed") {
+      draw(stage, true, d);
+      document.getElementById("nc-progress-status").textContent = "failed — nothing was changed on the endpoint";
+      document.getElementById("nc-another").hidden = false;
+      return;
+    }
+    draw("done", false, d);
+    document.getElementById("nc-progress-status").textContent = "done";
+    document.getElementById("nc-to-inventory").hidden = false;
+    document.getElementById("nc-another").hidden = false;
+    loadManaged(); loadIssued(); load();
+    showToast(`${name} is installed`, "ok");
+    return;
+  }
+  document.getElementById("nc-progress-status").textContent = "still working — check Renewals for the outcome";
+}
+document.getElementById("nc-another").addEventListener("click", resetForm);
+
+// The AD CS submitter is chosen from Windows endpoints; the agent list
+// arrives separately from the settings, so fill once both are known.
+let adcsSettings = {}, adcsAgents = null;
+async function fillADCSAgents() {
+  if (!adcsAgents) {
+    const r = await fetch("/api/agents"); if (!r.ok) return;
+    const list = await r.json();
+    adcsAgents = (Array.isArray(list) ? list : list.agents || []).filter(a => a.os === "windows");
+  }
+  const sel = document.getElementById("ca-adcs-agent");
+  sel.innerHTML = '<option value="">— not set —</option>' + adcsAgents.map(a =>
+    `<option value="${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)}</option>`).join("");
+  sel.value = adcsSettings.adcs_agent || "";
+}
+
+const stateLabel = { idle: "ok", awaiting_approval: "waiting for approval", renewing: "renewing…", failed: "failed" };
+async function loadManaged() {
+  const r = await fetch("/api/certificates/managed"); if (!r.ok) return;
+  const d = await r.json();
+  caInfo = d;
+  managed = d.managed || [];
+  const caSel = document.getElementById("mc-ca"), keep = caSel.value;
+  caSel.innerHTML = Object.entries(d.cas || {}).map(([k, v]) => `<option value="${escapeHtml(k)}">${escapeHtml(v)}</option>`).join("");
+  caSel.value = keep || "private";
+  showCANote();
+  document.getElementById("mc-add").hidden = !mcCanManage;
+  document.getElementById("mc-status").textContent = `${managed.length} managed`;
+  document.getElementById("ca-status").textContent = [d.private_ca_ready ? "private CA ready" : "private CA made on first use",
+    d.cloudflare_token_set ? "Cloudflare token set" : "no Cloudflare token",
+    d.adcs_config ? "AD CS set" : "no AD CS"].join(" · ");
+  adcsSettings = d;
+  fillADCSAgents();
+  document.getElementById("ca-adcs-config").value = d.adcs_config || "";
+  document.getElementById("ca-adcs-template").value = d.adcs_template || "";
+  document.getElementById("ca-email").value = d.acme_email || "";
+  document.getElementById("ca-staging").checked = !!d.acme_staging;
+  document.getElementById("ca-token").placeholder = d.cloudflare_token_set ? "a token is set — enter one to replace it" : "";
+  document.getElementById("ca-readonly").hidden = mcIsAdmin;
+  document.getElementById("ca-save").disabled = !mcIsAdmin;
+  document.querySelectorAll("#ca-form input, #ca-form select").forEach(el => { el.disabled = !mcIsAdmin; });
+  const body = document.getElementById("mc-body");
+  body.innerHTML = managed.length === 0
+    ? '<tr><td class="empty" colspan="8">none yet — create one under New Certificate, or open a certificate on the Overview and choose Manage renewal</td></tr>'
+    : managed.map(m => {
+      const days = m.expires_at ? Math.floor((new Date(m.expires_at) - Date.now()) / 86400000) : null;
+      return `<tr title="${escapeHtml(m.last_detail || "")}">
+        <td><strong>${escapeHtml(m.name)}</strong>${m.enabled ? "" : ' <span class="sev-pill none">off</span>'}</td>
+        <td><a href="/endpoint/${escapeHtml(m.agent_id)}">${escapeHtml(m.hostname || m.agent_id)}</a></td>
+        <td class="mono">${escapeHtml(m.cert_path)}</td>
+        <td>${escapeHtml((d.cas || {})[m.ca] || m.ca)}</td>
+        <td data-sort="${escapeHtml(days == null ? 99999 : days)}">${days == null ? "—" : `${escapeHtml(days)} days`}</td>
+        <td>${escapeHtml(m.renew_days)} days before${m.approval === "approve" ? " · approval" : ""}</td>
+        <td><span class="st ${escapeHtml(m.state === "failed" ? "expired" : m.state === "awaiting_approval" ? "warning" : "ok")}">${escapeHtml(stateLabel[m.state] || m.state)}</span></td>
+        <td class="row-actions">${mcCanManage ? `${m.ca === "upload" ? `<button class="tiny go" data-mc-edit="${escapeHtml(m.id)}" title="Upload the renewed certificate and install it">Upload new version</button>` : `<button class="tiny go" data-mc-renew="${escapeHtml(m.id)}" title="Issue a new certificate and install it now">${m.state === "awaiting_approval" ? "Approve" : "Renew now"}</button>`}
+          <button class="tiny" data-mc-edit="${escapeHtml(m.id)}" title="Change the names, files, authority or renewal settings">Edit</button>
+          <button class="tiny danger" data-mc-del="${escapeHtml(m.id)}" title="Stop managing it; nothing changes on the endpoint">Stop managing</button>` : ""}</td></tr>`;
+    }).join("");
+  body.querySelectorAll("[data-mc-renew]").forEach(b => b.addEventListener("click", async () => {
+    const m = managed.find(x => x.id === b.dataset.mcRenew);
+    if (!confirm(`Renew ${m.name} on ${m.hostname} now with ${(d.cas || {})[m.ca] || m.ca}?\n\nThe service on the endpoint is reloaded.`)) return;
+    b.disabled = true; b.textContent = "renewing…";
+    const r = await fetch(`/api/certificates/managed/${encodeURIComponent(m.id)}/renew`, { method: "POST" });
+    if (!r.ok) showToast("Renewal failed: " + await r.text(), "error"); else showToast(`${m.name} renewed`, "ok");
+    loadManaged(); load(); loadIssued();
+  }));
+  body.querySelectorAll("[data-mc-edit]").forEach(b => b.addEventListener("click", () => mcOpenForm(managed.find(x => x.id === b.dataset.mcEdit))));
+  body.querySelectorAll("[data-mc-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Stop managing this certificate? Nothing changes on the endpoint, and its history stays in the inventory.")) return;
+    await fetch(`/api/certificates/managed/${encodeURIComponent(b.dataset.mcDel)}`, { method: "DELETE" });
+    loadManaged();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "cert-renewals" });
+  if (dt) dt.refresh();
+}
+
+// --- Inventory and revocation -------------------------------------------------
+
+let issued = [], reasons = {};
+const REASON_LABELS = {
+  key_compromise: "The private key may have leaked",
+  superseded: "Replaced by a newer certificate",
+  cessation_of_operation: "The server or service is retired",
+  unspecified: "Other / no reason given",
+};
+const STATUS_LABELS = { active: "active", superseded: "superseded", expired: "expired", revoked: "revoked" };
+function day(t) { return t ? String(t).slice(0, 10) : "—"; }
+function issuedRow(c, extra) {
+  return `<td><strong>${escapeHtml(c.name)}</strong><div class="names">${escapeHtml((c.names || []).join(", "))}</div></td>
+    <td><a href="/endpoint/${escapeHtml(c.agent_id)}">${escapeHtml(c.hostname || c.agent_id)}</a><div class="locs mono">${escapeHtml(c.cert_path)}</div></td>
+    <td>${escapeHtml(c.ca_label || c.ca)}</td>
+    <td class="mono" title="${escapeHtml(c.fingerprint ? "SHA-256 " + c.fingerprint : "")}">${escapeHtml((c.serial || "—").slice(0, 16))}${(c.serial || "").length > 16 ? "…" : ""}</td>${/* safe-html: callers build extra from escaped cells */ extra}`;
+}
+
+async function loadIssued() {
+  const r = await fetch("/api/certificates/issued"); if (!r.ok) return;
+  const d = await r.json();
+  issued = d.issued || []; reasons = d.reasons || {};
+  renderIssued(); renderRevoke();
+}
+
+function renderIssued() {
+  const mode = document.getElementById("iss-filter").value;
+  const shown = issued.filter(c => mode === "all" ? true : mode === "active" ? c.status === "active" :
+    mode === "revoked" ? c.status === "revoked" : c.status === "active" || c.status === "superseded");
+  document.getElementById("iss-status").textContent = `${issued.filter(c => c.status === "active").length} active · ${issued.length} on record`;
+  const body = document.getElementById("iss-body");
+  body.innerHTML = shown.length === 0
+    ? `<tr><td class="empty" colspan="7">${issued.length ? "nothing matches that filter" : "nothing issued yet — create one under New Certificate"}</td></tr>`
+    : shown.map(c => `<tr>${issuedRow(c, `
+        <td data-sort="${escapeHtml(c.issued_at)}">${c.source === "discovered" ? '<span class="hint" title="Already on the endpoint when Mustra started managing it">found on endpoint</span>' : `${escapeHtml(day(c.issued_at))}<div class="locs">${escapeHtml(c.issued_by)}</div>`}</td>
+        <td data-sort="${escapeHtml(c.not_after || "")}">${escapeHtml(day(c.not_after))}</td>
+        <td><span class="st ${escapeHtml(c.status === "active" ? "ok" : c.status)}" title="${escapeHtml(c.revoke_detail || "")}">${escapeHtml(STATUS_LABELS[c.status] || c.status)}</span></td>`)}</tr>`).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "cert-issued" });
+  if (dt) dt.refresh();
+}
+document.getElementById("iss-filter").addEventListener("change", renderIssued);
+
+function renderRevoke() {
+  const live = issued.filter(c => c.status === "active" || c.status === "superseded");
+  document.getElementById("rv-status").textContent = `${live.filter(c => c.revocable).length} can be revoked`;
+  const body = document.getElementById("rv-body");
+  body.innerHTML = live.length === 0
+    ? '<tr><td class="empty" colspan="7">no active certificates from Mustra</td></tr>'
+    : live.map(c => `<tr>${issuedRow(c, `
+        <td data-sort="${escapeHtml(c.not_after || "")}">${escapeHtml(day(c.not_after))}</td>
+        <td><span class="st ${escapeHtml(c.status === "active" ? "ok" : c.status)}">${escapeHtml(STATUS_LABELS[c.status])}</span></td>
+        <td>${c.revocable && mcCanManage ? `<button class="tiny danger" data-revoke="${escapeHtml(c.id)}">Revoke…</button>`
+          : `<span class="hint" title="${escapeHtml(c.why_not || "needs the Deploy permission")}">${escapeHtml(c.revocable ? "Deploy permission needed" : "can't revoke")}</span>`}</td>`)}</tr>`).join("");
+  body.querySelectorAll("[data-revoke]").forEach(b => b.addEventListener("click", () => openRevoke(issued.find(c => c.id === b.dataset.revoke))));
+  const revoked = issued.filter(c => c.status === "revoked");
+  document.getElementById("rvd-status").textContent = `${revoked.length} revoked`;
+  const rb = document.getElementById("rvd-body");
+  rb.innerHTML = revoked.length === 0
+    ? '<tr><td class="empty" colspan="7">nothing revoked</td></tr>'
+    : revoked.map(c => `<tr>${issuedRow(c, `
+        <td data-sort="${escapeHtml(c.revoked_at)}">${escapeHtml(day(c.revoked_at))}</td>
+        <td>${escapeHtml(c.revoked_by || "—")}</td>
+        <td title="${escapeHtml(c.revoke_detail || "")}">${escapeHtml(REASON_LABELS[c.revoke_reason] || c.revoke_reason)}</td>`)}</tr>`).join("");
+  [body, rb].forEach((b, i) => { const dt = initDataTable(b.closest("table"), { storageKey: i ? "cert-revoked" : "cert-revocable" }); if (dt) dt.refresh(); });
+}
+
+function openRevoke(c) {
+  const isManaged = managed.some(m => m.id === c.managed_cert_id);
+  const isActive = c.status === "active";
+  openModal(`Revoke ${c.name}`, `
+    <p class="hint u-m-0-0-12">On ${escapeHtml(c.hostname || c.agent_id)} · ${escapeHtml(c.ca_label || c.ca)} · serial <span class="mono">${escapeHtml(c.serial)}</span>.
+      Revoking cannot be undone.</p>
+    <div class="form-grid">
+      <div class="field u-gc-full"><label for="rv-reason">Why <button type="button" class="help-q" data-help="Recorded with the revocation. Choose 'private key may have leaked' if anyone else could have the key: clients then treat it as never valid.">?</button></label>
+        <select id="rv-reason">${Object.entries(REASON_LABELS).map(([k, v]) => `<option value="${escapeHtml(k)}"${k === (isActive ? "key_compromise" : "superseded") ? " selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select></div>
+      <div class="field u-gc-full"><label class="nc-check u-mt-0"><input type="checkbox" id="rv-replace" ${isManaged && isActive ? "checked" : ""} ${isManaged && isActive ? "" : "disabled"}>
+        Install a replacement first <button type="button" class="help-q" data-help="Issues and installs a new certificate on the endpoint before revoking this one, so the service keeps working. Only for a certificate Mustra still manages and that is still in use.">?</button></label></div>
+      <div class="field u-gc-full"><label class="nc-check u-mt-0"><input type="checkbox" id="rv-stop" ${isManaged ? "" : "disabled"}>
+        Stop renewing it <button type="button" class="help-q" data-help="Turns off automatic renewal, for a server or service that is going away. Without it, Mustra keeps the endpoint supplied with a valid certificate.">?</button></label></div>
+    </div>
+    <p class="hint u-m-4-0-12" id="rv-warn"></p>
+    <div class="save-row"><button class="primary danger-fill" id="rv-go">Revoke</button><button class="secondary u-w-auto" id="rv-cancel">Cancel</button><span class="save-status" id="rv-state"></span></div>`,
+  wrap => {
+    const warn = () => {
+      const replace = wrap.querySelector("#rv-replace").checked;
+      wrap.querySelector("#rv-warn").textContent = isActive && !replace
+        ? "This certificate is in use: without a replacement, anything connecting to the service will reject it until a new one is installed."
+        : "";
+    };
+    wrap.querySelector("#rv-replace").addEventListener("change", warn);
+    warn();
+    wrap.querySelector("#rv-cancel").addEventListener("click", () => wrap.remove());
+    wrap.querySelector("#rv-go").addEventListener("click", async () => {
+      const btn = wrap.querySelector("#rv-go"), st = wrap.querySelector("#rv-state");
+      btn.disabled = true; st.textContent = wrap.querySelector("#rv-replace").checked ? "installing a replacement, then revoking…" : "revoking…";
+      const r = await fetch(`/api/certificates/issued/${encodeURIComponent(c.id)}/revoke`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: wrap.querySelector("#rv-reason").value, replace: wrap.querySelector("#rv-replace").checked, stop: wrap.querySelector("#rv-stop").checked }) });
+      if (!r.ok) { btn.disabled = false; st.textContent = "Failed: " + await r.text(); return; }
+      const res = await r.json();
+      wrap.remove();
+      showToast(`${c.name} revoked. ${res.detail || ""}`, "ok");
+      loadIssued(); loadManaged(); load();
+    });
+  });
+}
+
+document.getElementById("ca-save").addEventListener("click", async () => {
+  const st = document.getElementById("ca-save-status"); st.textContent = "saving…";
+  const body = { acme_email: document.getElementById("ca-email").value, acme_staging: document.getElementById("ca-staging").checked,
+    adcs_agent: document.getElementById("ca-adcs-agent").value, adcs_config: document.getElementById("ca-adcs-config").value,
+    adcs_template: document.getElementById("ca-adcs-template").value };
+  const tok = document.getElementById("ca-token").value.trim();
+  if (tok) body.cloudflare_token = tok;
+  const r = await fetch("/api/admin/cert-authorities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  st.textContent = r.ok ? "saved" : "failed: " + await r.text();
+  if (r.ok) { document.getElementById("ca-token").value = ""; loadManaged(); }
+});
+
+// --- trusted roots -----------------------------------------------------------
+const trustLabels = { installed: "installed", removed: "removed", failed: "failed", unsupported: "not supported", "": "pending" };
+async function loadTrust() {
+  const r = await fetch("/api/certificates/trust"); if (!r.ok) return;
+  const roots = (await r.json()).roots || [];
+  const body = document.getElementById("trust-body");
+  document.getElementById("trust-status").textContent = roots.length ? `${roots.length} root(s)` : "no roots yet";
+  if (!roots.length) { body.innerHTML = '<p class="hint">Mustra’s private CA appears here once it has signed something; the AD CS root once AD CS is set up.</p>'; return; }
+  body.innerHTML = roots.map(rt => {
+    const c = rt.counts || {};
+    const mode = rt.mode === "all" ? "all" : rt.mode === "remove" ? "remove" : "off";
+    const rows = (rt.endpoints || []).map(e => `<tr>
+        <td>${escapeHtml(e.hostname)}</td><td>${osPillFor(e.agent_id, e.os)}</td>
+        <td data-sort="${escapeHtml(e.state || "")}"><span class="trust-state trust-${escapeHtml(e.state || "pending")}">${escapeHtml(trustLabels[e.state || ""] || e.state)}</span></td>
+        <td>${escapeHtml(e.via === "mdm" ? "MDM profile" : e.via === "agent" ? "agent" : "")}</td>
+        <td>${e.state ? fmtAgo(e.updated_at) : "—"}</td>
+        <td class="trust-detail" title="${escapeHtml(e.detail || "")}">${escapeHtml((e.detail || "").split("\n")[0])}</td></tr>`).join("");
+    return `<div class="trust-root">
+      <div class="trust-head">
+        <div><strong>${escapeHtml(rt.name)}</strong> <span class="hint">${escapeHtml(rt.subject)} · expires ${escapeHtml(String(rt.not_after).slice(0, 10))} · SHA-256 ${escapeHtml(rt.fingerprint.slice(0, 16))}…</span></div>
+        <div class="trust-actions">
+          <span>${escapeHtml(c.installed || 0)} of ${escapeHtml(c.total || 0)} installed${c.failed ? ` · <b class="bad">${escapeHtml(c.failed)} failed</b>` : ""}${c.unsupported ? ` · ${escapeHtml(c.unsupported)} not supported` : ""}</span>
+          <label>Push to <select class="trust-mode" data-root="${escapeHtml(rt.id)}" ${mcCanManage ? "" : "disabled"}>
+            <option value="off" ${mode === "off" ? "selected" : ""}>nobody (off)</option>
+            <option value="all" ${mode === "all" ? "selected" : ""}>every endpoint</option>
+            <option value="remove" ${mode === "remove" ? "selected" : ""}>remove from every endpoint</option>
+          </select></label>
+        </div>
+      </div>
+      <div class="table-scroll rows-10"><table class="table-compact">
+        <thead><tr><th>Endpoint</th><th>OS</th><th>State</th><th>Via</th><th>Updated</th><th>Detail</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+    </div>`;
+  }).join("");
+  body.querySelectorAll("table").forEach(t => { const dt = initDataTable(t, { storageKey: "trust-roots" }); if (dt) dt.refresh(); });
+  body.querySelectorAll(".trust-mode").forEach(sel => sel.addEventListener("change", async () => {
+    const what = { all: "push this root to every endpoint", off: "stop pushing this root (endpoints keep it)", remove: "remove this root from every endpoint" }[sel.value];
+    if (!confirm(`This will ${what}. Continue?`)) { loadTrust(); return; }
+    const r = await fetch(`/api/certificates/trust/${encodeURIComponent(sel.dataset.root)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: sel.value }) });
+    if (!r.ok) alert("failed: " + await r.text());
+    loadTrust();
+  }));
+}
+// Follow a push while it runs, without re-rendering under someone typing in a filter.
+setInterval(() => {
+  const body = document.getElementById("trust-body");
+  if (document.hidden || !body || body.contains(document.activeElement)) return;
+  loadTrust();
+}, 30000);
+
+// --- App credentials (appcreds.go) ------------------------------------------
+
+let acData = { connections: [], credentials: [], kinds: {}, types: {} };
+// What each provider's connection needs, with where to get it.
+const AC_FIELDS = {
+  entra: { help: "An app registration in your tenant with the Microsoft Graph application permission Application.ReadWrite.All (admin consent granted) and a client secret.",
+    fields: [["tenant_id", "Tenant ID", "Directory (tenant) ID from the app registration's Overview."], ["client_id", "Client ID", "Application (client) ID of the app registration Mustra signs in as."]],
+    secret: ["Client secret", "A client secret of that app registration (its value, not its ID)."] },
+  authentik: { help: "An API token of an Authentik user allowed to change providers and certificates (Directory → Tokens and App passwords → Create, intent API).",
+    fields: [["url", "Authentik URL", "For example https://auth.example.com"]],
+    secret: ["API token", "The token's key."] },
+  okta: { help: "An API token of an Okta admin who may manage applications (Security → API → Tokens).",
+    fields: [["url", "Okta URL", "Your org URL, for example https://example.okta.com"]],
+    secret: ["API token", "The token value shown once when you create it."] },
+  gcp: { help: "A service-account key (JSON) for an account with the Service Account Key Admin role on the project whose keys Mustra manages.",
+    fields: [["project_id", "Project ID", "Leave blank to use the project in the key file."]],
+    secret: ["Service-account key (JSON)", "Paste the whole key file."], textarea: true },
+};
+const AC_MODES = {
+  remind: ["Remind me", "Notify before it expires. Renewing stays with you — or press Renew now here and download the new one."],
+  download: ["Renew, keep for download", "Mustra renews it at the provider before it expires and keeps the new one, encrypted, for you to download during the grace period."],
+  push: ["Renew and push", "Mustra renews it and writes it on an endpoint — the whole file, or one key's value in a config file — then reloads the application."],
+};
+
+async function loadAppCreds() {
+  const r = await fetch("/api/certificates/apps"); if (!r.ok) return;
+  acData = await r.json();
+  renderAppCreds(); renderConnections();
+}
+
+function acDue(c) {
+  if (!c.expires_at && !c.due_at) return { text: "no expiry", sort: 99999, cls: "" };
+  const t = c.expires_at || c.due_at;
+  const days = Math.floor((new Date(t) - Date.now()) / 86400000);
+  return { text: c.expires_at ? `${day(c.expires_at)} · ${days} days` : `rotate by ${day(c.due_at)}`, sort: days, cls: days < 0 ? "bad" : days <= 30 ? "warn" : "" };
+}
+
+function renderAppCreds() {
+  const list = acData.credentials || [];
+  document.getElementById("ac-status").textContent = `${list.length} tracked`;
+  const body = document.getElementById("ac-body");
+  body.innerHTML = list.length === 0
+    ? '<tr><td class="empty" colspan="7">nothing tracked yet — add a provider connection below and Import, or Add by hand</td></tr>'
+    : list.map(c => {
+      const d = acDue(c);
+      const st = c.state === "failed" ? "expired" : c.state === "rotating" ? "warning" : "ok";
+      return `<tr title="${escapeHtml(c.last_detail || "")}">
+        <td><strong>${escapeHtml(c.app_name)}</strong><div class="names">${escapeHtml(c.display_name || "")}</div></td>
+        <td>${escapeHtml(c.kind_label || c.kind)}</td>
+        <td>${escapeHtml(c.type_label || c.cred_type)}</td>
+        <td class="days ${escapeHtml(d.cls)}" data-sort="${escapeHtml(d.sort)}">${escapeHtml(d.text)}</td>
+        <td>${escapeHtml((AC_MODES[c.mode] || [c.mode])[0])}</td>
+        <td><span class="st ${escapeHtml(st)}">${escapeHtml(c.state === "idle" ? "ok" : c.state)}</span></td>
+        <td class="row-actions">${mcCanManage ? `${c.rotatable ? `<button class="tiny go" data-ac-renew="${escapeHtml(c.id)}" title="Make a new one at the provider now">Renew now</button>` : ""}
+          ${c.material_available ? `<a class="tiny button-link" href="/api/certificates/apps/credentials/${encodeURIComponent(c.id)}/download" title="Download the renewed secret or certificate (kept until ${escapeHtml(day(c.material_until))})">Download</a>` : ""}
+          <button class="tiny" data-ac-edit="${escapeHtml(c.id)}">Settings</button>
+          <button class="tiny danger" data-ac-del="${escapeHtml(c.id)}" title="Stop tracking it; nothing changes at the provider">Remove</button>` : ""}</td></tr>`;
+    }).join("");
+  body.querySelectorAll("[data-ac-renew]").forEach(b => b.addEventListener("click", async () => {
+    const c = list.find(x => x.id === b.dataset.acRenew);
+    const what = c.mode === "push" ? "and push it to the endpoint" : "and keep it for download";
+    if (!confirm(`Make a new ${c.type_label} for ${c.app_name} at ${c.kind_label} now ${what}?` +
+      (c.kind === "authentik" && c.cred_type === "client_secret" ? "\n\nAuthentik replaces the secret at once: the application stops working until it has the new one." : ""))) return;
+    b.disabled = true; b.textContent = "renewing…";
+    const r = await fetch(`/api/certificates/apps/credentials/${encodeURIComponent(c.id)}/renew`, { method: "POST" });
+    if (r.ok) showToast(`${c.app_name}: renewed${c.mode === "push" ? " and pushed" : " — download it from the table"}`, "ok");
+    else showToast("Renewal failed: " + await r.text(), "error");
+    loadAppCreds();
+  }));
+  body.querySelectorAll("[data-ac-edit]").forEach(b => b.addEventListener("click", () => openAppCred(list.find(x => x.id === b.dataset.acEdit))));
+  body.querySelectorAll("[data-ac-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Stop tracking this credential? Nothing changes at the provider.")) return;
+    await fetch(`/api/certificates/apps/credentials/${encodeURIComponent(b.dataset.acDel)}`, { method: "DELETE" });
+    loadAppCreds();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "app-creds" });
+  if (dt) dt.refresh();
+}
+
+function renderConnections() {
+  const list = acData.connections || [];
+  document.getElementById("acc-status").textContent = `${list.length} connection(s)`;
+  document.getElementById("acc-add").hidden = !mcCanManage;
+  document.getElementById("ac-add-manual").hidden = !mcCanManage;
+  const body = document.getElementById("acc-body");
+  body.innerHTML = list.length === 0
+    ? '<tr><td class="empty" colspan="4">none yet — Add connection</td></tr>'
+    : list.map(c => `<tr>
+        <td><strong>${escapeHtml(c.name)}</strong></td>
+        <td>${escapeHtml(acData.kinds[c.kind] || c.kind)}</td>
+        <td>${c.last_error ? `<span class="st expired" title="${escapeHtml(c.last_error)}">error</span> <span class="hint">${escapeHtml(c.last_error.slice(0, 90))}</span>`
+          : c.last_ok_at ? `<span class="st ok">working</span> <span class="hint">${escapeHtml(fmtAgo(c.last_ok_at))}</span>` : '<span class="st notice">untested</span>'}</td>
+        <td class="row-actions">${mcCanManage ? `<button class="tiny go" data-acc-import="${escapeHtml(c.id)}">Import…</button>
+          <button class="tiny" data-acc-edit="${escapeHtml(c.id)}">Edit</button>
+          <button class="tiny danger" data-acc-del="${escapeHtml(c.id)}">Remove</button>` : ""}</td></tr>`).join("");
+  body.querySelectorAll("[data-acc-import]").forEach(b => b.addEventListener("click", () => openImport(list.find(c => c.id === b.dataset.accImport))));
+  body.querySelectorAll("[data-acc-edit]").forEach(b => b.addEventListener("click", () => openConnection(list.find(c => c.id === b.dataset.accEdit))));
+  body.querySelectorAll("[data-acc-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Remove this connection? Credentials imported from it stay tracked but can no longer be renewed.")) return;
+    await fetch(`/api/certificates/apps/connections/${encodeURIComponent(b.dataset.accDel)}`, { method: "DELETE" });
+    loadAppCreds();
+  }));
+}
+document.getElementById("acc-add").addEventListener("click", () => openConnection(null));
+document.getElementById("ac-add-manual").addEventListener("click", () => openAppCred(null));
+
+function help(text) { return `<button type="button" class="help-q" data-help="${escapeHtml(text)}">?</button>`; }
+
+function openConnection(conn) {
+  const kinds = Object.keys(AC_FIELDS);
+  openModal(conn ? `Edit ${conn.name}` : "Add a provider connection", `
+    <div class="form-grid">
+      <div class="field"><label for="acc-kind">Provider ${help("The identity provider whose application credentials Mustra manages.")}</label>
+        <select id="acc-kind" ${conn ? "disabled" : ""}>${kinds.map(k => `<option value="${escapeHtml(k)}"${conn && conn.kind === k ? " selected" : ""}>${escapeHtml(acData.kinds[k] || k)}</option>`).join("")}</select></div>
+      <div class="field"><label for="acc-name">Name ${help("How the connection is shown here, for example Production tenant.")}</label><input id="acc-name" value="${escapeHtml(conn ? conn.name : "")}"></div>
+    </div>
+    <p class="hint u-m-4-0-10" id="acc-help"></p>
+    <div class="form-grid" id="acc-fields"></div>
+    <div class="save-row"><button class="primary" id="acc-save">Save and test</button><span class="save-status" id="acc-state"></span></div>`, wrap => {
+    wrap.querySelector(".modal").classList.add("ac-modal");
+    const draw = () => {
+      const k = wrap.querySelector("#acc-kind").value, def = AC_FIELDS[k];
+      wrap.querySelector("#acc-help").textContent = def.help;
+      wrap.querySelector("#acc-fields").innerHTML = def.fields.map(([key, label, tip]) =>
+        `<div class="field"><label for="acc-f-${escapeHtml(key)}">${escapeHtml(label)} ${help(tip)}</label><input id="acc-f-${escapeHtml(key)}" data-key="${escapeHtml(key)}" value="${escapeHtml(conn && conn.config ? conn.config[key] || "" : "")}"></div>`).join("") +
+        `<div class="field u-gc-full"><label for="acc-secret">${escapeHtml(def.secret[0])} ${help(def.secret[1] + " Stored encrypted; never shown again.")}</label>` +
+        (def.textarea ? `<textarea id="acc-secret" placeholder="${conn ? "set — paste a new one to replace it" : ""}"></textarea>` : `<input id="acc-secret" type="password" autocomplete="off" placeholder="${conn ? "set — enter a new one to replace it" : ""}">`) + `</div>`;
+    };
+    wrap.querySelector("#acc-kind").addEventListener("change", draw);
+    draw();
+    wrap.querySelector("#acc-save").addEventListener("click", async () => {
+      const st = wrap.querySelector("#acc-state"); st.textContent = "saving and testing…";
+      const config = {};
+      wrap.querySelectorAll("#acc-fields [data-key]").forEach(i => { config[i.dataset.key] = i.value.trim(); });
+      const body = { kind: wrap.querySelector("#acc-kind").value, name: wrap.querySelector("#acc-name").value.trim(), config, secret: wrap.querySelector("#acc-secret").value };
+      const r = await fetch(conn ? `/api/certificates/apps/connections/${encodeURIComponent(conn.id)}` : "/api/certificates/apps/connections",
+        { method: conn ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { st.textContent = "Could not save: " + await r.text(); return; }
+      const res = await r.json();
+      loadAppCreds();
+      if (res.test_error) { st.textContent = "Saved, but the test failed: " + res.test_error; return; }
+      wrap.remove();
+      showToast("Connection saved and working", "ok");
+    });
+  });
+}
+
+async function openImport(conn) {
+  openModal(`Import from ${conn.name}`, `<p class="hint" id="aci-state">Asking ${escapeHtml(acData.kinds[conn.kind])} for its applications…</p><div id="aci-body"></div>`, async wrap => {
+    wrap.querySelector(".modal").classList.add("ac-modal");
+    const r = await fetch(`/api/certificates/apps/connections/${encodeURIComponent(conn.id)}/discover`);
+    if (!r.ok) { wrap.querySelector("#aci-state").textContent = "Could not list them: " + await r.text(); loadAppCreds(); return; }
+    const found = (await r.json()).found || [];
+    wrap.querySelector("#aci-state").textContent = found.length ? `${found.length} credential(s) found. Tick the ones to track; you can change each one's settings afterwards.` : "No application credentials found.";
+    if (!found.length) return;
+    wrap.querySelector("#aci-body").innerHTML = `
+      <div class="ac-found">${found.map((c, i) => `<label><input type="checkbox" data-i="${escapeHtml(String(i))}" ${c.imported ? "disabled" : ""}>
+        <span><strong>${escapeHtml(c.app_name)}</strong> · ${escapeHtml(c.type_label)}<div class="names">${escapeHtml(c.display_name || "")}</div></span>
+        <span class="hint">${c.imported ? "already tracked" : c.expires_at ? "expires " + escapeHtml(day(c.expires_at)) : "no expiry"}</span></label>`).join("")}</div>
+      <div class="form-grid u-mt-12">
+        <div class="field"><label for="aci-mode">Track them as ${help("Each one's mode can be changed later under Settings. Push needs the endpoint and file, so it is set per credential.")}</label>
+          <select id="aci-mode"><option value="remind">Remind me</option><option value="download">Renew, keep for download</option></select></div>
+        <div class="field"><label for="aci-rotate">Rotate secrets without expiry every ${help("Authentik and Okta client secrets never expire; this is how often Mustra treats them as due.")}</label>
+          <select id="aci-rotate"><option value="90">90 days</option><option value="180" selected>180 days</option><option value="365">365 days</option></select></div>
+      </div>
+      <div class="save-row"><button class="primary" id="aci-go">Import selected</button><span class="save-status" id="aci-save"></span></div>`;
+    wrap.querySelector("#aci-go").addEventListener("click", async () => {
+      const picked = [...wrap.querySelectorAll(".ac-found input:checked")].map(i => found[+i.dataset.i]);
+      if (!picked.length) { wrap.querySelector("#aci-save").textContent = "Tick at least one."; return; }
+      const mode = wrap.querySelector("#aci-mode").value, rotate = +wrap.querySelector("#aci-rotate").value;
+      let ok = 0, failed = [];
+      for (const c of picked) {
+        const body = Object.assign({}, c, { mode, renew_days: 30, grace_days: 7, rotate_days: c.expires_at ? 0 : rotate });
+        const r = await fetch("/api/certificates/apps/credentials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (r.ok) ok++; else failed.push(`${c.app_name}: ${await r.text()}`);
+      }
+      loadAppCreds();
+      if (failed.length) { wrap.querySelector("#aci-save").textContent = `${ok} imported; ${failed.join("; ")}`; return; }
+      wrap.remove();
+      showToast(`${ok} credential(s) imported`, "ok");
+    });
+  });
+}
+
+function openAppCred(c) {
+  const manual = !c || c.kind === "manual";
+  const types = acData.types || {};
+  const modes = c && c.rotatable ? Object.keys(AC_MODES) : ["remind"];
+  openModal(c ? `${c.app_name} · ${c.type_label}` : "Add a credential by hand", `
+    ${manual ? `<p class="hint u-m-0-0-10">Track a secret or certificate Mustra cannot reach through a provider connection. Mustra reminds you before it expires; renewing stays manual.</p>
+    <div class="form-grid">
+      <div class="field"><label for="ac-app">Application ${help("What uses it, for example Payroll SSO.")}</label><input id="ac-app" value="${escapeHtml(c ? c.app_name : "")}"></div>
+      <div class="field"><label for="ac-type">Type</label><select id="ac-type">${Object.entries(types).map(([k, v]) => `<option value="${escapeHtml(k)}"${c && c.cred_type === k ? " selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select></div>
+      <div class="field"><label for="ac-name">Description ${help("Where it lives or who owns it, so the reminder makes sense on its own.")}</label><input id="ac-name" value="${escapeHtml(c ? c.display_name : "")}"></div>
+      <div class="field"><label for="ac-exp">Expires ${help("Its expiry date. For a certificate you can paste it below instead and Mustra reads the date.")}</label><input id="ac-exp" type="date" value="${escapeHtml(c && c.expires_at ? day(c.expires_at) : "")}"></div>
+      <div class="field u-gc-full"><label for="ac-pem">Certificate (optional) ${help("Paste a PEM certificate (-----BEGIN CERTIFICATE-----) to read its expiry. Only the public certificate; never paste a private key here.")}</label><textarea id="ac-pem"></textarea></div>
+    </div>` : `<p class="hint u-m-0-0-10">${escapeHtml(c.kind_label)} · ${escapeHtml(c.display_name || "")}${c.expires_at ? " · expires " + escapeHtml(day(c.expires_at)) : " · no expiry"}</p>`}
+    <div class="sec-title">When it is due</div>
+    <div class="ac-modes">${modes.map(m => `<label class="ac-mode"><input type="radio" name="ac-mode" value="${escapeHtml(m)}"${(c ? c.mode : "remind") === m ? " checked" : ""}><span><b>${escapeHtml(AC_MODES[m][0])}</b><span>${escapeHtml(AC_MODES[m][1])}</span></span></label>`).join("")}</div>
+    <div class="form-grid">
+      <div class="field"><label for="ac-renew">Act this many days before expiry ${help("Reminders and renewals start this long before the credential expires.")}</label><input id="ac-renew" type="number" min="1" max="365" value="${escapeHtml(String(c ? c.renew_days : 30))}"></div>
+      <div class="field"><label for="ac-rotate">Rotate every (days, no expiry) ${help("For secrets that never expire (Authentik, Okta): treat them as due this long after the last rotation. 0 turns it off.")}</label><input id="ac-rotate" type="number" min="0" max="3650" value="${escapeHtml(String(c ? c.rotate_days : 0))}"></div>
+      <div class="field"><label for="ac-grace">Keep the old one (days) ${help("After a renewal the previous credential keeps working this long so the application can switch over, then Mustra removes it at the provider. Authentik client secrets cannot overlap.")}</label><input id="ac-grace" type="number" min="0" max="90" value="${escapeHtml(String(c ? c.grace_days : 7))}"></div>
+    </div>
+    <div id="ac-push" hidden>
+      <div class="sec-title">Where to push it</div>
+      <div class="form-grid">
+        <div class="field"><label for="ac-agent">Endpoint ${help("The server where the application reads the credential.")}</label><select id="ac-agent"><option value="">Choose…</option>${mcAgents.map(a => `<option value="${escapeHtml(a.agent_id)}"${c && c.push_agent_id === a.agent_id ? " selected" : ""}>${escapeHtml(a.hostname)}</option>`).join("")}</select></div>
+        <div class="field"><label for="ac-path">File ${help("Full path of the file the application reads, for example /etc/grafana/grafana.ini. It is backed up first.")}</label><input id="ac-path" value="${escapeHtml(c ? c.push_path : "")}" placeholder="/etc/grafana/grafana.ini"></div>
+        <div class="field"><label for="ac-key">Key in the file (optional) ${help("To replace only one setting's value (client_secret = …, CLIENT_SECRET=…, client_secret: …), name it. Leave blank to write the whole file with the new secret, certificate and key, or key file.")}</label><input id="ac-key" value="${escapeHtml(c ? c.push_key : "")}" placeholder="client_secret"></div>
+        <div class="field"><label for="ac-reload">Reload command ${help("Run afterwards so the application picks it up, for example systemctl restart grafana-server. If it fails, the old file is put back.")}</label><input id="ac-reload" value="${escapeHtml(c ? c.push_reload : "")}" placeholder="systemctl restart grafana-server"></div>
+      </div>
+    </div>
+    <div class="save-row"><button class="primary" id="ac-save">Save</button><span class="save-status" id="ac-state"></span></div>`, wrap => {
+    wrap.querySelector(".modal").classList.add("ac-modal");
+    const sync = () => { wrap.querySelector("#ac-push").hidden = (wrap.querySelector('input[name="ac-mode"]:checked') || {}).value !== "push"; };
+    wrap.querySelectorAll('input[name="ac-mode"]').forEach(i => i.addEventListener("change", sync));
+    sync();
+    wrap.querySelector("#ac-save").addEventListener("click", async () => {
+      const v = id => (wrap.querySelector("#" + id) || {}).value;
+      const body = Object.assign({}, c || {}, {
+        mode: wrap.querySelector('input[name="ac-mode"]:checked').value,
+        renew_days: +v("ac-renew"), rotate_days: +v("ac-rotate"), grace_days: +v("ac-grace"),
+        push_agent_id: v("ac-agent") || "", push_path: (v("ac-path") || "").trim(), push_key: (v("ac-key") || "").trim(), push_reload: (v("ac-reload") || "").trim(),
+      });
+      if (manual) Object.assign(body, { app_name: v("ac-app").trim(), cred_type: v("ac-type"), display_name: v("ac-name").trim(),
+        expires_at: v("ac-exp") ? new Date(v("ac-exp") + "T00:00:00Z").toISOString() : null, cert_pem: v("ac-pem") });
+      const r = await fetch(c ? `/api/certificates/apps/credentials/${encodeURIComponent(c.id)}` : "/api/certificates/apps/credentials",
+        { method: c ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { wrap.querySelector("#ac-state").textContent = "Could not save: " + await r.text(); return; }
+      wrap.remove(); loadAppCreds(); showToast("Saved", "ok");
+    });
+  });
+}
+
+// --- Expiry alerts (expiry_alerts.go) ----------------------------------------
+
+let alCanEdit = false;
+const ITEM_TYPES = { managed_certificate: "Managed certificate", certificate: "Certificate", app_credential: "App credential", app_credential_rotation: "Rotation due" };
+async function loadAlerts() {
+  const r = await fetch("/api/certificates/alerts"); if (!r.ok) return;
+  const d = await r.json();
+  document.getElementById("al-th").value = d.thresholds || "";
+  document.querySelectorAll(".al-src-cb").forEach(cb => { cb.checked = (d.sources || []).includes(cb.value); cb.disabled = !alCanEdit; });
+  document.getElementById("al-th").disabled = !alCanEdit;
+  document.getElementById("al-save").disabled = !alCanEdit;
+  document.getElementById("al-test").disabled = !alCanEdit;
+  document.getElementById("al-readonly").hidden = alCanEdit;
+  const subs = d.integrations || [];
+  document.getElementById("al-status").textContent = (d.sources || []).includes("off") ? "off" : `at ${d.thresholds} days and on expiry`;
+  document.getElementById("al-subs").innerHTML = subs.length === 0
+    ? '<tr><td class="empty" colspan="3">only the console for now — tick "Certificate &amp; credential expiry" on an integration under Manage integrations</td></tr>'
+    : subs.map(i => `<tr><td><strong>${escapeHtml(i.name)}</strong>${i.enabled ? "" : ' <span class="sev-pill none">off</span>'}</td><td>${escapeHtml(i.kind)}</td>
+        <td>${escapeHtml(i.only_days ? i.only_days.split(",").map(x => x === "0" ? "expired" : x + " days").join(", ") : "every threshold")}</td></tr>`).join("");
+  const up = d.upcoming || [];
+  document.getElementById("al-up-status").textContent = `${up.length} shown`;
+  document.getElementById("al-up").innerHTML = up.length === 0 ? '<tr><td class="empty" colspan="4">nothing with an expiry is being watched</td></tr>'
+    : up.map(i => `<tr><td><a href="${escapeHtml(safeUrl(i.link))}">${escapeHtml(i.name)}</a><div class="names">${escapeHtml(ITEM_TYPES[i.item_type] || i.item_type)}</div></td>
+        <td>${escapeHtml(i.where)}</td><td data-sort="${escapeHtml(i.expires_at)}">${escapeHtml(day(i.expires_at))}</td>
+        <td class="days ${i.days_left <= 7 ? "bad" : i.days_left <= 30 ? "warn" : ""}" data-sort="${escapeHtml(i.days_left)}">${escapeHtml(i.days_left)}</td></tr>`).join("");
+  const rec = d.recent || [];
+  document.getElementById("al-recent").innerHTML = rec.length === 0 ? '<tr><td class="empty" colspan="4">nothing sent yet</td></tr>'
+    : rec.map(a => `<tr><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.threshold === 0 ? "expired" : a.threshold + " days")}</td>
+        <td>${escapeHtml(a.days_left)}</td><td data-sort="${escapeHtml(a.sent_at)}">${escapeHtml(fmtAgo(a.sent_at))}</td></tr>`).join("");
+}
+document.getElementById("al-save").addEventListener("click", async () => {
+  const st = document.getElementById("al-save-status"); st.textContent = "saving…";
+  const body = { thresholds: document.getElementById("al-th").value, sources: [...document.querySelectorAll(".al-src-cb:checked")].map(cb => cb.value) };
+  const r = await fetch("/api/certificates/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  st.textContent = r.ok ? "" : "Could not save: " + await r.text();
+  if (r.ok) { showToast("Expiry alerts saved", "ok"); loadAlerts(); }
+});
+document.getElementById("al-test").addEventListener("click", async () => {
+  const r = await fetch("/api/certificates/alerts/test", { method: "POST" });
+  showToast(r.ok ? "Test expiry alert sent to the integrations that take them" : "Could not send: " + await r.text(), r.ok ? "ok" : "error");
+});
+
+async function loadCoverage() {
+  const resp = await fetch("/api/certificates/coverage");
+  if (!resp.ok) return;
+  const cov = (await resp.json()).coverage || [];
+  const blind = cov.filter(c => !c.reported).length;
+  document.getElementById("cov-status").textContent =
+    blind ? `${blind} endpoint(s) haven't reported` : "every endpoint has reported";
+  const body = document.getElementById("cov-body");
+  body.innerHTML = cov.map(c => `
+    <tr>
+      <td><a href="/endpoint/${escapeHtml(c.agent_id)}">${escapeHtml(c.hostname)}</a></td>
+      <td>${osPillFor(c.agent_id, c.os)}</td>
+      <td data-sort="${escapeHtml(c.count)}">${escapeHtml(c.reported ? c.count : "—")}</td>
+      <td>${c.reported ? '<span class="st ok">reported</span>' : '<span class="st warning">no data</span>'}</td>
+    </tr>`).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "cert-coverage" });
+  if (dt) dt.refresh();
+}
+</script>
+</body>
+</html>

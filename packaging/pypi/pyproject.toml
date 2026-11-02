@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mustra"
+version = "0.0.1"
+description = "Placeholder reserving the name for mustra — an open-source fleet management and endpoint operations platform."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "AGPL-3.0-only"
+authors = [{ name = "mustra-dev" }]
+keywords = ["fleet-management", "endpoint-management", "patch-management", "device-management"]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Intended Audience :: System Administrators",
+  "Topic :: System :: Systems Administration",
+  "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://mustra.dev"
+Source = "https://github.com/mustra-dev/mustra"
+Issues = "https://github.com/mustra-dev/mustra/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

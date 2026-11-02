@@ -1,0 +1,37 @@
+{
+  "notes": "Reads the existing neighbour cache as text without scanning. macOS example covers IPv4 ARP only.",
+  "commands": {
+    "linux": "# Standalone example: Reads the existing neighbour cache as text without scanning. macOS example covers IPv4 ARP only.\nip neigh show\n",
+    "darwin": "# Standalone example: Reads the existing neighbour cache as text without scanning. macOS example covers IPv4 ARP only.\narp -an\n",
+    "windows": "# Standalone example: Reads the existing neighbour cache as text without scanning. macOS example covers IPv4 ARP only.\n$ErrorActionPreference = \"Stop\"\nGet-NetNeighbor | ForEach-Object { '{0} {1} {2}' -f $_.IPAddress, $_.LinkLayerAddress, $_.InterfaceIndex }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

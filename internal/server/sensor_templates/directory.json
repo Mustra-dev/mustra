@@ -1,0 +1,37 @@
+{
+  "notes": "Standalone example: domain membership and the signed-in users' groups, as text. The built-in sensor also reads each user's directory record (enabled, locked, password age, last logon, manager) and the computer's OU and site.",
+  "commands": {
+    "linux": "# Standalone example: the joined realm and each signed-in user's groups, as text.\nrealm list 2>/dev/null | head -1 | sed 's/^/realm: /'\nwho | awk '{print $1}' | sort -u | while read u; do echo \"$u: $(id -Gn \"$u\" 2>/dev/null)\"; done\n",
+    "darwin": "# Standalone example: an Active Directory binding and the console user's groups, as text.\ndsconfigad -show 2>/dev/null | grep 'Active Directory Domain' | sed 's/^ *//'\nu=$(stat -f%Su /dev/console); echo \"$u: $(id -Gn \"$u\")\"\n",
+    "windows": "# Standalone example: domain membership and the signed-in user's AD groups, as text.\n$cs = Get-CimInstance Win32_ComputerSystem\n\"domain: \" + $(if ($cs.PartOfDomain) { $cs.Domain } else { 'none (workgroup)' })\nif ($cs.PartOfDomain -and $cs.UserName) {\n  $n = ($cs.UserName -split '\\\\')[-1]\n  $r = ([adsisearcher]\"(&(objectCategory=person)(sAMAccountName=$n))\").FindOne()\n  if ($r) { $r.Properties['memberof'] | ForEach-Object { \"$n: \" + (($_ -split ',')[0] -replace '^CN=') } }\n}\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 60,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

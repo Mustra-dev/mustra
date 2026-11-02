@@ -1,0 +1,13 @@
+{
+  "name": "htop (test)",
+  "kind": "software",
+  "commands": {
+    "linux": {
+      "install": "apt-get update && apt-get install -y htop",
+      "remove": "apt-get remove -y htop"
+    }
+  },
+  "detect": {
+    "app_name": "htop"
+  }
+}

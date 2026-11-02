@@ -1,0 +1,37 @@
+{
+  "notes": "Hashes one explicitly selected file. Edit the path to change the watched file. Custom results do not enter the built-in integrity baseline, diff, or alert pipeline.",
+  "commands": {
+    "linux": "# Standalone example: Hashes one explicitly selected file. Edit the path to change the watched file. Custom results do not enter the built-in integrity baseline, diff, or alert pipeline.\nsha256sum /etc/hosts\n",
+    "darwin": "# Standalone example: Hashes one explicitly selected file. Edit the path to change the watched file. Custom results do not enter the built-in integrity baseline, diff, or alert pipeline.\nshasum -a 256 /etc/hosts\n",
+    "windows": "# Standalone example: Hashes one explicitly selected file. Edit the path to change the watched file. Custom results do not enter the built-in integrity baseline, diff, or alert pipeline.\n$ErrorActionPreference = \"Stop\"\nGet-FileHash -Algorithm SHA256 \"$env:SystemRoot\\System32\\drivers\\etc\\hosts\" | ForEach-Object { '{0} {1}' -f $_.Hash, $_.Path }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

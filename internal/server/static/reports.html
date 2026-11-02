@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .scope-note { border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                padding: 10px 13px; font-size: 12.5px; line-height: 1.55; margin-bottom: 14px; }
+  .sec-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px;
+              background: var(--surface); }
+  .sec-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .sec-num { width: 22px; height: 22px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted);
+             font-size: var(--fs-meta); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .sec-card-head .spacer { margin-left: auto; }
+  .src-desc { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 10px; }
+  /* The rendered document, shown inside the console. Scoped so a report's
+     own markup can never restyle the page around it. */
+  .rpt-frame { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+               padding: 22px 24px; overflow-x: auto; }
+  .rpt-frame .rpt-head h1 { font-size: 21px; margin: 0 0 6px; }
+  .rpt-frame .rpt-desc { margin: 0 0 6px; font-size: 13px; }
+  .rpt-frame .rpt-stamp { margin: 0 0 22px; color: var(--text-muted); font-size: 12px; }
+  .rpt-frame .rpt-section { margin-bottom: 26px; }
+  .rpt-frame .rpt-section h2 { font-size: 15px; margin: 0 0 6px; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+  .rpt-frame .rpt-note { margin: 6px 0; font-size: 13px; }
+  .rpt-frame .rpt-meta { margin: 4px 0 10px; color: var(--text-muted); font-size: var(--fs-meta); }
+  .rpt-frame .rpt-empty, .rpt-frame .rpt-more { color: var(--text-muted); font-size: 12.5px; }
+  .rpt-frame .rpt-error { color: var(--off); font-size: 13px; }
+  .rpt-frame table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .rpt-frame th, .rpt-frame td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .rpt-frame th { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+  .rpt-frame td.num, .rpt-frame th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .dest-pill { font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+               padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-reports" hidden>
+      <div id="rp-page-head"></div>
+      <div id="rp-quick-links"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Reports</h2><span class="scan-status" id="rp-status"></span></div>
+        <div class="scope-note">
+          Everything in mustra is already exportable, which is not the same thing. An export is a stream of rows for a
+          machine; a report is a page for a person — sections with titles, counts rolled up, and the date it was true.
+          Renderings are <b>kept</b> rather than regenerated, because the point of a monthly report is being able to say
+          what the fleet looked like on the first: re-running today's query against today's data answers a different
+          question.
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Sections</th><th>Schedule</th><th>Delivered to</th><th>Last run</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="rp-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="rp-editor-title">New report</h2>
+        <div class="form-grid">
+          <div class="field"><label for="f-name">Name</label><input id="f-name" placeholder="Weekly fleet health"></div>
+          <div class="field"><label for="f-schedule">Schedule</label><select id="f-schedule">
+            <option value="">Only when run by hand</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select></div>
+          <div class="field"><label for="f-time">At (UTC, HH:MM)</label><input id="f-time" placeholder="07:00"></div>
+          <div class="field"><label for="f-weekday">Weekday</label><select id="f-weekday">
+            <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+            <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option>
+            <option value="6">Saturday</option>
+          </select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="f-description">Description — the line under the title</label>
+            <input id="f-description" placeholder="What this covers, and who it is for"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="f-destination">Deliver to</label><select id="f-destination">
+            <option value="">Nowhere — read it here</option>
+            <option value="file">A file on the server</option>
+            <option value="webhook">A webhook (Discord, Slack, anything)</option>
+            <option value="syslog">Syslog</option>
+          </select></div>
+          <div class="field"><label for="f-target">Target</label><input id="f-target" placeholder="/var/lib/mustra/output/ or https://discord.com/api/webhooks/…"></div>
+          <div class="field"><label for="f-style">Webhook style</label><select id="f-style">
+            <option value="">Plain POST</option>
+            <option value="discord">Discord</option>
+            <option value="slack">Slack</option>
+          </select></div>
+        </div>
+        <p class="hint" id="f-dest-hint"></p>
+        <div class="u-d-flex u-gap-14 u-fw-wrap u-fs-12_5 u-mb-12">
+          <label class="u-d-flex u-ai-center u-gap-6"><input type="checkbox" id="f-enabled" checked> Enabled</label>
+        </div>
+
+        <h3 class="u-fs-12 u-tt-upper u-ls-006em u-c-text-muted u-m-18-0-10">Sections</h3>
+        <div id="f-sections"></div>
+        <div class="panel-actions u-mb-14">
+          <button class="tiny" id="f-add">Add a section</button>
+          <button class="tiny" id="f-example">Load the weekly-health example</button>
+        </div>
+
+        <div class="panel-actions">
+          <button class="primary" id="f-save">Save report</button>
+          <button id="f-cancel">Cancel</button>
+          <span class="scan-status" id="f-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-renderings" hidden>
+      <div class="panel" id="view-panel" hidden>
+        <div class="panel-header"><h2 id="view-title">Rendering</h2><span class="scan-status" id="view-meta"></span></div>
+        <div class="panel-actions u-mb-12">
+          <button class="tiny" id="view-back">Back to all renderings</button>
+          <a class="tiny u-td-none u-d-iblock" id="view-download" href="#">Download as HTML</a>
+        </div>
+        <div class="rpt-frame" id="view-body"></div>
+      </div>
+
+      <div class="panel" id="runs-panel">
+        <div class="panel-header"><h2>Renderings</h2><span class="scan-status" id="runs-status"></span></div>
+        <p class="hint">The last 30 of each report are kept. Older ones are pruned — a shelf, not an archive.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Report</th><th>Generated</th><th>By</th><th>Sections</th><th>Rows</th><th>Delivered</th><th>Action</th></tr></thead>
+            <tbody id="runs-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+let reports = [];
+let runs = [];
+let sources = [];
+let questions = [];
+let editing = null;
+let draft = [];
+let canManage = false;
+
+const EXAMPLE = [
+  { title: "Fleet by platform", source: "endpoints", group_by: "platform",
+    note: "Every managed endpoint, counted by what it runs." },
+  { title: "Endpoints missing patches", source: "patches", group_by: "hostname",
+    note: "Which machines have outstanding updates, worst first." },
+  { title: "Compliance failures", source: "compliance", filter_column: "state", filter_value: "fail",
+    columns: ["hostname", "title", "severity", "detail"], limit: 20,
+    note: "Benchmark checks that are failing right now." },
+  { title: "Enforce: settings mustra gave up on", source: "enforce",
+    filter_column: "state", filter_value: "failing",
+    columns: ["hostname", "setting", "detail"], limit: 20,
+    note: "Desired state that could not be restored and is no longer being retried." },
+  { title: "Deployments this period", source: "deployments",
+    columns: ["what", "target", "devices", "status", "started_at"], limit: 15 },
+];
+
+document.addEventListener("mustra:user", (e) => {
+  canManage = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("settings.manage")));
+  initModuleSections([
+    { hash: "reports", label: "Reports" },
+    { hash: "renderings", label: "Renderings" },
+  ]);
+  renderPageHead("rp-page-head", "/reports", { title: "Reports",
+    sub: "A page for somebody who does not open the console." });
+  renderQuickLinks("rp-quick-links", "/reports", e.detail, [
+    { label: "Connect", href: "/connect", icon: "connect" },
+    { label: "Interact", href: "/interact", icon: "interact" },
+  ]);
+  wireEditor();
+  load();
+  window.addEventListener("hashchange", () => { if (!window.location.hash.startsWith("#renderings")) closeView(); });
+});
+
+async function load() {
+  const [rResp, qResp] = await Promise.all([fetch("/api/reports"), fetch("/api/interact/saved")]);
+  if (rResp.ok) {
+    const d = await rResp.json();
+    reports = d.reports || [];
+    runs = d.runs || [];
+    sources = d.sources || [];
+  }
+  if (qResp.ok) questions = (await qResp.json()).questions || [];
+  renderReports();
+  renderRuns();
+  renderSections();
+  // ?report=<id> opens that report (the top bar's dashboards and reports
+  // search links here), once.
+  const want = new URLSearchParams(location.search).get("report");
+  if (want && reports.some(r => r.id === want)) {
+    const u = new URL(location.href); u.searchParams.delete("report"); history.replaceState(null, "", u);
+    editReport(want);
+  }
+}
+
+function scheduleLabel(p) {
+  if (!p.schedule_kind) return "by hand";
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  if (p.schedule_kind === "weekly") return `${days[p.weekday || 0]} ${p.time_of_day} UTC`;
+  return `daily ${p.time_of_day} UTC`;
+}
+
+function destLabel(r) {
+  if (!r.destination) return `<span class="dest-pill">console only</span>`;
+  return `<span class="dest-pill">${escapeHtml(r.destination)}</span> <span class="u-fs-meta u-c-text-muted">${escapeHtml(r.target)}</span>`;
+}
+
+function renderReports() {
+  const body = document.getElementById("rp-body");
+  document.getElementById("rp-status").textContent = reports.length ? `${reports.length} report(s)` : "";
+  if (reports.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">Nothing yet — write one below, or load the example.</td></tr>`;
+    return;
+  }
+  body.innerHTML = reports.map(r => `
+    <tr${r.enabled ? "" : ' class="u-op-055"'}>
+      <td><b>${escapeHtml(r.name)}</b>
+        ${r.description ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(r.description)}</div>` : ""}
+        ${r.last_error ? `<div class="u-fs-meta u-c-off">${escapeHtml(r.last_error)}</div>` : ""}</td>
+      <td>${escapeHtml(r.section_count)}</td>
+      <td>${escapeHtml(scheduleLabel(r))}${r.next_run_at ? `<div class="u-fs-meta u-c-text-muted">next ${escapeHtml(fmtAgo(r.next_run_at))}</div>` : ""}</td>
+      <td>${destLabel(r)}</td>
+      <td>${r.last_run_at ? escapeHtml(fmtAgo(r.last_run_at)) : "never"}</td>
+      <td>${r.enabled ? "enabled" : "disabled"}</td>
+      <td class="u-ws-nowrap">${canManage ? `
+        <button class="tiny" data-preview="${escapeHtml(r.id)}" title="Render it now without sending it anywhere">Preview</button>
+        ${r.destination ? `<button class="tiny" data-send="${escapeHtml(r.id)}">Run &amp; send</button>` : ""}
+        <button class="tiny" data-edit="${escapeHtml(r.id)}">Edit</button>
+        <button class="tiny danger" data-del="${escapeHtml(r.id)}">Delete</button>` : ""}</td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-preview]").forEach(b => b.addEventListener("click", () => runReport(b.dataset.preview, false, b)));
+  body.querySelectorAll("[data-send]").forEach(b => b.addEventListener("click", () => runReport(b.dataset.send, true, b)));
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => editReport(b.dataset.edit)));
+  body.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => deleteReport(b.dataset.del)));
+}
+
+function renderRuns() {
+  const body = document.getElementById("runs-body");
+  document.getElementById("runs-status").textContent = runs.length ? `${runs.length} kept` : "";
+  if (runs.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">nothing rendered yet</td></tr>`;
+    return;
+  }
+  body.innerHTML = runs.map(r => `
+    <tr>
+      <td><b>${escapeHtml(r.name)}</b>${r.error ? `<div class="u-fs-meta u-c-off">${escapeHtml(r.error)}</div>` : ""}</td>
+      <td data-sort="${escapeHtml(r.generated_at)}">${escapeHtml(fmtAgo(r.generated_at))}</td>
+      <td>${escapeHtml(r.generated_by || "—")}</td>
+      <td>${escapeHtml(r.section_count)}</td>
+      <td>${escapeHtml(r.row_count)}</td>
+      <td>${r.delivered ? "yes" : "—"}</td>
+      <td><button class="tiny" data-open="${escapeHtml(r.id)}">Open</button></td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => showRun(b.dataset.open)));
+}
+
+async function showRun(id) {
+  const resp = await fetch(`/api/reports/runs/${encodeURIComponent(id)}`);
+  if (!resp.ok) { alert("couldn't load that rendering"); return; }
+  const run = (await resp.json()).run;
+  document.getElementById("view-panel").hidden = false;
+  document.getElementById("runs-panel").hidden = true;
+  document.getElementById("view-title").textContent = run.name;
+  document.getElementById("view-meta").textContent =
+    `${run.section_count} sections · ${run.row_count} rows · generated ${fmtAgo(run.generated_at)}`;
+  document.getElementById("view-download").href = `/api/reports/runs/${encodeURIComponent(id)}?download=1`;
+  // The document is mustra's own rendering, already escaped where it was
+  // built — the console only has to scope it so it cannot restyle the page.
+  document.getElementById("view-body").innerHTML = /* safe-html: rendered server-side by reports.go, which escapes every value */ run.html || "<p class='rpt-empty'>empty</p>";
+  window.location.hash = "renderings";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function closeView() {
+  const v = document.getElementById("view-panel");
+  if (v) v.hidden = true;
+  const l = document.getElementById("runs-panel");
+  if (l) l.hidden = false;
+}
+
+// --- editor ------------------------------------------------------------
+
+function sourceDesc(id) {
+  const s = sources.find(x => x.id === id);
+  return s ? s.desc : "";
+}
+
+function wireEditor() {
+  document.getElementById("f-add").addEventListener("click", () => {
+    draft.push({ title: "", source: "endpoints", group_by: "", columns: [], limit: 25 });
+    renderSections();
+  });
+  document.getElementById("f-example").addEventListener("click", () => {
+    draft = JSON.parse(JSON.stringify(EXAMPLE));
+    if (!document.getElementById("f-name").value) document.getElementById("f-name").value = "Weekly fleet health";
+    renderSections();
+  });
+  document.getElementById("f-save").addEventListener("click", saveReport);
+  document.getElementById("f-cancel").addEventListener("click", resetEditor);
+  document.getElementById("view-back").addEventListener("click", closeView);
+  document.getElementById("f-destination").addEventListener("change", syncDestHint);
+  syncDestHint();
+  if (!canManage) {
+    document.querySelectorAll("#section-reports input, #section-reports select, #section-reports textarea, #f-add, #f-save")
+      .forEach(el => { el.disabled = true; });
+  }
+}
+
+function syncDestHint() {
+  const d = document.getElementById("f-destination").value;
+  const hint = {
+    "": "The report is rendered and kept here. Nothing leaves mustra.",
+    file: "Give a directory (ending in /) for a timestamped file per run, or an exact path to overwrite the same one. The full HTML document is written. Use /var/lib/mustra/output/ — that path is a volume that survives a redeploy; anywhere else lives inside the server container and is lost the next time it is rebuilt.",
+    webhook: "A webhook gets the text digest, not the document — a Discord channel is not a place to paste eight hundred lines of HTML. Pick the Discord or Slack style and a plain webhook URL works as-is.",
+    syslog: "udp://host:port or tcp://host:port. The text digest is sent.",
+  }[d] || "";
+  document.getElementById("f-dest-hint").textContent = hint;
+}
+
+function renderSections() {
+  const host = document.getElementById("f-sections");
+  if (draft.length === 0) {
+    host.innerHTML = `<div class="empty">No sections yet — add one, or load the example.</div>`;
+    return;
+  }
+  host.innerHTML = draft.map((s, i) => `
+    <div class="sec-card">
+      <div class="sec-card-head">
+        <span class="sec-num">${i + 1}</span>
+        <input data-f="title" data-i="${i}" value="${escapeHtml(s.title || "")}" placeholder="Section heading"
+          class="u-flex-1 u-minw-160 u-p-6-9 u-br-radius-sm u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-fs-12_5">
+        <span class="spacer"></span>
+        ${canManage ? `
+          <button class="tiny" data-up="${i}"${i === 0 ? " disabled" : ""}>↑</button>
+          <button class="tiny" data-down="${i}"${i === draft.length - 1 ? " disabled" : ""}>↓</button>
+          <button class="tiny danger" data-rm="${i}">Remove</button>` : ""}
+      </div>
+      <div class="form-grid">
+        <div class="field"><label>Data</label><select data-f="source" data-i="${i}">
+          ${sources.map(src => `<option value="${escapeHtml(src.id)}"${s.source === src.id ? " selected" : ""}>${escapeHtml(src.label)}</option>`).join("")}
+        </select></div>
+        ${s.source === "question" ? `
+        <div class="field"><label>Saved query</label><select data-f="saved_question_id" data-i="${i}">
+          <option value="">— choose —</option>
+          ${questions.map(q => `<option value="${escapeHtml(q.id)}"${s.saved_question_id === q.id ? " selected" : ""}>${escapeHtml(q.name)}</option>`).join("")}
+        </select></div>` : ""}
+        <div class="field"><label>Count by (leave blank for a table)</label>
+          <input data-f="group_by" data-i="${i}" value="${escapeHtml(s.group_by || "")}" placeholder="platform"></div>
+        <div class="field"><label>Row limit</label>
+          <input type="number" min="1" max="500" data-f="limit" data-i="${i}" value="${escapeHtml(s.limit || 25)}"></div>
+      </div>
+      <p class="src-desc">${escapeHtml(sourceDesc(s.source))}</p>
+      <div class="form-grid">
+        <div class="field"><label>Columns — comma separated, blank for the first few</label>
+          <input data-f="columns" data-i="${i}" value="${escapeHtml((s.columns || []).join(", "))}" placeholder="hostname, severity, detail"></div>
+        <div class="field"><label>Only rows where this column…</label>
+          <input data-f="filter_column" data-i="${i}" value="${escapeHtml(s.filter_column || "")}" placeholder="state"></div>
+        <div class="field"><label>…contains (prefix ! to exclude)</label>
+          <input data-f="filter_value" data-i="${i}" value="${escapeHtml(s.filter_value || "")}" placeholder="fail"></div>
+      </div>
+      <div class="form-grid u-mb-0">
+        <div class="field u-gc-full"><label>Note under the heading</label>
+          <input data-f="note" data-i="${i}" value="${escapeHtml(s.note || "")}" placeholder="Why this section is here"></div>
+      </div>
+    </div>`).join("");
+
+  host.querySelectorAll("[data-f]").forEach(el => {
+    const handler = () => {
+      const s = draft[Number(el.dataset.i)];
+      const f = el.dataset.f;
+      if (f === "columns") s.columns = el.value.split(",").map(x => x.trim()).filter(Boolean);
+      else if (el.type === "number") s[f] = Number(el.value) || 0;
+      else s[f] = el.value;
+      // Changing the source changes which fields matter, so redraw.
+      if (f === "source") renderSections();
+    };
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
+  });
+  host.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", () => {
+    draft.splice(Number(b.dataset.rm), 1); renderSections();
+  }));
+  host.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => {
+    const i = Number(b.dataset.up); [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]]; renderSections();
+  }));
+  host.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => {
+    const i = Number(b.dataset.down); [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]]; renderSections();
+  }));
+  if (!canManage) host.querySelectorAll("input, select").forEach(el => { el.disabled = true; });
+}
+
+async function editReport(id) {
+  const resp = await fetch(`/api/reports/${encodeURIComponent(id)}`);
+  if (!resp.ok) { alert("couldn't load that report"); return; }
+  const rep = (await resp.json()).report;
+  editing = rep;
+  document.getElementById("rp-editor-title").textContent = "Editing: " + rep.name;
+  document.getElementById("f-name").value = rep.name;
+  document.getElementById("f-description").value = rep.description || "";
+  document.getElementById("f-schedule").value = rep.schedule_kind || "";
+  document.getElementById("f-time").value = rep.time_of_day || "";
+  document.getElementById("f-weekday").value = String(rep.weekday == null ? 0 : rep.weekday);
+  document.getElementById("f-destination").value = rep.destination || "";
+  document.getElementById("f-target").value = rep.target || "";
+  document.getElementById("f-style").value = rep.webhook_style || "";
+  document.getElementById("f-enabled").checked = !!rep.enabled;
+  draft = Array.isArray(rep.sections) ? rep.sections : JSON.parse(rep.sections || "[]");
+  syncDestHint();
+  renderSections();
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function resetEditor() {
+  editing = null;
+  draft = [];
+  document.getElementById("rp-editor-title").textContent = "New report";
+  ["f-name", "f-description", "f-time", "f-target"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("f-schedule").value = "";
+  document.getElementById("f-destination").value = "";
+  document.getElementById("f-style").value = "";
+  document.getElementById("f-enabled").checked = true;
+  document.getElementById("f-status").textContent = "";
+  syncDestHint();
+  renderSections();
+}
+
+async function saveReport() {
+  const status = document.getElementById("f-status");
+  const kind = document.getElementById("f-schedule").value;
+  const body = {
+    id: editing ? editing.id : "",
+    name: document.getElementById("f-name").value,
+    description: document.getElementById("f-description").value,
+    sections: draft,
+    enabled: document.getElementById("f-enabled").checked,
+    schedule_kind: kind,
+    time_of_day: kind ? document.getElementById("f-time").value : "",
+    weekday: kind === "weekly" ? Number(document.getElementById("f-weekday").value) : null,
+    destination: document.getElementById("f-destination").value,
+    target: document.getElementById("f-target").value,
+    webhook_style: document.getElementById("f-style").value,
+  };
+  status.textContent = "saving…";
+  try {
+    const resp = await fetch("/api/reports", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const text = await resp.text();
+    if (!resp.ok) { status.textContent = text.trim(); return; }
+    status.textContent = "saved";
+    resetEditor();
+    await load();
+  } catch (e) {
+    status.textContent = "failed: " + e.message;
+  }
+}
+
+async function runReport(id, deliver, btn) {
+  const rep = reports.find(x => x.id === id);
+  if (deliver && !confirm(`Render "${rep ? rep.name : id}" and send it to ${rep ? rep.target : "its destination"}?`)) return;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const resp = await fetch(`/api/reports/${encodeURIComponent(id)}/run${deliver ? "?deliver=1" : ""}`, { method: "POST" });
+    const text = await resp.text();
+    if (!resp.ok) { alert(text.trim()); return; }
+    const run = JSON.parse(text).run;
+    await load();
+    showRun(run.id);
+  } catch (e) {
+    alert("render failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+async function deleteReport(id) {
+  const rep = reports.find(x => x.id === id);
+  if (!confirm(`Delete "${rep ? rep.name : id}"? Its past renderings go with it.`)) return;
+  const resp = await fetch(`/api/reports/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!resp.ok) { alert(await resp.text()); return; }
+  if (editing && editing.id === id) resetEditor();
+  await load();
+}
+</script>
+</body>
+</html>

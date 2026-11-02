@@ -1,0 +1,37 @@
+{
+  "notes": "Raw service-manager rows; output is not normalized to the built-in service schema.",
+  "commands": {
+    "linux": "# Standalone example: Raw service-manager rows; output is not normalized to the built-in service schema.\nsystemctl list-units --type=service --all --no-legend --no-pager --plain\n",
+    "darwin": "# Standalone example: Raw service-manager rows; output is not normalized to the built-in service schema.\nlaunchctl list\n",
+    "windows": "# Standalone example: Raw service-manager rows; output is not normalized to the built-in service schema.\n$ErrorActionPreference = \"Stop\"\nGet-Service | ForEach-Object { \"{0} {1} {2}\" -f $_.Name, $_.Status, $_.StartType }\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "darwin": {
+      "language": "shell",
+      "output": {
+        "format": "text"
+      }
+    },
+    "windows": {
+      "language": "powershell",
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}

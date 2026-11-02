@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playbooks — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .form-grid textarea { font-family: var(--mono); font-size: 12px; min-height: 60px; resize: vertical; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .scope-note { border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                padding: 10px 13px; font-size: 12.5px; line-height: 1.55; margin-bottom: 14px; }
+  .step-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px;
+               background: var(--surface); }
+  .step-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step-num { width: 22px; height: 22px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted);
+              font-size: var(--fs-meta); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .step-card-head .spacer { margin-left: auto; }
+  .st { font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+        padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+  .st-succeeded { background: var(--ok-bg); color: var(--ok); }
+  .st-running { background: var(--ok-bg); color: var(--accent); }
+  .st-failed { background: var(--off-bg); color: var(--off); }
+  .st-skipped, .st-pending { background: var(--surface-2); color: var(--text-muted); }
+  .st-partial { background: var(--off-bg); color: var(--off); }
+  .matrix td, .matrix th { vertical-align: top; }
+  .matrix .cell { display: block; }
+  .matrix .cell-detail { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 3px; max-width: 200px;
+                         white-space: normal; word-break: break-word; }
+  .kind-pill { font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+               padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: var(--fs-meta); color: var(--text-muted); }
+  .flow .arrow { opacity: .5; }
+  .pb-flow { margin-bottom: 16px; }
+  .pb-node { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-md);
+    padding: 9px 12px; background: var(--surface-2); max-width: 560px; }
+  .pb-node.gate { border-left-color: var(--warn); }
+  .pb-node.stop { border-left-color: var(--off); }
+  .pb-node .n-kind { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+  .pb-node .n-name { font-size: 13px; font-weight: 600; margin-top: 2px; }
+  .pb-node .n-sub { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 3px; white-space: normal; }
+  .pb-edge { margin: 0 0 0 22px; padding: 5px 0 5px 16px; border-left: 2px solid var(--border);
+    font-size: var(--fs-meta); color: var(--text-muted); }
+  .pb-edge b { color: var(--text); font-weight: 600; }
+  .pb-edge.branch { border-left-style: dashed; color: var(--off); }
+  .pb-end { margin: 0 0 0 22px; padding: 5px 0 0 16px; font-size: var(--fs-meta); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-playbooks" hidden>
+      <div id="pb-page-head"></div>
+      <div id="pb-quick-links"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Playbooks</h2><span class="scan-status" id="pb-status"></span></div>
+        <div class="scope-note">
+          A playbook does several things <b>in order, per endpoint</b>, deciding at each step whether the next one still
+          makes sense. Machine seven can be waiting to come back from a reboot while machine three is already finished —
+          a run is not a fleet-wide state machine that halts because one endpoint failed. Nothing new reaches the
+          endpoint: every step is something mustra could already do. What a playbook adds is the patience to wait for a
+          patch to actually finish before deciding whether to reboot.
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Flow</th><th>Targets</th><th>Schedule</th><th>Last run</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="pb-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="pb-editor-title">New playbook</h2>
+        <div class="form-grid">
+          <div class="field"><label for="f-name">Name</label><input id="f-name" placeholder="Patch and reboot the DCs"></div>
+          <div class="field"><label for="f-os">Platform</label><select id="f-os">
+            <option value="">Any platform</option>
+            <option value="linux">Linux</option>
+            <option value="windows">Windows</option>
+            <option value="darwin">macOS</option>
+          </select></div>
+          <div class="field"><label for="f-group">Targets</label><select id="f-group"><option value="">Every endpoint</option></select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="f-description">Description</label>
+            <input id="f-description" placeholder="What this is for, and when it should be used"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="f-schedule">Schedule</label><select id="f-schedule">
+            <option value="">Only when run by hand</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select></div>
+          <div class="field"><label for="f-time">At (UTC, HH:MM)</label><input id="f-time" placeholder="03:00"></div>
+          <div class="field"><label for="f-weekday">Weekday</label><select id="f-weekday">
+            <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+            <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option>
+            <option value="6">Saturday</option>
+          </select></div>
+        </div>
+        <div class="u-d-flex u-gap-14 u-fw-wrap u-fs-12_5 u-mb-12">
+          <label class="u-d-flex u-ai-center u-gap-6"><input type="checkbox" id="f-enabled" checked> Enabled</label>
+        </div>
+
+        <h3 class="u-fs-12 u-tt-upper u-ls-006em u-c-text-muted u-m-18-0-10">Steps</h3>
+        <div id="f-steps"></div>
+        <div class="panel-actions u-mb-14">
+          <select id="f-add-kind" aria-label="Step to add" class="u-p-6-10 u-br-radius-sm u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-fs-12">
+            <option value="patch">Apply patches</option>
+            <option value="wait">Wait</option>
+            <option value="check">Check (gate)</option>
+            <option value="package">Run a package</option>
+            <option value="enforce">Run an Enforce policy</option>
+            <option value="notify">Notify the person</option>
+            <option value="approval">Wait for approval</option>
+          </select>
+          <button class="tiny" id="f-add-step">Add step</button>
+          <button class="tiny" id="f-example">Load the patch-and-reboot example</button>
+        </div>
+
+        <h3 class="u-fs-12 u-tt-upper u-ls-006em u-c-text-muted u-m-18-0-8">Flow</h3>
+        <p class="hint u-m-0-0-10">
+          What this playbook does to one endpoint, in order, with the conditions between the steps drawn rather than
+          described. It is a <b>picture of the steps above</b>, redrawn as you edit them — not a second place to author
+          them. A drag-and-drop canvas is deliberately not built: it would be a second editor for the same nine fields,
+          and the thing that is actually hard to see in a list is the branching, which is what this shows.
+        </p>
+        <div class="pb-flow" id="f-flow"></div>
+
+        <div class="panel-actions">
+          <button class="primary" id="f-save">Save playbook</button>
+          <button id="f-cancel">Cancel</button>
+          <span class="scan-status" id="f-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-runs" hidden>
+      <div class="panel" id="run-detail-panel" hidden>
+        <div class="panel-header"><h2 id="run-title">Run</h2>
+          <span class="scan-status" id="run-status"></span></div>
+        <div class="panel-actions u-mb-12">
+          <button class="tiny" id="run-back">Back to all runs</button>
+          <span class="scan-status" id="run-live"></span>
+        </div>
+        <div class="table-scroll table-scroll-y">
+          <table class="matrix">
+            <thead id="run-head"></thead>
+            <tbody id="run-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="runs-list-panel">
+        <div class="panel-header"><h2>Runs</h2><span class="scan-status" id="runs-status"></span></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Playbook</th><th>Targets</th><th>Endpoints</th><th>Status</th><th>Started</th><th>Finished</th><th>By</th><th>Action</th></tr></thead>
+            <tbody id="runs-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-triggers" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Triggers</h2><span class="scan-status" id="tg-status"></span></div>
+        <p class="hint">
+          Something other than a clock starting a playbook. An <b>event</b> trigger fires when a Guide item is raised
+          that matches it; a <b>webhook</b> trigger fires when something outside posts to a URL.
+          <br><br>
+          Every matching field left empty means <b>any</b>, so a trigger with nothing set fires on everything.
+          That is written here rather than defaulted into quietly. Two guards are not optional and cannot be turned
+          off: a Guide item raised <b>by Playbooks</b> never fires a trigger, because a playbook that raises a
+          notification that starts a playbook is a loop that runs on your fleet until somebody notices; and every
+          trigger has a <b>cooldown</b> of at least <b id="tg-min">60</b> seconds, because a vulnerability feed refresh
+          raises hundreds of items in the same second and without one that is hundreds of attempts to launch the same
+          playbook. The cooldown is claimed in a single conditional UPDATE, so two events in the same millisecond
+          cannot both win.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Playbook</th><th>Kind</th><th>Fires on</th><th>Cooldown</th><th>Fired</th><th>Last</th><th>Action</th></tr></thead>
+            <tbody id="tg-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="tg-form-panel">
+        <div class="panel-header"><h2>New trigger</h2><span class="scan-status" id="tg-save-status"></span></div>
+        <div class="form-grid">
+          <div class="field"><label for="t-playbook">Playbook</label><select id="t-playbook"></select></div>
+          <div class="field"><label for="t-kind">Kind</label><select id="t-kind">
+            <option value="event">A Guide item is raised</option>
+            <option value="webhook">Something posts to a URL</option>
+          </select></div>
+          <div class="field"><label for="t-cooldown">Cooldown (seconds)</label><input type="number" id="t-cooldown" min="60" value="300"></div>
+        </div>
+        <div class="form-grid" id="t-event-fields">
+          <div class="field"><label for="t-source">Source (blank = any)</label><input type="text" id="t-source" placeholder="Patch"></div>
+          <div class="field"><label for="t-severity">Severity (blank = any)</label><select id="t-severity">
+            <option value="">any</option><option value="critical">critical</option>
+            <option value="warning">warning</option><option value="notice">notice</option>
+          </select></div>
+          <div class="field"><label for="t-title">Title contains (blank = any)</label><input type="text" id="t-title" placeholder="failed"></div>
+        </div>
+        <div class="panel-actions">
+          <button class="primary" id="t-save">Create trigger</button>
+          <span class="scan-status" id="t-token"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-approvals" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Waiting for approval</h2><span class="scan-status" id="ap-status"></span></div>
+        <p class="hint">
+          A run that has reached an approval step. <b>One decision per run</b>, not per endpoint. The run is parked in
+          the database, not in a goroutine, so a decision that comes tomorrow — or after a restart — still resumes it
+          from exactly where each endpoint stopped, using the steps the run <b>froze when it started</b> rather than
+          whatever the playbook says now.
+          <br><br>
+          Deciding needs <b>approvals.decide</b>, never deploy.manage: an approval whose only requirement is being
+          allowed to do the thing yourself is not an approval. The person who started the run cannot approve it.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Run</th><th>Stopped at</th><th>Endpoints</th><th>Asked</th><th>State</th><th>Expires</th><th>Action</th></tr></thead>
+            <tbody id="ap-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+let playbooks = [];
+let runs = [];
+let groups = [];
+let packages = [];
+let messages = [];
+let policies = [];
+let editing = null;
+let draft = [];
+let canManage = false;
+let openRun = null;
+let pollTimer = null;
+
+const KIND_LABEL = {
+  patch: "Apply patches", wait: "Wait", check: "Check", package: "Package",
+  enforce: "Enforce policy", notify: "Notify",
+};
+
+// The example is the flow the whole module exists for. Loading it is how
+// somebody sees what a gate and a wait-for-check-in are actually for
+// without reading the documentation first.
+const EXAMPLE = [
+  { kind: "notify", name: "Warn the person", message_id: "", run_if: "always", on_failure: "continue" },
+  { kind: "patch", name: "Apply pending patches", run_if: "always", on_failure: "stop" },
+  { kind: "check", name: "Is a reboot pending?", condition: "any",
+    rules: ["f:/var/run/reboot-required"], run_if: "previous_succeeded", on_failure: "continue" },
+  { kind: "package", name: "Reboot", package_id: "", operation: "install",
+    run_if: "previous_succeeded", on_failure: "stop" },
+  { kind: "wait", name: "Wait for it to come back", wait_seconds: 30, wait_for_online: true,
+    run_if: "previous_succeeded", on_failure: "stop" },
+  { kind: "check", name: "Verify the reboot cleared", condition: "all",
+    rules: ["not f:/var/run/reboot-required"], run_if: "previous_succeeded", on_failure: "continue" },
+];
+
+document.addEventListener("mustra:user", (e) => {
+  canManage = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("deploy.manage")));
+  initModuleSections([
+    { hash: "playbooks", label: "Playbooks" },
+    { hash: "runs", label: "Runs" },
+    { hash: "triggers", label: "Triggers" },
+    { hash: "approvals", label: "Approvals" },
+  ]);
+  renderPageHead("pb-page-head", "/playbooks", { title: "Playbooks",
+    sub: "Several things in order, per endpoint, with the patience to wait between them." });
+  renderQuickLinks("pb-quick-links", "/playbooks", e.detail, [
+    { label: "Patch", href: "/patches", icon: "patch" },
+    { label: "Deploy", href: "/software", icon: "deploy" },
+    { label: "Enforce", href: "/enforce", icon: "lock" },
+  ]);
+  wireEditor();
+  wireTriggers();
+  load();
+  loadApprovals();
+  window.addEventListener("hashchange", () => { if (!window.location.hash.startsWith("#runs")) closeRun(); });
+});
+
+async function load() {
+  const [pbResp, gResp, swResp, eunResp, enfResp] = await Promise.all([
+    fetch("/api/playbooks"), fetch("/api/groups"), fetch("/api/software"),
+    fetch("/api/eun"), fetch("/api/enforce/policies"),
+  ]);
+  if (pbResp.ok) {
+    const d = await pbResp.json();
+    playbooks = d.playbooks || [];
+    runs = d.runs || [];
+  }
+  if (gResp.ok) groups = (await gResp.json()).groups || [];
+  if (swResp.ok) packages = (await swResp.json()).packages || [];
+  if (eunResp.ok) messages = (await eunResp.json()).messages || [];
+  if (enfResp.ok) policies = (await enfResp.json()).policies || [];
+  renderPlaybooks();
+  renderRuns();
+  renderGroupOptions();
+  renderSteps();
+  loadTriggers();
+  const linked=new URLSearchParams(location.search).get("edit");if(linked&&!editing)await editPlaybook(linked);
+}
+
+function scheduleLabel(p) {
+  if (!p.schedule_kind) return "by hand";
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  if (p.schedule_kind === "weekly") return `${days[p.weekday || 0]} ${p.time_of_day} UTC`;
+  return `daily ${p.time_of_day} UTC`;
+}
+
+// Named apart from flowSummary below, which takes one step and returns
+// prose. Both were called flowSummary; the later declaration replaced this
+// one, so the table's Flow column called it with an array, fell through the
+// switch to its empty default, and rendered nothing for every playbook.
+function flowPills(steps) {
+  if (!steps || steps.length === 0) return "—";
+  return `<div class="flow">` + steps.map((s, i) =>
+    `${i ? '<span class="arrow">→</span>' : ""}<span class="kind-pill">${escapeHtml(KIND_LABEL[s.kind] || s.kind)}</span>`
+  ).join("") + `</div>`;
+}
+
+function renderPlaybooks() {
+  const body = document.getElementById("pb-body");
+  document.getElementById("pb-status").textContent = playbooks.length ? `${playbooks.length} playbook(s)` : "";
+  if (playbooks.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">Nothing yet — write one below, or load the example.</td></tr>`;
+    return;
+  }
+  body.innerHTML = playbooks.map(p => {
+    const steps = Array.isArray(p.steps) ? p.steps : [];
+    // See enforce.html: an orphan must not read as "Every endpoint".
+    const where = p.group_deleted
+      ? "no targets — its group was deleted"
+      : (p.group_name || "Every endpoint") + (p.os ? " · " + osLabel(p.os) : "");
+    return `<tr${p.enabled ? "" : ' class="u-op-055"'}>
+      <td><b>${escapeHtml(p.name)}</b>
+        ${p.description ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(p.description)}</div>` : ""}</td>
+      <td>${flowPills(steps)}</td>
+      <td${p.group_deleted ? ' class="u-c-off u-fwt-600"' : ""}>${escapeHtml(where)}</td>
+      <td>${escapeHtml(scheduleLabel(p))}${p.next_run_at ? `<div class="u-fs-meta u-c-text-muted">next ${escapeHtml(fmtAgo(p.next_run_at))}</div>` : ""}</td>
+      <td>${p.last_run_at ? escapeHtml(fmtAgo(p.last_run_at)) : "never"}</td>
+      <td>${p.enabled ? "enabled" : "disabled"}</td>
+      <td class="u-ws-nowrap">${canManage ? `
+        <button class="tiny" data-run="${escapeHtml(p.id)}">Run now</button>
+        <button class="tiny" data-edit="${escapeHtml(p.id)}">Edit</button>
+        <button class="tiny danger" data-del="${escapeHtml(p.id)}">Delete</button>` : ""}</td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", () => runNow(b.dataset.run, b)));
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => editPlaybook(b.dataset.edit)));
+  body.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => deletePlaybook(b.dataset.del)));
+}
+
+function renderRuns() {
+  const body = document.getElementById("runs-body");
+  document.getElementById("runs-status").textContent = runs.length ? `${runs.length} run(s)` : "";
+  if (runs.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="8">no runs yet</td></tr>`;
+    return;
+  }
+  body.innerHTML = runs.map(r => `
+    <tr>
+      <td><b>${escapeHtml(r.name)}</b></td>
+      <td>${escapeHtml(r.target_desc)}</td>
+      <td>${escapeHtml(r.agent_count)}</td>
+      <td><span class="st st-${escapeHtml(r.status)}">${escapeHtml(r.status)}</span></td>
+      <td data-sort="${escapeHtml(r.started_at)}">${escapeHtml(fmtAgo(r.started_at))}</td>
+      <td>${r.finished_at ? escapeHtml(fmtAgo(r.finished_at)) : "—"}</td>
+      <td>${escapeHtml(r.triggered_by || "—")}</td>
+      <td><button class="tiny" data-open="${escapeHtml(r.id)}">Open</button></td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => showRun(b.dataset.open)));
+}
+
+// --- the live run view ------------------------------------------------
+
+async function showRun(runID) {
+  openRun = runID;
+  document.getElementById("run-detail-panel").hidden = false;
+  document.getElementById("runs-list-panel").hidden = true;
+  window.location.hash = "runs";
+  await refreshRun();
+}
+
+function closeRun() {
+  openRun = null;
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  const panel = document.getElementById("run-detail-panel");
+  if (panel) panel.hidden = true;
+  const list = document.getElementById("runs-list-panel");
+  if (list) list.hidden = false;
+}
+
+async function refreshRun() {
+  if (!openRun) return;
+  const resp = await fetch(`/api/playbooks/runs/${encodeURIComponent(openRun)}`);
+  if (!resp.ok) { document.getElementById("run-body").innerHTML = `<tr><td class="empty">couldn't load that run</td></tr>`; return; }
+  const { run, results } = await resp.json();
+  const steps = Array.isArray(run.steps) ? run.steps : [];
+
+  document.getElementById("run-title").textContent = run.name;
+  document.getElementById("run-status").innerHTML =
+    `<span class="st st-${escapeHtml(run.status)}">${escapeHtml(run.status)}</span> · ${escapeHtml(run.agent_count)} endpoints · ${escapeHtml(run.target_desc)}`;
+  document.getElementById("run-live").textContent = run.finished_at
+    ? "finished " + fmtAgo(run.finished_at)
+    : "live — refreshing every 3s";
+
+  document.getElementById("run-head").innerHTML =
+    `<tr><th>Endpoint</th>${steps.map((s, i) =>
+      `<th>${i + 1}. ${escapeHtml(s.name || KIND_LABEL[s.kind] || s.kind)}<div class="u-fwt-400 u-c-text-muted u-fs-meta">${escapeHtml(KIND_LABEL[s.kind] || s.kind)}</div></th>`
+    ).join("")}</tr>`;
+
+  const byHost = {};
+  for (const r of results) {
+    (byHost[r.agent_id] = byHost[r.agent_id] || { hostname: r.hostname, agent_id: r.agent_id, steps: {} })
+      .steps[r.step_index] = r;
+  }
+  const hosts = Object.values(byHost).sort((a, b) => (a.hostname || "").localeCompare(b.hostname || ""));
+  document.getElementById("run-body").innerHTML = hosts.length === 0
+    ? `<tr><td class="empty" colspan="${escapeHtml(steps.length + 1)}">no endpoint has started yet</td></tr>`
+    : hosts.map(h => `<tr>
+        <td><a href="/endpoint/${encodeURIComponent(h.agent_id)}">${escapeHtml(h.hostname || h.agent_id)}</a></td>
+        ${steps.map((s, i) => {
+          const r = h.steps[i];
+          if (!r) return `<td><span class="st st-pending">pending</span></td>`;
+          return `<td><span class="st st-${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+            ${r.detail ? `<span class="cell-detail">${escapeHtml(r.detail.slice(0, 220))}</span>` : ""}</td>`;
+        }).join("")}
+      </tr>`).join("");
+
+  if (pollTimer) clearTimeout(pollTimer);
+  if (!run.finished_at && openRun) pollTimer = setTimeout(refreshRun, 3000);
+}
+
+// --- editor -----------------------------------------------------------
+
+function renderGroupOptions() {
+  const sel = document.getElementById("f-group");
+  const keep = sel.value;
+  sel.innerHTML = `<option value="">Every endpoint</option>` +
+    groups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${escapeHtml(g.member_count)})</option>`).join("");
+  sel.value = keep;
+}
+
+function wireEditor() {
+  document.getElementById("f-add-step").addEventListener("click", () => {
+    const kind = document.getElementById("f-add-kind").value;
+    draft.push({ kind, name: KIND_LABEL[kind], run_if: "always", on_failure: "stop",
+                 condition: "all", rules: [], operation: "install", wait_seconds: 0,
+                 approval_hours: 24, approval_reason: "" });
+    renderSteps();
+  });
+  document.getElementById("f-example").addEventListener("click", () => {
+    draft = JSON.parse(JSON.stringify(EXAMPLE));
+    renderSteps();
+  });
+  document.getElementById("f-save").addEventListener("click", savePlaybook);
+  document.getElementById("f-cancel").addEventListener("click", resetEditor);
+  document.getElementById("run-back").addEventListener("click", closeRun);
+  if (!canManage) {
+    document.querySelectorAll("#section-playbooks input, #section-playbooks select, #section-playbooks textarea")
+      .forEach(el => { el.disabled = true; });
+  }
+}
+
+function optionList(items, selected, valueKey, labelFn) {
+  return `<option value="">— choose —</option>` + items.map(i =>
+    `<option value="${escapeHtml(i[valueKey])}"${i[valueKey] === selected ? " selected" : ""}>${escapeHtml(labelFn(i))}</option>`
+  ).join("");
+}
+
+function stepBody(s, i) {
+  switch (s.kind) {
+    case "patch":
+      return `<p class="hint">Applies whatever is pending and then <b>waits for the endpoint to report what actually
+        happened</b> — minutes, sometimes hours. That wait is the reason this is a step and not a button.</p>`;
+    case "wait":
+      return `<div class="form-grid">
+        <div class="field"><label>Wait first (seconds)</label>
+          <input type="number" min="0" data-f="wait_seconds" data-i="${escapeHtml(i)}" value="${Number(s.wait_seconds || 0)}"></div>
+        <div class="field u-d-flex u-ai-end"><label class="u-d-flex u-ai-center u-gap-6 u-m-0-0-9">
+          <input type="checkbox" data-f="wait_for_online" data-i="${escapeHtml(i)}"${s.wait_for_online ? " checked" : ""}>
+          Then wait until it checks in again</label></div>
+      </div>
+      <p class="hint">"Checks in again" means a heartbeat newer than the moment this step started — which is how a
+      reboot is detected. A plain online check would sail straight past a machine that has not rebooted yet.</p>`;
+    case "check":
+      return `<div class="form-grid">
+        <div class="field"><label>Rules must be</label><select data-f="condition" data-i="${escapeHtml(i)}">
+          ${[["all", "all true"], ["any", "any true"], ["none", "none true"]].map(([v, l]) =>
+            `<option value="${escapeHtml(v)}"${(s.condition || "all") === v ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}
+        </select></div>
+      </div>
+      <div class="form-grid"><div class="field u-gc-full">
+        <label>Rules — one per line, the dialect Comply and Enforce use</label>
+        <textarea data-f="rules" data-i="${escapeHtml(i)}" placeholder="not f:/var/run/reboot-required">${escapeHtml((s.rules || []).join("\n"))}</textarea>
+      </div></div>
+      <p class="hint">A check that cannot be evaluated fails the gate rather than passing it — a gate that opens
+      because nobody could read it is worse than one that stays shut.</p>`;
+    case "package":
+      return `<div class="form-grid">
+        <div class="field"><label>Package</label><select data-f="package_id" data-i="${escapeHtml(i)}">
+          ${optionList(packages, s.package_id, "id", p => p.name)}</select></div>
+        <div class="field"><label>Operation</label><select data-f="operation" data-i="${escapeHtml(i)}">
+          ${(packages.find(p=>p.id===s.package_id)?.deploy_definition?.kind==="action"?["run"]:["install", "update", "remove"]).map(v =>
+            `<option value="${escapeHtml(v)}"${(s.operation || "install") === v ? " selected" : ""}>${escapeHtml(v)}</option>`).join("")}
+        </select></div>
+      </div>
+      <div class="form-grid"><div class="field"><label>Pinned published version (blank = current on save)</label><select data-f="revision_id" data-i="${escapeHtml(i)}"><option value="">Current version on save</option>${deployRevisions.filter(r=>r.package_id===s.package_id&&r.published&&(!r.retired||r.id===s.revision_id)).map(r=>`<option value="${escapeHtml(r.id)}"${r.id===s.revision_id?' selected':''}>${escapeHtml(r.label||r.id)}${r.retired?' (retired — select replacement)':''}</option>`).join('')}</select></div><label><input type="checkbox" data-f="follow_latest" data-i="${escapeHtml(i)}"${s.follow_latest?' checked':''}> Follow latest published version</label></div>
+      <div class="form-grid"><div class="field u-gc-full">
+        <label>Parameters — name=value, one per line</label>
+        <textarea data-f="params" data-i="${escapeHtml(i)}" placeholder="version=1.2.3">${escapeHtml(paramsToText(s.params))}</textarea>
+      </div></div>
+      <p class="hint">A package with no command for an endpoint's platform makes this step <b>skipped</b> there, not
+      failed — otherwise a mixed-platform playbook halts on its first step.</p>`;
+    case "enforce":
+      return `<div class="form-grid">
+        <div class="field u-gc-full"><label>Enforce policy</label><select data-f="policy_id" data-i="${escapeHtml(i)}">
+          ${optionList(policies, s.policy_id, "id", p => `${p.name} (${p.mode})`)}</select></div>
+      </div>
+      <p class="hint">Runs that policy against this endpoint alone, honouring its mode — a policy in report mode still
+      only reports here.</p>`;
+    case "approval":
+      return `<div class="form-grid">
+        <div class="field u-gc-full"><label>What the approver is being asked</label>
+          <input type="text" data-f="approval_reason" data-i="${escapeHtml(i)}" placeholder="This reboots the domain controllers."
+            value="${escapeHtml(s.approval_reason || "")}"></div>
+        <div class="field"><label>Give up after (hours)</label>
+          <input type="number" min="1" max="168" data-f="approval_hours" data-i="${escapeHtml(i)}" value="${Number(s.approval_hours || 24)}"></div>
+      </div>
+      <p class="hint">The <b>whole run</b> stops here, not this one endpoint — asking forty people to approve the same
+      change forty times is not an approval gate. Every endpoint that reaches it joins one pending decision, and the
+      run is resumed from the database when somebody decides, so it survives a restart and an approval that arrives
+      tomorrow. Deciding needs <b>approvals.decide</b>, and the person who started the run cannot approve it.
+      If nobody decides in time the run closes as failed, with every remaining step recorded as skipped and why.</p>`;
+    case "notify":
+      return `<div class="form-grid">
+        <div class="field u-gc-full"><label>Message</label><select data-f="message_id" data-i="${escapeHtml(i)}">
+          ${optionList(messages, s.message_id, "id", m => `${m.title} (${m.kind})`)}</select></div>
+      </div>
+      <p class="hint">Succeeds when the endpoint <b>has</b> the message. What the person answers comes back separately,
+      as it does for a hand-sent notification.</p>`;
+    default:
+      return "";
+  }
+}
+
+// renderFlow draws the steps as a chain with the conditions on the edges.
+// The list above says what each step is; this says what reaches it.
+const FLOW_KIND_LABEL = {
+  patch: "Apply patches", wait: "Wait", check: "Check (gate)", package: "Run a package",
+  enforce: "Enforce policy", notify: "Notify the person", approval: "Wait for approval",
+};
+
+function flowSummary(s) {
+  switch (s.kind) {
+    case "patch": return "applies what is pending, then waits for the endpoint to report the outcome";
+    case "wait": return `${Number(s.wait_seconds || 0)}s${s.wait_for_online ? ", then until it checks in again" : ""}`;
+    case "check": return `${escapeHtml((s.rules || []).length)} rule(s) must be ${escapeHtml(s.condition || "all")} true`;
+    case "package": {
+      const p = packages.find(x => x.id === s.package_id);
+      return `${escapeHtml(s.operation || "install")} ${p ? escapeHtml(p.name) : "— no package chosen —"}`;
+    }
+    case "enforce": {
+      const p = policies.find(x => x.id === s.policy_id);
+      return p ? escapeHtml(p.name) : "— no policy chosen —";
+    }
+    case "notify": {
+      const m = messages.find(x => x.id === s.message_id);
+      return m ? escapeHtml(m.title) : "— no message chosen —";
+    }
+    case "approval":
+      return `the run stops until somebody approves${s.approval_hours ? `, or ${Number(s.approval_hours)}h passes` : ""}`;
+    default: return "";
+  }
+}
+
+function renderFlow() {
+  const host = document.getElementById("f-flow");
+  if (!host) return;
+  const steps = draft;
+  if (!steps.length) { host.innerHTML = '<p class="hint u-m-0">No steps yet.</p>'; return; }
+  const parts = ['<div class="pb-edge">the endpoint is in scope and online</div>'];
+  steps.forEach((s, i) => {
+    const cls = s.kind === "approval" ? " gate" : "";
+    parts.push(`<div class="pb-node${cls}">
+      <div class="n-kind">step ${i + 1} · ${escapeHtml(FLOW_KIND_LABEL[s.kind] || s.kind)}</div>
+      <div class="n-name">${escapeHtml(s.name || FLOW_KIND_LABEL[s.kind] || s.kind)}</div>
+      <div class="n-sub">${flowSummary(s)}</div>
+    </div>`);
+    const stops = s.on_failure !== "continue";
+    if (i < steps.length - 1) {
+      const next = steps[i + 1];
+      const cond = next.run_if === "previous_succeeded" ? "if this <b>succeeded</b>"
+        : next.run_if === "previous_failed" ? "if this <b>failed</b>"
+        : "<b>always</b>, whatever this did";
+      parts.push(`<div class="pb-edge">${cond}</div>`);
+      if (stops) {
+        parts.push(`<div class="pb-edge branch">if this fails, the run <b>stops here</b> for this endpoint — every
+          step after it is recorded as skipped, with the reason</div>`);
+      } else {
+        parts.push(`<div class="pb-edge">if this fails, it is recorded red and the run <b>carries on anyway</b></div>`);
+      }
+    } else {
+      parts.push(`<div class="pb-end">then this endpoint is done${stops ? "" : " — a failure here is recorded but does not fail the endpoint"}</div>`);
+    }
+  });
+  host.innerHTML = parts.join("");
+}
+
+function paramsToText(params) {
+  if (!params) return "";
+  return Object.entries(params).map(([k, v]) => `${k}=${v}`).join("\n");
+}
+
+function textToParams(text) {
+  const out = {};
+  for (const line of (text || "").split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    const eq = t.indexOf("=");
+    if (eq > 0) out[t.slice(0, eq).trim()] = t.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+function renderSteps() {
+  const host = document.getElementById("f-steps");
+  if (draft.length === 0) {
+    host.innerHTML = `<div class="empty">No steps yet — add one, or load the example.</div>`;
+    return;
+  }
+  host.innerHTML = draft.map((s, i) => `
+    <div class="step-card">
+      <div class="step-card-head">
+        <span class="step-num">${i + 1}</span>
+        <span class="kind-pill">${escapeHtml(KIND_LABEL[s.kind] || s.kind)}</span>
+        <input data-f="name" data-i="${i}" value="${escapeHtml(s.name || "")}" placeholder="What this step is for"
+          class="u-flex-1 u-minw-160 u-p-6-9 u-br-radius-sm u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-fs-12_5">
+        <span class="spacer"></span>
+        ${canManage ? `
+          <button class="tiny" data-up="${i}"${i === 0 ? " disabled" : ""}>↑</button>
+          <button class="tiny" data-down="${i}"${i === draft.length - 1 ? " disabled" : ""}>↓</button>
+          <button class="tiny danger" data-rm="${i}">Remove</button>` : ""}
+      </div>
+      ${stepBody(s, i)}
+      <div class="form-grid u-mb-0">
+        <div class="field"><label>Run this step</label><select data-f="run_if" data-i="${i}">
+          <option value="always"${(s.run_if || "always") === "always" ? " selected" : ""}>always</option>
+          <option value="previous_succeeded"${s.run_if === "previous_succeeded" ? " selected" : ""}>only if the previous step succeeded</option>
+          <option value="previous_failed"${s.run_if === "previous_failed" ? " selected" : ""}>only if the previous step failed</option>
+        </select></div>
+        <div class="field"><label>If it fails</label><select data-f="on_failure" data-i="${i}">
+          <option value="stop"${(s.on_failure || "stop") === "stop" ? " selected" : ""}>stop this endpoint here</option>
+          <option value="continue"${s.on_failure === "continue" ? " selected" : ""}>carry on anyway</option>
+        </select></div>
+        <div class="field"><label>Timeout (seconds, blank for the default)</label>
+          <input type="number" min="0" data-f="timeout_seconds" data-i="${i}" value="${escapeHtml(s.timeout_seconds || "")}"></div>
+      </div>
+    </div>`).join("");
+
+  host.querySelectorAll("[data-f]").forEach(el => {
+    const handler = () => {
+      const s = draft[Number(el.dataset.i)];
+      const f = el.dataset.f;
+      if (f === "rules") s.rules = el.value.split("\n").map(x => x.trim()).filter(Boolean);
+      else if (f === "params") s.params = textToParams(el.value);
+      else if (el.type === "checkbox") s[f] = el.checked;
+      else if (el.type === "number") s[f] = Number(el.value) || 0;
+      else s[f] = el.value;
+      if(f==="package_id"){s.revision_id="";s.operation=packages.find(p=>p.id===s.package_id)?.deploy_definition?.kind==="action"?"run":"install";renderSteps();}
+    };
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
+  });
+  host.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", () => {
+    draft.splice(Number(b.dataset.rm), 1); renderSteps();
+  }));
+  host.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => {
+    const i = Number(b.dataset.up);
+    [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]];
+    renderSteps();
+  }));
+  host.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => {
+    const i = Number(b.dataset.down);
+    [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]];
+    renderSteps();
+  }));
+  if (!canManage) host.querySelectorAll("input, select, textarea").forEach(el => { el.disabled = true; });
+  renderFlow();
+}
+
+async function editPlaybook(id) {
+  const resp = await fetch(`/api/playbooks/${encodeURIComponent(id)}`);
+  if (!resp.ok) { alert("couldn't load that playbook"); return; }
+  const p = (await resp.json()).playbook;
+  editing = p;
+  document.getElementById("pb-editor-title").textContent = "Editing: " + p.name;
+  document.getElementById("f-name").value = p.name;
+  document.getElementById("f-description").value = p.description || "";
+  document.getElementById("f-os").value = p.os || "";
+  document.getElementById("f-group").value = p.group_id || "";
+  document.getElementById("f-schedule").value = p.schedule_kind || "";
+  document.getElementById("f-time").value = p.time_of_day || "";
+  document.getElementById("f-weekday").value = String(p.weekday == null ? 0 : p.weekday);
+  document.getElementById("f-enabled").checked = !!p.enabled;
+  draft = Array.isArray(p.steps) ? p.steps : JSON.parse(p.steps || "[]");
+  renderSteps();
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function resetEditor() {
+  editing = null;
+  draft = [];
+  document.getElementById("pb-editor-title").textContent = "New playbook";
+  ["f-name", "f-description", "f-time"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("f-os").value = "";
+  document.getElementById("f-group").value = "";
+  document.getElementById("f-schedule").value = "";
+  document.getElementById("f-enabled").checked = true;
+  document.getElementById("f-status").textContent = "";
+  renderSteps();
+}
+
+async function savePlaybook() {
+  const status = document.getElementById("f-status");
+  const kind = document.getElementById("f-schedule").value;
+  const body = {
+    id: editing ? editing.id : "",
+    name: document.getElementById("f-name").value,
+    description: document.getElementById("f-description").value,
+    os: document.getElementById("f-os").value,
+    group_id: document.getElementById("f-group").value,
+    enabled: document.getElementById("f-enabled").checked,
+    steps: draft,
+    schedule_kind: kind,
+    time_of_day: kind ? document.getElementById("f-time").value : "",
+    weekday: kind === "weekly" ? Number(document.getElementById("f-weekday").value) : null,
+  };
+  status.textContent = "saving…";
+  try {
+    const resp = await fetch("/api/playbooks", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const text = await resp.text();
+    if (!resp.ok) { status.textContent = text.trim(); return; }
+    status.textContent = "saved";
+    resetEditor();
+    await load();
+  } catch (e) {
+    status.textContent = "failed: " + e.message;
+  }
+}
+
+async function runNow(id, btn) {
+  const p = playbooks.find(x => x.id === id);
+  const steps = p && Array.isArray(p.steps) ? p.steps : [];
+  const flow = steps.map((s, i) => `${i + 1}. ${s.name || KIND_LABEL[s.kind] || s.kind}`).join("\n");
+  if (!confirm(`Run "${p ? p.name : id}" now?\n\n${flow}\n\nEach matching endpoint walks these in order.`)) return;
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`/api/playbooks/${encodeURIComponent(id)}/run`, { method: "POST" });
+    const text = await resp.text();
+    if (!resp.ok) { alert(text.trim()); return; }
+    const d = JSON.parse(text);
+    await load();
+    showRun(d.run_id);
+  } catch (e) {
+    alert("run failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deletePlaybook(id) {
+  const p = playbooks.find(x => x.id === id);
+  if (!confirm(`Delete "${p ? p.name : id}"? Its past runs are kept.`)) return;
+  const resp = await fetch(`/api/playbooks/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!resp.ok) { alert(await resp.text()); return; }
+  if (editing && editing.id === id) resetEditor();
+  await load();
+}
+
+// ---- triggers and approvals ---------------------------------------------
+let triggers = [];
+
+function wireTriggers() {
+  const kind = document.getElementById("t-kind");
+  const sync = () => { document.getElementById("t-event-fields").style.display = kind.value === "event" ? "" : "none"; };
+  kind.addEventListener("change", sync);
+  sync();
+  document.getElementById("t-save").addEventListener("click", saveTrigger);
+}
+
+async function loadTriggers() {
+  const r = await fetch("/api/playbook-triggers");
+  if (!r.ok) { document.getElementById("tg-body").innerHTML = '<tr><td class="empty" colspan="7">could not load</td></tr>'; return; }
+  const d = await r.json();
+  triggers = d.triggers || [];
+  document.getElementById("tg-min").textContent = d.min_cooldown;
+  document.getElementById("tg-status").textContent = `${triggers.length} trigger(s)`;
+  document.getElementById("tg-body").innerHTML = triggers.length ? triggers.map(t => {
+    const on = t.kind === "webhook"
+      ? `<code>POST /hooks/playbook/&lt;token&gt;</code>${t.has_token ? "" : ' <span class="u-c-off">no token</span>'}`
+      : [escapeHtml(t.source || "any source"), escapeHtml(t.severity || "any severity"), t.title_match ? `title contains “${escapeHtml(t.title_match)}”` : "any title"].join(" · ");
+    return `<tr>
+      <td><b>${escapeHtml(t.playbook_name || t.playbook_id)}</b>${t.enabled ? "" : ' <span class="state-pill state-not_applicable">off</span>'}</td>
+      <td>${escapeHtml(t.kind)}</td>
+      <td class="u-ws-normal u-fs-12">${on}</td>
+      <td>${escapeHtml(t.min_interval_seconds)}s</td>
+      <td>${escapeHtml(t.fire_count)}</td>
+      <td class="u-ws-normal u-fs-12">${t.last_fired_at ? `${escapeHtml(fmtAgo(t.last_fired_at))}<div class="hint">${escapeHtml(t.last_detail || "")}</div>` : "never"}</td>
+      <td><button class="tiny" data-tg="${escapeHtml(t.id)}">Delete</button></td></tr>`;
+  }).join("") : '<tr><td class="empty" colspan="7">nothing but the clock starts a playbook yet</td></tr>';
+  document.querySelectorAll("#tg-body button[data-tg]").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest("tr"), id = b.dataset.tg;
+    undoable({ text: "Trigger deleted", hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/playbook-triggers/${encodeURIComponent(id)}`, { method: "DELETE", keepalive: true }); loadTriggers(); } });
+  }));
+  document.getElementById("t-playbook").innerHTML =
+    playbooks.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+}
+
+async function saveTrigger() {
+  const status = document.getElementById("tg-save-status");
+  const body = {
+    playbook_id: document.getElementById("t-playbook").value,
+    kind: document.getElementById("t-kind").value,
+    enabled: true,
+    min_interval_seconds: Number(document.getElementById("t-cooldown").value) || 300,
+    source: document.getElementById("t-source").value.trim(),
+    severity: document.getElementById("t-severity").value,
+    title_match: document.getElementById("t-title").value.trim(),
+  };
+  if (!body.playbook_id) { status.textContent = "choose a playbook"; return; }
+  if (body.kind === "event" && !body.source && !body.severity && !body.title_match &&
+      !confirm("This trigger matches every Guide item raised by anything. Create it anyway?")) return;
+  status.textContent = "saving…";
+  const r = await fetch("/api/playbook-triggers", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!r.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await r.text())}</span>`; return; }
+  const out = await r.json();
+  status.innerHTML = '<span class="u-c-ok">created</span>';
+  // Shown once, here, and never again — a secret that stays readable in a
+  // console is a secret in every screen share it appears in.
+  document.getElementById("t-token").innerHTML = out.token
+    ? `<span class="u-c-ok">POST to <code>/hooks/playbook/${escapeHtml(out.token)}</code> — copy it now, it is not shown again.</span>`
+    : "";
+  loadTriggers();
+}
+
+async function loadApprovals() {
+  const r = await fetch("/api/playbook-approvals");
+  if (!r.ok) { document.getElementById("ap-body").innerHTML = '<tr><td class="empty" colspan="7">could not load</td></tr>'; return; }
+  const d = await r.json();
+  const list = d.pauses || [];
+  const pending = list.filter(p => p.state === "pending");
+  document.getElementById("ap-status").textContent = `${pending.length} waiting · ${list.length} in the last 200`;
+  document.getElementById("ap-body").innerHTML = list.length ? list.map(p => `<tr>
+    <td><b>${escapeHtml(p.run_name || p.run_id)}</b></td>
+    <td>${escapeHtml(p.step_name)}<div class="hint u-ws-normal u-maxw-320">${escapeHtml(p.reason)}</div></td>
+    <td>${escapeHtml((p.agent_ids || []).length)}</td>
+    <td>${escapeHtml(p.requested_by)}</td>
+    <td><span class="state-pill ${p.state === "approved" ? "state-installed" : p.state === "pending" ? "state-update_eligible" : "state-not_applicable"}">${escapeHtml(p.state)}</span>
+      ${p.decided_by ? `<div class="hint">by ${escapeHtml(p.decided_by)}</div>` : ""}</td>
+    <td>${p.expires_at ? escapeHtml(fmtAgo(p.expires_at)) : "—"}</td>
+    <td class="u-ws-nowrap">${p.state === "pending"
+      ? `<button class="tiny" data-ap="${escapeHtml(p.run_id)}" data-ok="1">Approve</button>
+         <button class="tiny" data-ap="${escapeHtml(p.run_id)}" data-ok="0">Reject</button>` : ""}</td></tr>`).join("")
+    : '<tr><td class="empty" colspan="7">no run has reached an approval step</td></tr>';
+  document.querySelectorAll("#ap-body button[data-ap]").forEach(b => b.addEventListener("click", async () => {
+    const approve = b.dataset.ok === "1";
+    if (!confirm(approve ? "Approve the rest of this run?" : "Reject it? Every remaining step is recorded as skipped.")) return;
+    const resp = await fetch(`/api/playbook-approvals/${encodeURIComponent(b.dataset.ap)}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approve, note: "" }),
+    });
+    if (!resp.ok) { alert(await resp.text()); return; }
+    loadApprovals();
+  }));
+}
+
+let deployRevisions=[];
+fetch('/api/deploy/packages/all/revisions').then(r=>r.ok?r.json():Promise.reject(Error('Cannot load revisions'))).then(d=>{deployRevisions=d.revisions||[];if(typeof renderSteps==='function')renderSteps();}).catch(()=>{});
+</script>
+</body>
+</html>

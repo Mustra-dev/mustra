@@ -1,0 +1,8 @@
+{
+  "name": "mustra-e2e-ui",
+  "private": true,
+  "description": "Browser crawl for the mustra end-to-end tests (test/e2e).",
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}

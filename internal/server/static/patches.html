@@ -1,0 +1,1458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patches — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .sev-pill { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; }
+  .sev-pill.security { background: var(--off-bg); color: var(--off); }
+  .sev-pill.none { background: var(--surface-2); color: var(--text-muted); }
+  .apply-btn.is-busy { display: inline-flex; align-items: center; gap: 7px; opacity: .75; cursor: not-allowed; }
+  .spin-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: spin-dot .8s linear infinite; }
+  @keyframes spin-dot { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin-dot { animation-duration: 2.5s; } }
+  details.affected summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+  details.affected { margin-top: 2px; }
+  .rescan-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .rescan-output { font-size: var(--fs-small); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px; background: var(--surface-2); }
+  .rescan-output ul { margin: 6px 0 0; padding-left: 18px; }
+  .rescan-output .rescan-err { font-family: var(--mono); color: var(--off); overflow-wrap: anywhere; }
+  .rescan-output .rescan-wait { font-family: var(--mono); color: var(--text-muted); overflow-wrap: anywhere; }
+  .apply-output { font-family: var(--mono); font-size: var(--fs-meta); white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; margin-top: 6px; max-height: 160px; overflow-y: auto; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; margin-bottom: 14px; }
+  .form-grid .field { margin: 0; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .enabled-toggle { cursor: pointer; }
+  button.tiny { font-size: var(--fs-meta); padding: 4px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .deploy-summary { font-size: 12px; margin-top: 8px; }
+  .deploy-summary .ok { color: var(--ok); }
+  .deploy-summary .bad { color: var(--off); }
+
+  /* Specific-endpoint targeting: a scrolling checklist rather than a
+     multi-select, so the OS, site and backlog that decide the choice are
+     visible next to each hostname. */
+  .host-picker { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); margin-top: 6px; }
+  .host-row { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: 12.5px; cursor: pointer; }
+  .host-row:hover { background: var(--surface-2); }
+  .host-row + .host-row { border-top: 1px solid var(--border); }
+  .host-row .host-meta { margin-left: auto; color: var(--text-muted); font-size: var(--fs-meta); }
+  .host-tools { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .host-tools input { flex: 1 1 200px; }
+
+  .cve-chip { font-family: var(--mono); font-size: var(--fs-meta); color: var(--accent); background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 6px; }
+  .vuln-row { cursor: pointer; }
+  .vuln-row:hover { background: var(--surface-2); }
+  .affected-scroll { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .affected-scroll table { margin: 0; }
+  .affected-scroll thead th { position: sticky; top: 0; background: var(--surface); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <h1 class="sr-only">Patch</h1>
+    <div class="module-section" id="section-overview" hidden>
+      <div id="patch-quick-links"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Endpoint patch readiness</h2><span class="scan-status" id="readiness-status"></span></div>
+        <div class="readiness-bar" id="readiness-bar"></div>
+        <div class="readiness-legend" id="readiness-legend"></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Endpoints by pending patches</div>
+          <div class="chart-sub">How deep the backlog is, per reporting device</div>
+          <div id="chart-backlog"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Most widespread missing patches</div>
+          <div class="chart-sub">Missing on the most devices across the fleet</div>
+          <div class="hbars" id="chart-top-patches"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Devices with the largest backlog</div>
+          <div class="chart-sub">Pending patches per device, highest first</div>
+          <div class="hbars" id="chart-top-devices"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Missing patches by operating system</div>
+          <div class="chart-sub">Distinct patches pending, by the system each device runs</div>
+          <div class="hbars" id="chart-by-os"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Missing patches</h2><span class="scan-status" id="patches-summary"></span></div>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8">
+          Built from each agent's cached patches sensor (auto-refreshed on the usual sensor interval) — not a live query.
+          A patch is <strong>superseded</strong> the moment any endpoint reports a newer version of it pending.
+          <label class="u-ml-10"><input type="checkbox" id="hide-superseded" checked> hide superseded</label>
+        </p>
+        <div class="table-scroll table-scroll-y rows-10 no-cards">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th>OS</th><th>Patch</th><th>Version</th><th>Severity</th><th>First seen</th><th>Missing on</th></tr></thead>
+            <tbody id="patches-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="devices-panel">
+        <div class="panel-header"><h2>Devices</h2><div class="rescan-head"><span class="scan-status" id="devices-count"></span><button class="tiny" id="devices-rescan" type="button" hidden>Rescan now</button></div></div>
+        <div class="rescan-output" id="devices-rescan-output" hidden></div>
+        <div class="query-row" id="devices-filter-row" hidden>
+          <span class="u-fs-12 u-c-text-muted">Showing <strong id="devices-filter-label"></strong></span>
+          <button class="tiny u-w-auto" id="devices-filter-clear">Show all reporting devices</button>
+        </div>
+        <div class="query-row" id="devices-bulk-row" hidden>
+          <span class="u-fs-12 u-c-text-muted"><span id="devices-selected-count">0</span> selected</span>
+          <button class="primary u-w-auto" id="devices-apply-selected">Apply patches to selected</button>
+        </div>
+        <div class="table-scroll table-scroll-y rows-10 no-cards">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th><input type="checkbox" id="devices-select-all" aria-label="Select all devices"></th><th>Hostname</th><th>OS</th><th>Site</th><th>Pending patches</th><th>Last checked</th><th>Action</th></tr></thead>
+            <tbody id="devices-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="apply-output" id="devices-apply-output" hidden></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-deploy" hidden>
+      <div class="panel">
+        <h2>Deploy now</h2>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8">
+          Fires the same "apply patches" job immediately on every online device matching the target — a one-off bulk push, not a schedule.
+        </p>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="deploy-target">Target</label><select id="deploy-target"></select></div>
+          <div class="field u-gc-full" id="deploy-hosts-field" hidden>
+            <label>Endpoints <span id="deploy-hosts-count" class="u-c-text-muted u-fwt-400"></span></label>
+            <div class="host-tools">
+              <input id="deploy-hosts-filter" placeholder="filter by hostname, OS or site" autocomplete="off">
+              <button class="tiny u-w-auto" data-hosts-all="deploy">Select all shown</button>
+              <button class="tiny u-w-auto" data-hosts-none="deploy">Clear</button>
+            </div>
+            <div class="host-picker" id="deploy-hosts-list"></div>
+          </div>
+          <div class="field" id="deploy-override-field" hidden><label><input type="checkbox" id="deploy-override"> Override maintenance windows</label></div>
+          <div class="field"><button class="primary" id="deploy-now-btn">Deploy now</button></div>
+        </div>
+        <div class="deploy-summary u-fs-12 u-c-text-muted" id="deploy-preview"></div>
+        <div class="deploy-summary" id="deploy-summary"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Scheduled &amp; recurring deployments</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Target</th><th>Schedule</th><th>Next run</th><th>Last run</th><th>Enabled</th><th>Action</th></tr></thead>
+            <tbody id="schedules-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">New schedule</h3>
+        <div class="form-grid">
+          <div class="field"><label for="sched-name">Name</label><input id="sched-name" placeholder="Weekly Linux patching"></div>
+          <div class="field"><label for="sched-target">Target</label><select id="sched-target"></select></div>
+          <div class="field u-gc-full" id="sched-hosts-field" hidden>
+            <label>Endpoints <span id="sched-hosts-count" class="u-c-text-muted u-fwt-400"></span></label>
+            <div class="host-tools">
+              <input id="sched-hosts-filter" placeholder="filter by hostname, OS or site" autocomplete="off">
+              <button class="tiny u-w-auto" data-hosts-all="sched">Select all shown</button>
+              <button class="tiny u-w-auto" data-hosts-none="sched">Clear</button>
+            </div>
+            <div class="host-picker" id="sched-hosts-list"></div>
+            <p class="u-fs-meta u-c-text-muted u-m-6-0-0">A named set is frozen: the schedule fires at these endpoints whenever they are online, and at nothing else.</p>
+          </div>
+          <div class="field"><label for="sched-kind">Cadence</label>
+            <select id="sched-kind">
+              <option value="once">Once</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <div class="field" id="sched-field-runat"><label for="sched-runat">Date &amp; time (local)</label><input type="datetime-local" id="sched-runat"></div>
+          <div class="field" id="sched-field-weekday" hidden><label for="sched-weekday">Day of week</label>
+            <select id="sched-weekday">
+              <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+              <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+            </select>
+          </div>
+          <div class="field" id="sched-field-time" hidden><label for="sched-time">Time (local)</label><input type="time" id="sched-time" value="03:00"></div>
+          <div class="field"><button class="primary" id="sched-add">Create schedule</button></div>
+        </div>
+        <p class="u-fs-meta u-c-text-muted">Times are entered in your browser's local time and converted to UTC for storage.</p>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-deployments" hidden>
+      <div id="patch-deployments"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Schedules</h2><span class="scan-status">Recurring jobs — each firing creates its own deployment above</span></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Target</th><th>Cadence</th><th>Next run</th><th>Last run</th><th>Status</th></tr></thead>
+            <tbody id="schedule-deployments-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-policies" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Patch lists and block lists</h2><span class="scan-status" id="ppl-status"></span></div>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8 u-lh-1_55">
+          A <strong>patch list</strong> says what may be applied; a <strong>block list</strong> says what may not. Both are rules —
+          severity, operating system, name patterns, minimum age — over whatever is pending. An endpoint no patch list covers
+          may receive everything; block lists always subtract. Every deployment, bulk, scheduled or single-device, is narrowed
+          this way before it is sent. Agents older than 0.44.0 cannot apply a narrowed set and are refused with the reason.
+        </p>
+        <div class="query-row u-mb-8">
+          <button class="tiny" id="ppl-export">Export JSON</button>
+          <button class="tiny" id="ppl-import">Import JSON</button>
+          <input type="file" id="ppl-import-file" accept="application/json" hidden>
+          <span class="scan-status" id="ppl-io-status"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Kind</th><th>Name</th><th>Rules</th><th>Covers</th><th>Matches now</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="ppl-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="ppl-editor-title">New list</h2>
+        <div class="form-grid">
+          <div class="field"><label for="ppl-kind">Kind</label><select id="ppl-kind"><option value="allow">Patch list (what may be applied)</option><option value="block">Block list (what may not)</option></select></div>
+          <div class="field"><label for="ppl-name">Name</label><input id="ppl-name" placeholder="Security only, a week old"></div>
+          <div class="field"><label for="ppl-desc">Description</label><input id="ppl-desc" placeholder="optional"></div>
+          <div class="field"><label for="ppl-groups">Covers groups (none = every endpoint)</label><select id="ppl-groups" multiple size="4"></select></div>
+        </div>
+        <div class="form-grid top">
+          <div class="field"><label>Severity</label><div class="checks"><label><input type="checkbox" id="ppl-sev-security"> security</label><label><input type="checkbox" id="ppl-sev-other"> unclassified</label></div><div class="hint u-mt-4">None ticked = any.</div></div>
+          <div class="field"><label>Operating system</label><div class="checks"><label><input type="checkbox" value="linux" class="ppl-os"> Linux</label><label><input type="checkbox" value="windows" class="ppl-os"> Windows</label><label><input type="checkbox" value="darwin" class="ppl-os"> macOS</label></div><div class="hint u-mt-4">None ticked = any.</div></div>
+          <div class="field"><label for="ppl-patterns">Name patterns (one per line; * and ? wildcards, otherwise substring)</label><textarea id="ppl-patterns" rows="3" placeholder="linux-image-*&#10;cumulative&#10;KB50*"></textarea></div>
+          <div class="field"><label for="ppl-age">Minimum age (days seen pending; 0 = no minimum)</label><input id="ppl-age" type="number" min="0" max="365" value="0"></div>
+        </div>
+        <div class="checks"><label><input type="checkbox" id="ppl-enabled" checked> Enabled</label></div>
+        <div class="panel-actions">
+          <button class="primary" id="ppl-save">Save list</button>
+          <button id="ppl-cancel">Cancel</button>
+          <span class="scan-status" id="ppl-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-scanmgmt" hidden>
+      <div class="panel">
+        <h2>Repository lists</h2>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8">
+          A repository list scopes a Linux host's scan/apply to a specific set of repos instead of whatever's natively
+          configured on it. A host with no list assigned keeps using its official distro repos, unchanged. Which patches
+          may then be applied is decided by Patch Lists, not here.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Package manager</th><th>Repos</th><th>Description</th><th>Action</th></tr></thead>
+            <tbody id="plists-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">New repository list</h3>
+        <div class="form-grid">
+          <div class="field"><label for="plist-name">Name</label><input id="plist-name" placeholder="Ubuntu security-only"></div>
+          <div class="field"><label for="plist-osfamily">Package manager</label>
+            <select id="plist-osfamily">
+              <option value="apt">apt (Debian/Ubuntu)</option>
+              <option value="dnf">dnf (Fedora/RHEL)</option>
+            </select>
+          </div>
+          <div class="field"><label for="plist-desc">Description</label><input id="plist-desc" placeholder="optional"></div>
+        </div>
+        <div class="field u-mb-14">
+          <label for="plist-repos" class="u-d-block u-fs-meta u-c-text-muted u-mb-4" id="plist-repos-label">Repos — one sources.list line per repo</label>
+          <textarea id="plist-repos" rows="4" placeholder="deb http://archive.ubuntu.com/ubuntu jammy-security main restricted"
+            class="u-w-100p u-p-8-10 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-ff-mono u-fs-12 u-rs-vertical"></textarea>
+        </div>
+        <button class="primary" id="plist-add">Create repository list</button>
+      </div>
+
+      <div class="panel">
+        <h2>Assignments</h2>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8">
+          Which Linux hosts use which repository list. A rule naming both a site and a platform (set through the API) covers only
+          that platform's hosts at that site. When more than one rule matches a host, the most specific wins:
+          a single device, then a site and platform, then a site, then a platform.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Repository list</th><th>Target</th><th>Action</th></tr></thead>
+            <tbody id="passign-body"><tr><td class="empty" colspan="3">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">New assignment</h3>
+        <div class="form-grid">
+          <div class="field"><label for="passign-list">Repository list</label><select id="passign-list"></select></div>
+          <div class="field"><label for="passign-target">Target</label><select id="passign-target"></select></div>
+          <div class="field"><button class="primary" id="passign-add">Assign</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-history" hidden>
+      <div class="panel">
+        <h2>Recent activity</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>When</th><th>Schedule</th><th>Target</th><th>Devices started</th><th>Triggered by</th></tr></thead>
+            <tbody id="history-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script src="/static/deployments.js"></script>
+<script>
+let canApply = false;
+document.addEventListener("mustra:user", (e) => {
+  canApply = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("patches.manage")));
+  document.getElementById("devices-rescan").hidden = !canApply;
+  renderDevices();
+  const items = [{ hash: "overview", label: "Overview" }];
+  // The readiness bar needs the full inventory to count devices that have
+  // never reported, so this loads for every viewer, not just patchers.
+  loadFleetAgents();
+  renderDashboard();
+  if (canApply) {
+    items.push(
+      { hash: "deploy", label: "Deploy & Schedule" },
+      { hash: "deployments", label: "Deployments" },
+      { hash: "history", label: "Recent Activity" },
+      { hash: "policies", label: "Patch Lists" },
+      { hash: "scanmgmt", label: "Scan Management" },
+    );
+    renderTargetOptions();
+    loadSchedules();
+    loadDeployments().then(openLinkedRun);
+    loadHistory();
+    loadPatchLists();
+    loadPatchListAssignments();
+    loadPolicies();
+    applyAgentHandoff();
+    previewDeploy();
+  }
+  initModuleSections(items);
+});
+
+let summary = { agents: [], patches: [] };
+
+async function loadPatches() {
+  const resp = await fetch("/api/patches");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  summary = await resp.json();
+  document.getElementById("patches-summary").textContent =
+    `${summary.patches.length} distinct patch(es) missing across ${summary.agents.length} reporting device(s)`;
+  renderPatchGroups();
+  renderDevices();
+  renderDashboard();
+  if (canApply) renderTargetOptions();
+  applyDeviceHandoff();
+  followOpenJobs();
+}
+
+// While any device has a patch job open, check again every few seconds so
+// its "Installing…" clears when the job ends. One reload after Apply was not
+// enough: a job still running at that moment stayed "Installing…" until the
+// page was refreshed by hand.
+let followTimer = null;
+function followOpenJobs() {
+  clearTimeout(followTimer);
+  followTimer = null;
+  const open = (summary.agents || []).filter(a => a.patching);
+  if (open.length) {
+    // A macOS install through the MDM runs for an hour or more; no need
+    // to ask every five seconds while that is all that is open.
+    const wait = open.every(a => a.patching === "installing macOS") ? 30000 : 5000;
+    followTimer = setTimeout(() => { if (!document.hidden) loadPatches(); else followOpenJobs(); }, wait);
+  }
+}
+
+// A drill-down from Home (/patches?devices=up_to_date) opens the Devices
+// table already narrowed, once, on the first load.
+let deviceHandoffDone = false;
+function applyDeviceHandoff() {
+  if (deviceHandoffDone) return;
+  deviceHandoffDone = true;
+  const key = new URLSearchParams(window.location.search).get("devices");
+  if (key && DEVICE_FILTERS[key]) setDeviceFilter(key);
+}
+
+// --- Overview dashboard ---
+//
+// Everything here is derived from the same cached patches sensor the tables
+// below show — no separate rollup to drift out of sync with them.
+
+// patchSystems names the systems a pending patch is pending on (Debian,
+// Raspberry Pi OS), from its affected devices, rather than the kernel family.
+function patchSystems(p) {
+  const byId = Object.fromEntries((summary.agents || []).map(a => [a.agent_id, platformLabel(a.distro) || osLabel(a.os)]));
+  const names = [...new Set((p.affected_agents || []).map(x => byId[x.agent_id]).filter(Boolean))].sort();
+  return names.length ? names : [osLabel(p.os)];
+}
+
+function renderDashboard() {
+  renderQuickLinks("patch-quick-links", "/patches", currentUser, [
+    { href: "/risk", icon: "alert", label: "Risk & Compliance" },
+  ]);
+
+  const agents = summary.agents || [];
+  const patches = summary.patches || [];
+
+  const securityAgents = securityAgentSet();
+  const upToDate = agents.filter(a => deviceState(a, securityAgents) === "up_to_date").length;
+  const otherPending = agents.filter(a => deviceState(a, securityAgents) === "pending").length;
+  const securityPending = agents.filter(a => deviceState(a, securityAgents) === "security").length;
+  const checkFailing = agents.filter(a => deviceState(a, securityAgents) === "check_failed").length;
+  // Devices mustra knows about that have never published the sensor: they
+  // aren't "compliant", they're unmeasured, and lumping them in with either
+  // side would overstate what we actually know.
+  const notReporting = nonReportingDevices().length;
+
+  document.getElementById("readiness-status").textContent =
+    `${agents.length} of ${fleetAgents.length || agents.length} device(s) reporting`;
+  stackedStatusBar(
+    document.getElementById("readiness-bar"),
+    document.getElementById("readiness-legend"),
+    [
+      { key: "up_to_date", label: "Up to date", value: upToDate, color: "var(--viz-good)" },
+      { key: "pending", label: "Patches pending", value: otherPending, color: "var(--viz-warning)" },
+      { key: "security", label: "Security patches pending", value: securityPending, color: "var(--viz-critical)" },
+      { key: "check_failed", label: "Patch check failing", value: checkFailing, color: "var(--viz-serious, var(--viz-critical))" },
+      { key: "not_reporting", label: "Not reporting", value: notReporting, color: "var(--viz-none)" },
+    ],
+    { selected: deviceFilter, onSelect: setDeviceFilter },
+  );
+
+  const buckets = [
+    { label: "0", test: n => n === 0 },
+    { label: "1–9", test: n => n >= 1 && n <= 9 },
+    { label: "10–49", test: n => n >= 10 && n <= 49 },
+    { label: "50+", test: n => n >= 50 },
+  ].map(b => {
+    const value = agents.filter(a => b.test(a.patch_count)).length;
+    return { label: b.label, value, hint: `${value} device(s) with ${b.label} pending patch(es)` };
+  });
+  columnChart(document.getElementById("chart-backlog"), buckets, { unit: "devices", empty: "no device has reported yet" });
+
+  // One measure, so one hue: severity rides a visible tag beside the name
+  // rather than a second bar color, which would put meaning in color alone.
+  const topPatches = [...patches].sort((a, b) => b.affected_count - a.affected_count).slice(0, 8).map(p => ({
+    label: p.name,
+    value: p.affected_count,
+    tag: p.severity === "security" ? "security" : "",
+    hint: `${p.name} — missing on ${p.affected_count} device(s)${p.severity === "security" ? ", flagged security" : ""}`,
+  }));
+  hBarChart(document.getElementById("chart-top-patches"), topPatches, { unit: "devices", empty: "nothing missing — or no device has reported yet" });
+
+  const topDevices = agents.filter(a => a.patch_count > 0)
+    .sort((a, b) => b.patch_count - a.patch_count).slice(0, 8)
+    .map(a => ({ label: a.hostname, value: a.patch_count, hint: `${a.hostname} — ${a.patch_count} pending patch(es)` }));
+  hBarChart(document.getElementById("chart-top-devices"), topDevices, { unit: "patches", empty: "every reporting device is up to date" });
+
+  // Grouped by the system each affected device actually runs (Debian,
+  // Raspberry Pi OS, Ubuntu, a Windows edition), not the kernel family: a
+  // patch pending on Debian and Raspberry Pi OS boxes counts once in each.
+  const distroOf = {};
+  for (const a of agents) distroOf[a.agent_id] = platformLabel(a.distro) || osLabel(a.os);
+  const byOS = {};
+  for (const p of patches) {
+    const systems = new Set((p.affected_agents || []).map(x => distroOf[x.agent_id]).filter(Boolean));
+    if (!systems.size) systems.add(osLabel(p.os));
+    for (const sys of systems) byOS[sys] = (byOS[sys] || 0) + 1;
+  }
+  const osRows = Object.entries(byOS).sort((a, b) => b[1] - a[1])
+    .map(([os, count]) => ({
+      label: os, value: count,
+      hint: `${os} — ${count} distinct patch(es) pending`,
+    }));
+  hBarChart(document.getElementById("chart-by-os"), osRows, { unit: "patches", empty: "nothing missing yet" });
+}
+
+// --- Which devices is a readiness number made of? ------------------------
+//
+// The bar and the Devices table below it have to agree, so the state of a
+// device is decided in one place and both read it from here.
+
+const DEVICE_FILTERS = {
+  up_to_date: "devices that are up to date",
+  pending: "devices with patches pending",
+  security: "devices with security patches pending",
+  not_reporting: "devices that are not reporting",
+  check_failed: "devices whose last patch check failed",
+  needs_patching: "devices with any patch pending",
+};
+
+let deviceFilter = "";
+
+// Devices with at least one patch the distro flagged as security — a
+// materially more urgent state than a routine backlog.
+function securityAgentSet() {
+  const out = new Set();
+  for (const p of summary.patches || []) {
+    if (p.severity !== "security") continue;
+    for (const a of p.affected_agents || []) out.add(a.agent_id);
+  }
+  return out;
+}
+
+function deviceState(a, securityAgents) {
+  // A failed check means the count below is old, or (no list yet) unknown:
+  // neither is evidence of being up to date.
+  if (a.check_error) return "check_failed";
+  if (!a.patch_count) return "up_to_date";
+  return securityAgents.has(a.agent_id) ? "security" : "pending";
+}
+
+// Inventory the patches summary has never heard from. These have no row in
+// the Devices table normally, so "Not reporting" has to build its own from
+// the fleet list — a number that drills into nothing would be worse than
+// one that cannot be clicked.
+function nonReportingDevices() {
+  const reporting = new Set((summary.agents || []).map(a => a.agent_id));
+  return fleetAgents.filter(a => !reporting.has(a.agent_id))
+    .map(a => ({ ...a, patch_count: null, collected_at: "" }));
+}
+
+function setDeviceFilter(key) {
+  deviceFilter = key || "";
+  renderDashboard();
+  renderDevices();
+  if (deviceFilter) document.getElementById("devices-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+document.getElementById("devices-filter-clear").addEventListener("click", () => setDeviceFilter(""));
+
+function renderPatchGroups() {
+  const body = document.getElementById("patches-body");
+  const hide = document.getElementById("hide-superseded").checked;
+  const patches = (summary.patches || []).filter(p => !(hide && p.superseded));
+  const superseded = (summary.patches || []).filter(p => p.superseded).length;
+  document.getElementById("patches-summary").textContent = `${patches.length} shown${superseded ? ` · ${superseded} superseded${hide ? " hidden" : ""}` : ""}`;
+  if (patches.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no missing patches reported — or no agent has published the patches sensor yet</td></tr>';
+    return;
+  }
+  body.innerHTML = patches.map(p => `
+    <tr class="${p.superseded ? "muted" : ""}">
+      <td>${patchSystems(p).map(x => `<span class="os-pill" title="${escapeHtml(p.os)}">${escapeHtml(x)}</span>`).join(" ")}</td>
+      <td>${escapeHtml(p.name)}${p.restart_required ? ' <span class="sev-pill none" title="Installing it restarts the computer">restart</span>' : ""}${p.superseded ? ' <span class="sev-pill none" title="A newer version of this patch is pending on at least one endpoint">superseded</span>' : ""}</td>
+      <td>${escapeHtml(p.new_version || "—")}</td>
+      <td><span class="sev-pill ${p.severity === "security" ? "security" : "none"}">${escapeHtml(p.severity || "unspecified")}</span></td>
+      <td data-sort="${escapeHtml(p.age_days || 0)}">${p.first_seen ? `${escapeHtml(p.age_days)} day${p.age_days === 1 ? "" : "s"} ago` : "—"}</td>
+      <td>
+        <details class="affected">
+          <summary>${escapeHtml(p.affected_count)} device(s)</summary>
+          ${p.affected_agents.map(a => `<div>${escapeHtml(a.hostname)}${a.current_version ? ` (${escapeHtml(a.current_version)} → ${escapeHtml(a.new_version)})` : ""}</div>`).join("")}
+        </details>
+      </td>
+    </tr>
+  `).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "patches-missing" });
+  if (dt) dt.refresh();
+}
+
+// The rows currently drawn, which is not always summary.agents: a
+// readiness drill-down narrows them, and "Not reporting" replaces them
+// with inventory that has no patch data at all. Selections and the Apply
+// buttons index into this, never into the unfiltered summary.
+let renderedDevices = [];
+
+function renderDevices() {
+  const body = document.getElementById("devices-body");
+  const securityAgents = securityAgentSet();
+  renderedDevices = deviceFilter === "not_reporting"
+    ? nonReportingDevices()
+    : (summary.agents || []).filter(a => {
+      if (!deviceFilter) return true;
+      const state = deviceState(a, securityAgents);
+      // Home's compliance bar splits only "compliant" from "not", so it
+      // needs a filter spanning both pending states.
+      return deviceFilter === "needs_patching" ? state !== "up_to_date" : state === deviceFilter;
+    });
+
+  document.getElementById("devices-filter-row").hidden = !deviceFilter;
+  document.getElementById("devices-filter-label").textContent = DEVICE_FILTERS[deviceFilter] || "";
+
+  if ((summary.agents || []).length === 0 && !deviceFilter) {
+    document.getElementById("devices-count").textContent = "";
+    body.innerHTML = '<tr><td class="empty" colspan="7">no agent has published the patches sensor yet</td></tr>';
+    return;
+  }
+  document.getElementById("devices-count").textContent = deviceFilter
+    ? `${renderedDevices.length} of ${(summary.agents || []).length} reporting device(s) shown`
+    : `${renderedDevices.length} device(s) reporting`;
+  if (renderedDevices.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="7">no device is in that state</td></tr>';
+    syncDevicesBulkRow();
+    return;
+  }
+  body.innerHTML = renderedDevices.map((a, i) => `
+    <tr>
+      <td>${canApply && a.patch_count > 0 ? `<input type="checkbox" class="device-check" data-idx="${i}" aria-label="Select ${escapeHtml(a.hostname || a.agent_id)}"${a.patching ? ' disabled title="Already patching"' : a.apply_elsewhere ? ` disabled title="${escapeHtml(a.apply_elsewhere)}"` : ""}>` : ""}</td>
+      <td><a href="/endpoint/${encodeURIComponent(a.agent_id)}">${escapeHtml(a.hostname)}</a></td>
+      <td><span class="os-pill" title="${escapeHtml(a.os)}">${escapeHtml(osDisplay(a))}</span></td>
+      <td>${escapeHtml(a.site)}</td>
+      <td data-sort="${escapeHtml(a.patch_count == null || (a.check_error && !a.collected_at) ? -1 : a.patch_count)}">${escapeHtml(a.patch_count == null || (a.check_error && !a.collected_at) ? "unknown" : a.patch_count)}${a.check_error
+        ? ` <span class="sev-pill security" title="${escapeHtml(`Last check failed${a.check_failing_since ? ` (failing since ${fmtDate(a.check_failing_since)})` : ""}: ${a.check_error}`)}">check failing</span>` : ""}</td>
+      <td data-sort="${escapeHtml(a.collected_at || "")}">${a.collected_at ? fmtAgo(a.collected_at) : "never"}${a.check_error && a.check_failing_since ? `<div class="hint">failing since ${escapeHtml(fmtAgo(a.check_failing_since))}</div>` : ""}</td>
+      <td>${a.patching ? patchingBadge(a) : a.apply_elsewhere && a.patch_count > 0 ? `<button disabled title="${escapeHtml(a.apply_elsewhere)}">Update in Home Assistant</button>` : canApply && a.patch_count > 0 ? `<button class="primary apply-btn" data-idx="${i}">Apply patches</button>` : ""}</td>
+    </tr>
+  `).join("");
+  body.querySelectorAll(".apply-btn").forEach(btn => {
+    btn.addEventListener("click", () => applyPatches(renderedDevices[btn.dataset.idx].agent_id, btn));
+  });
+  body.querySelectorAll(".device-check").forEach(cb => cb.addEventListener("change", syncDevicesBulkRow));
+  const selectAll = document.getElementById("devices-select-all");
+  if (selectAll) selectAll.checked = false;
+  syncDevicesBulkRow();
+  const dt = initDataTable(body.closest("table"), { storageKey: "patches-devices" });
+  if (dt) dt.refresh();
+}
+
+// A device with a patch job still open says so in place of its button:
+// a second job would install the same updates again.
+function patchingBadge(a) {
+  const label = { waiting: "Waiting for window", downloading: "Downloading…", installing: "Installing…", "installing macOS": "Installing macOS…" }[a.patching] || "Updating…";
+  const since = a.patching_since ? ` since ${fmtAgo(a.patching_since)}` : "";
+  return `<button class="apply-btn is-busy" disabled title="${escapeHtml("A patch job is already running on this device" + since)}"><span class="spin-dot"></span>${escapeHtml(label)}</button>`;
+}
+
+function selectedDeviceIndexes() {
+  return [...document.querySelectorAll(".device-check:checked")].map(cb => parseInt(cb.dataset.idx, 10));
+}
+
+function syncDevicesBulkRow() {
+  const n = selectedDeviceIndexes().length;
+  document.getElementById("devices-bulk-row").hidden = n === 0;
+  document.getElementById("devices-selected-count").textContent = String(n);
+}
+
+// Rescan asks the selected devices (or every online device you manage) to
+// collect their pending patches now, instead of waiting for the next sensor
+// interval, and says which ones could not: a broken repository otherwise
+// only shows as the device quietly missing from this page.
+document.getElementById("devices-rescan").addEventListener("click", async () => {
+  const btn = document.getElementById("devices-rescan");
+  const out = document.getElementById("devices-rescan-output");
+  const idxs = selectedDeviceIndexes();
+  const agent_ids = idxs.map(i => renderedDevices[i].agent_id);
+  btn.disabled = true;
+  out.hidden = false;
+  out.textContent = `Asking ${agent_ids.length ? agent_ids.length + " selected device(s)" : "every online device"} to check for updates…`;
+  try {
+    const resp = await fetch("/api/patches/rescan", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent_ids }) });
+    if (!resp.ok) { out.textContent = (await resp.text()).trim(); return; }
+    const r = await resp.json();
+    out.textContent = "";
+    const line = document.createElement("div");
+    line.textContent = `Refreshed ${r.refreshed} of ${r.asked} device(s).`;
+    out.append(line);
+    const list = (title, rows, cls = "rescan-err") => {
+      if (!rows.length) return;
+      const h = document.createElement("div");
+      h.textContent = title;
+      const ul = document.createElement("ul");
+      rows.forEach(p => {
+        const li = document.createElement("li");
+        li.append((p.hostname || p.agent_id) + ": ");
+        const err = document.createElement("span");
+        err.className = cls;
+        err.textContent = p.error;
+        li.append(err);
+        ul.append(li);
+      });
+      out.append(h, ul);
+    };
+    list("Patch collection failed on:", r.failed || []);
+    list("No answer from:", r.no_response || []);
+    list("Still searching (results appear in a few minutes):", r.searching || [], "rescan-wait");
+    await loadPatches();
+  } catch (e) {
+    out.textContent = "request failed: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("devices-select-all").addEventListener("change", (e) => {
+  // A disabled box (already patching, or updated outside mustra) stays
+  // unticked: select-all used to tick it anyway and send it a job.
+  document.querySelectorAll(".device-check:not(:disabled)").forEach(cb => { cb.checked = e.target.checked; });
+  syncDevicesBulkRow();
+});
+
+document.getElementById("devices-apply-selected").addEventListener("click", async () => {
+  const idxs = selectedDeviceIndexes();
+  if (idxs.length === 0) return;
+  const agents = renderedDevices;
+  const choice = await askPatchApply(idxs.map(i => agents[i].hostname));
+  if (!choice) return;
+  const out = document.getElementById("devices-apply-output");
+  out.style.display = "block";
+  out.textContent = `starting on ${idxs.length} device(s)…\n`;
+  const btn = document.getElementById("devices-apply-selected");
+  btn.disabled = true;
+  const started = [];
+  await Promise.all(idxs.map(async i => {
+    const a = agents[i];
+    try {
+      out.textContent += `${a.hostname}: ${await applyPatchesTo(a.agent_id, choice)}\n`;
+      started.push(a.agent_id);
+    } catch (e) {
+      out.textContent += `${a.hostname}: request failed — ${e.message}\n`;
+    }
+  }));
+  btn.disabled = false;
+  if (started.length) markPatching(started);
+});
+
+// --- Deploy now ---
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function distinctTargets() {
+  const agents = summary.agents || [];
+  const oses = [...new Set(agents.map(a => a.os))].sort();
+  const sites = [...new Set(agents.map(a => a.site))].sort();
+  return { oses, sites, agents };
+}
+
+function targetOptionsHtml() {
+  const { oses, sites, agents } = distinctTargets();
+  let html = `<option value="">All online agents</option>`
+    + `<option value="specific">Specific endpoints…</option>`;
+  if (oses.length > 1) html += `<optgroup label="By OS">` + oses.map(os => `<option value="os:${escapeHtml(os)}">${escapeHtml(osLabel(os))}</option>`).join("") + `</optgroup>`;
+  if (sites.length > 1) html += `<optgroup label="By site">` + sites.map(s => `<option value="site:${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("") + `</optgroup>`;
+  html += `<optgroup label="Single device">` + agents.map(a => `<option value="agent:${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)}</option>`).join("") + `</optgroup>`;
+  return html;
+}
+
+function renderTargetOptions() {
+  for (const prefix of ["deploy", "sched"]) {
+    const sel = document.getElementById(`${prefix}-target`);
+    const keep = sel.value;
+    sel.innerHTML = targetOptionsHtml();
+    // This is re-rendered every time the summary reloads. Without putting
+    // the choice back, a target picked a moment ago — or handed over from
+    // Interact — silently reverts to "All online agents".
+    if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+    syncTargetMode(prefix);
+  }
+}
+
+function parseTargetValue(v, prefix) {
+  if (v === "specific") return { target_agents: [...hostPicks[prefix]] };
+  if (!v) return {};
+  const [kind, val] = v.split(":");
+  if (kind === "os") return { target_os: val };
+  if (kind === "site") return { target_site: val };
+  if (kind === "agent") return { target_agent: val };
+  return {};
+}
+
+// --- Specific endpoints -------------------------------------------------
+//
+// One picker serving both "Deploy now" and a new schedule, because the two
+// paths must agree on what "specific endpoints" means. The chosen set is
+// held here rather than read back off the checkboxes: filtering the list
+// would otherwise quietly drop a host that is picked but scrolled out of
+// the current search.
+
+const hostPicks = { deploy: new Set(), sched: new Set() };
+
+// Every online endpoint, not only the ones in the patches summary: a device
+// that has never published the sensor can still be told to patch, and it is
+// exactly the one an operator goes looking for by name.
+function pickableHosts() {
+  const pending = new Map((summary.agents || []).map(a => [a.agent_id, a.patch_count]));
+  return fleetAgents.filter(a => a.online)
+    .map(a => ({ ...a, patch_count: pending.has(a.agent_id) ? pending.get(a.agent_id) : null }))
+    .sort((a, b) => (a.hostname || "").localeCompare(b.hostname || ""));
+}
+
+function renderHostPicker(prefix) {
+  const list = document.getElementById(`${prefix}-hosts-list`);
+  const q = (document.getElementById(`${prefix}-hosts-filter`).value || "").trim().toLowerCase();
+  const picked = hostPicks[prefix];
+  const rows = pickableHosts().filter(a => !q || `${a.hostname} ${a.os} ${a.site}`.toLowerCase().includes(q));
+  list.innerHTML = rows.length === 0
+    ? '<p class="empty u-p-10-12 u-m-0">no online endpoint matches</p>'
+    : rows.map(a => `
+        <label class="host-row">
+          <input type="checkbox" data-host="${escapeHtml(a.agent_id)}" ${picked.has(a.agent_id) ? "checked" : ""}>
+          <span>${escapeHtml(a.hostname)}</span>
+          <span class="host-meta">${escapeHtml(osLabel(a.os))}${a.site ? ` · ${escapeHtml(a.site)}` : ""} · ${a.patch_count == null ? "not reporting" : `${escapeHtml(a.patch_count)} pending`}</span>
+        </label>`).join("");
+  list.querySelectorAll("[data-host]").forEach(cb => cb.addEventListener("change", () => {
+    if (cb.checked) picked.add(cb.dataset.host); else picked.delete(cb.dataset.host);
+    hostPicksChanged(prefix);
+  }));
+  updateHostCount(prefix);
+}
+
+function updateHostCount(prefix) {
+  const n = hostPicks[prefix].size;
+  document.getElementById(`${prefix}-hosts-count`).textContent =
+    n === 0 ? "— none selected" : `— ${n} selected`;
+}
+
+function hostPicksChanged(prefix) {
+  updateHostCount(prefix);
+  if (prefix === "deploy") previewDeploy();
+}
+
+function syncTargetMode(prefix) {
+  const specific = document.getElementById(`${prefix}-target`).value === "specific";
+  document.getElementById(`${prefix}-hosts-field`).hidden = !specific;
+  if (specific) renderHostPicker(prefix);
+}
+
+for (const prefix of ["deploy", "sched"]) {
+  document.getElementById(`${prefix}-target`).addEventListener("change", () => syncTargetMode(prefix));
+  document.getElementById(`${prefix}-hosts-filter`).addEventListener("input", () => renderHostPicker(prefix));
+}
+// "Select all shown" is deliberately the filtered list, not the fleet:
+// filter to "dc" and select all, and you meant those.
+document.querySelectorAll("[data-hosts-all]").forEach(btn => btn.addEventListener("click", () => {
+  const prefix = btn.dataset.hostsAll;
+  document.querySelectorAll(`#${prefix}-hosts-list [data-host]`).forEach(cb => hostPicks[prefix].add(cb.dataset.host));
+  renderHostPicker(prefix);
+  hostPicksChanged(prefix);
+}));
+document.querySelectorAll("[data-hosts-none]").forEach(btn => btn.addEventListener("click", () => {
+  const prefix = btn.dataset.hostsNone;
+  hostPicks[prefix].clear();
+  renderHostPicker(prefix);
+  hostPicksChanged(prefix);
+}));
+
+// Targets handed over from an Interact result (/patches?agents=a,b#deploy):
+// preselect exactly those and nothing else, so Deploy opens on the set the
+// operator picked over there. The IDs are kept even if the fleet list has
+// not loaded yet — the picker draws from them when it does.
+function applyAgentHandoff() {
+  const raw = new URLSearchParams(window.location.search).get("agents");
+  if (!raw) return;
+  const ids = raw.split(",").filter(Boolean);
+  if (ids.length === 0) return;
+  hostPicks.deploy = new Set(ids);
+  document.getElementById("deploy-target").value = "specific";
+  syncTargetMode("deploy");
+}
+
+// The override switch only appears for an account that may use it; the
+// server refuses it for anyone else regardless.
+fetch("/api/maintenance-windows").then(r => r.ok ? r.json() : {}).then(d => { document.getElementById("deploy-override-field").hidden = !d.can_override; }).catch(() => {});
+// What Deploy now would do, before the click: how many pending patches the
+// lists permit, how many they block, who is outside a window, and which
+// agents are too old to apply a narrowed set.
+async function previewDeploy() {
+  const el = document.getElementById("deploy-preview");
+  const raw = document.getElementById("deploy-target").value;
+  const target = parseTargetValue(raw, "deploy");
+  // An empty explicit list is not "everything" — say so rather than
+  // previewing a fleet-wide run nobody asked for.
+  if (raw === "specific" && target.target_agents.length === 0) {
+    el.textContent = "pick at least one endpoint";
+    return;
+  }
+  if (document.getElementById("deploy-override").checked) target.override_windows = true;
+  try {
+    const resp = await fetch("/api/patches/deploy/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(target) });
+    if (!resp.ok) { el.textContent = ""; return; }
+    const d = await resp.json(); const t = d.totals || {};
+    const parts = [`${escapeHtml(d.matched)} online endpoint(s)`, `${escapeHtml(t.pending || 0)} pending`, `${escapeHtml(t.allowed || 0)} permitted by patch lists`];
+    if (t.blocked) parts.push(`${escapeHtml(t.blocked)} blocked`);
+    if (t.waiting) parts.push(`${escapeHtml(t.waiting)} endpoint(s) will wait for a maintenance window`);
+    if (t.agent_too_old) parts.push(`<span class="bad">${escapeHtml(t.agent_too_old)} agent(s) too old to honour patch lists</span>`);
+    el.innerHTML = parts.join(" · ");
+  } catch (e) { el.textContent = ""; }
+}
+document.getElementById("deploy-target").addEventListener("change", previewDeploy);
+document.getElementById("deploy-override").addEventListener("change", previewDeploy);
+document.getElementById("deploy-now-btn").addEventListener("click", async () => {
+  const raw = document.getElementById("deploy-target").value;
+  const target = parseTargetValue(raw, "deploy");
+  if (raw === "specific" && target.target_agents.length === 0) { alert("pick at least one endpoint"); return; }
+  if (document.getElementById("deploy-override").checked) target.override_windows = true;
+  const scope = raw === "specific"
+    ? `the ${target.target_agents.length} selected endpoint(s)`
+    : "every online device matching this target";
+  if (!confirm(`Deploy patches now to ${scope}? This can take several minutes per device.`)) return;
+  const btn = document.getElementById("deploy-now-btn");
+  const summaryEl = document.getElementById("deploy-summary");
+  btn.disabled = true;
+  summaryEl.textContent = "deploying…";
+  try {
+    const resp = await fetch("/api/patches/deploy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(target) });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || JSON.stringify(data));
+    const failedCount = Object.keys(data.failed || {}).length;
+    summaryEl.innerHTML = `<span class="ok">${escapeHtml(data.started.length)} started</span>` +
+      (failedCount ? `, <span class="bad">${escapeHtml(failedCount)} failed</span>: ${escapeHtml(Object.entries(data.failed).map(([id, err]) => id + " (" + err + ")").join(", "))}` : "") +
+      ` — target: ${escapeHtml(data.target_desc)}`;
+    loadHistory();
+  } catch (e) {
+    summaryEl.innerHTML = `<span class="bad">failed: ${escapeHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// --- Schedules ---
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+document.getElementById("sched-kind").addEventListener("change", (e) => {
+  const kind = e.target.value;
+  document.getElementById("sched-field-runat").style.display = kind === "once" ? "" : "none";
+  document.getElementById("sched-field-time").hidden = kind === "once";
+  document.getElementById("sched-field-weekday").hidden = kind !== "weekly";
+});
+
+function localDailyToUTC(timeStr) {
+  const [hh, mm] = timeStr.split(":").map(Number);
+  const d = new Date();
+  d.setHours(hh, mm, 0, 0);
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+
+function localWeeklyToUTC(weekdayLocal, timeStr) {
+  const [hh, mm] = timeStr.split(":").map(Number);
+  const d = new Date();
+  d.setHours(hh, mm, 0, 0);
+  const diff = (weekdayLocal - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return { weekday: d.getUTCDay(), time_of_day: `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}` };
+}
+
+async function loadSchedules() {
+  const resp = await fetch("/api/patches/schedules");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  schedulesCache = data.schedules || [];
+  renderSchedules(schedulesCache);
+  renderDeployments();
+}
+
+function describeSchedule(s) {
+  if (s.kind === "once") return `Once at ${fmtTime(s.run_at)}`;
+  if (s.kind === "daily") return `Daily at ${s.time_of_day} UTC`;
+  if (s.kind === "weekly") return `Weekly on ${WEEKDAY_NAMES[s.weekday]} at ${s.time_of_day} UTC`;
+  return s.kind;
+}
+
+function describeScheduleTarget(s) {
+  if ((s.target_agents || []).length > 0) return `${s.target_agents.length} selected endpoint(s)`;
+  if (s.target_agent) return "device: " + s.target_agent;
+  if (s.target_vuln_id) return "CVE remediation (" + s.target_vuln_id + ")";
+  const parts = [];
+  if (s.target_os) parts.push("os=" + s.target_os);
+  if (s.target_site) parts.push("site=" + s.target_site);
+  return parts.length ? parts.join(", ") : "all agents";
+}
+
+function renderSchedules(schedules) {
+  const body = document.getElementById("schedules-body");
+  if (schedules.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="7">no schedules yet</td></tr>';
+    return;
+  }
+  body.innerHTML = schedules.map(s => `
+    <tr>
+      <td>${escapeHtml(s.name)}</td>
+      <td>${escapeHtml(describeScheduleTarget(s))}</td>
+      <td>${escapeHtml(describeSchedule(s))}</td>
+      <td>${s.next_run_at ? fmtAgo(s.next_run_at) : "—"}</td>
+      <td>${s.last_run_at ? fmtAgo(s.last_run_at) : "never"}</td>
+      <td><input type="checkbox" class="enabled-toggle" data-id="${escapeHtml(s.id)}" aria-label="Schedule enabled" ${s.enabled ? "checked" : ""}></td>
+      <td><button class="tiny danger" data-delete-sched="${escapeHtml(s.id)}">delete</button></td>
+    </tr>
+  `).join("");
+  body.querySelectorAll(".enabled-toggle").forEach(el => el.addEventListener("change", async () => {
+    await fetch(`/api/patches/schedules/${el.dataset.id}/enabled`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: el.checked }) });
+    loadSchedules();
+  }));
+  body.querySelectorAll("[data-delete-sched]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this schedule?")) return;
+    await fetch(`/api/patches/schedules/${btn.dataset.deleteSched}`, { method: "DELETE" });
+    loadSchedules();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "patches-schedules" });
+  if (dt) dt.refresh();
+}
+
+document.getElementById("sched-add").addEventListener("click", async () => {
+  const name = document.getElementById("sched-name").value.trim();
+  if (!name) { alert("name is required"); return; }
+  const schedRaw = document.getElementById("sched-target").value;
+  const target = parseTargetValue(schedRaw, "sched");
+  if (schedRaw === "specific" && target.target_agents.length === 0) { alert("pick at least one endpoint"); return; }
+  const kind = document.getElementById("sched-kind").value;
+  const body = { name, kind, ...target };
+
+  if (kind === "once") {
+    const raw = document.getElementById("sched-runat").value;
+    if (!raw) { alert("pick a date and time"); return; }
+    body.run_at = new Date(raw).toISOString();
+  } else if (kind === "daily") {
+    body.time_of_day = localDailyToUTC(document.getElementById("sched-time").value);
+  } else if (kind === "weekly") {
+    const { weekday, time_of_day } = localWeeklyToUTC(parseInt(document.getElementById("sched-weekday").value, 10), document.getElementById("sched-time").value);
+    body.weekday = weekday;
+    body.time_of_day = time_of_day;
+  }
+
+  const resp = await fetch("/api/patches/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { alert("failed: " + await resp.text()); return; }
+  document.getElementById("sched-name").value = "";
+  loadSchedules();
+});
+
+// --- History ---
+
+async function loadHistory() {
+  const resp = await fetch("/api/patches/history");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const body = document.getElementById("history-body");
+  const runs = data.runs || [];
+  if (runs.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="5">no deployments yet</td></tr>';
+    return;
+  }
+  body.innerHTML = runs.map(r => `
+    <tr>
+      <td>${fmtAgo(r.StartedAt)}</td>
+      <td>${escapeHtml(r.ScheduleName || "ad-hoc")}</td>
+      <td>${escapeHtml(r.TargetDesc)}</td>
+      <td>${escapeHtml(r.AgentCount)}</td>
+      <td>${escapeHtml(r.TriggeredBy)}</td>
+    </tr>
+  `).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "patches-history" });
+  if (dt) dt.refresh();
+}
+
+async function applyPatches(agentId, btn) {
+  const host = (renderedDevices.find(d => d.agent_id === agentId) || {}).hostname || agentId;
+  const choice = await askPatchApply([host]);
+  if (!choice) return;
+  const output = document.getElementById("devices-apply-output");
+  btn.disabled = true;
+  btn.textContent = "Starting…";
+  output.style.display = "block";
+  output.textContent = "patch job started — this can take several minutes; refresh later to see updated status…";
+  try {
+    output.textContent = `${host}: ${await applyPatchesTo(agentId, choice)}`;
+    markPatching([agentId]);
+  } catch (e) {
+    output.textContent = "failed: " + e.message;
+    btn.disabled = false;
+    btn.textContent = "Apply patches";
+  }
+}
+
+// Shows the devices just sent a job as busy straight away, then reloads
+// to pick up the job's real status from the server.
+function markPatching(ids) {
+  for (const a of summary.agents || []) if (ids.includes(a.agent_id)) { a.patching = a.patching || "started"; a.patching_since = a.patching_since || new Date().toISOString(); }
+  renderDevices();
+  clearTimeout(followTimer);
+  followTimer = setTimeout(loadPatches, 4000);
+}
+
+// --- Deployments ---
+//
+// A deployment is one identified event that targeted some set of devices:
+// a schedule firing, a bulk deploy, a one-off apply to a single machine, a
+// Self Service install. Every one carries an ID and is clickable through to
+// who ran it and what happened on each device. Schedules are listed
+// separately below — a schedule isn't a deployment, it's a thing that
+// creates them.
+
+let schedulesCache = [];
+// The list, tiles and drawer are the shared deployment dashboard
+// (deployments.js); this page adds its schedules as a tile.
+const patchDeployments = mountDeploymentDashboard(document.getElementById("patch-deployments"), {
+  id: "patch",
+  title: "Patch deployment",
+  create: { label: "Deploy Patches", href: "#deploy" },
+  emptyText: "no deployments yet — apply patches to a device and it will appear here",
+  load: () => loadRunDeployments(null, "Patch deployment"),
+  loadDetail: id => loadRunDeploymentDetail(id, "Patch deployment"),
+  extraTiles: () => [{
+    label: "Schedules", value: schedulesCache.length, title: "Show the recurring schedules",
+    onClick: () => document.getElementById("schedule-deployments-body").closest(".panel")
+      .scrollIntoView({ behavior: "smooth", block: "start" }),
+  }],
+});
+
+async function loadDeployments() {
+  await patchDeployments.reload();
+}
+
+function renderDeployments() {
+  patchDeployments.render();
+  renderScheduleList();
+  const dt = initDataTable(document.getElementById("schedule-deployments-body").closest("table"),
+    { storageKey: "patch-deployments-schedules" });
+  if (dt) dt.refresh();
+}
+
+function openLinkedRun() {
+  patchDeployments.openLinked();
+}
+
+function renderScheduleList() {
+  const body = document.getElementById("schedule-deployments-body");
+  if (!body) return;
+  body.innerHTML = schedulesCache.length === 0
+    ? '<tr><td class="empty" colspan="6">nothing scheduled — create one under Deploy &amp; Schedule</td></tr>'
+    : schedulesCache.map(s => {
+        const isActive = s.enabled && s.next_run_at;
+        const state = isActive ? "active" : (s.last_run_at && !s.next_run_at ? "completed" : "disabled");
+        return `
+        <tr>
+          <td>${escapeHtml(s.name)}</td>
+          <td>${escapeHtml(describeScheduleTarget(s))}</td>
+          <td>${escapeHtml(describeSchedule(s))}</td>
+          <td data-sort="${escapeHtml(s.next_run_at || "")}">${s.next_run_at ? fmtAgo(s.next_run_at) : "—"}</td>
+          <td data-sort="${escapeHtml(s.last_run_at || "")}">${s.last_run_at ? fmtAgo(s.last_run_at) : "never"}</td>
+          <td>${isActive ? `<span class="sev-pill u-bg-ok-bg u-c-ok">active</span>`
+                         : `<span class="sev-pill none">${state}</span>`}</td>
+        </tr>`;
+      }).join("");
+}
+
+// --- Scan Management ---
+
+let fleetAgents = [];
+let patchLists = [];
+
+async function loadFleetAgents() {
+  const resp = await fetch("/api/agents");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  fleetAgents = data.agents || [];
+  renderDashboard();
+  renderDevices();
+  if (canApply) { syncTargetMode("deploy"); syncTargetMode("sched"); }
+  if (canApply) renderAssignTargetOptions();
+}
+
+// A repository list applies only to Linux hosts on its package manager:
+// the agent ignores a list for the other one, so offering those hosts
+// would save a rule that does nothing. Platforms the map does not know
+// are offered for either.
+const APT_PLATFORMS = ["debian", "ubuntu", "raspbian", "linuxmint", "pop", "kali", "elementary", "zorin"];
+const DNF_PLATFORMS = ["rhel", "redhat", "fedora", "centos", "rocky", "almalinux", "alma", "ol", "oracle", "amzn", "amazon"];
+function platformFamily(p) {
+  p = (p || "").toLowerCase();
+  if (APT_PLATFORMS.includes(p)) return "apt";
+  if (DNF_PLATFORMS.includes(p)) return "dnf";
+  return "";
+}
+
+function renderAssignTargetOptions() {
+  const sel = document.getElementById("passign-target");
+  const list = patchLists.find(pl => pl.id === document.getElementById("passign-list").value);
+  const family = list ? list.os_family : "";
+  const hosts = fleetAgents.filter(a => a.os === "linux" && (!family || !platformFamily(a.platform) || platformFamily(a.platform) === family));
+  const platforms = [...new Set(hosts.map(a => a.platform).filter(Boolean))].sort();
+  const sites = [...new Set(hosts.map(a => a.site).filter(Boolean))].sort();
+  let html = "";
+  if (platforms.length) html += `<optgroup label="By platform">` + platforms.map(p => `<option value="platform:${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("") + `</optgroup>`;
+  if (sites.length) html += `<optgroup label="By site">` + sites.map(s => `<option value="site:${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("") + `</optgroup>`;
+  if (hosts.length) html += `<optgroup label="Single device">` + hosts.map(a => `<option value="agent:${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)}</option>`).join("") + `</optgroup>`;
+  sel.innerHTML = html || `<option value="">no ${family ? escapeHtml(family) + " " : ""}Linux hosts yet</option>`;
+}
+
+// The value is kind:rest; a site name may itself contain a colon.
+function parseAssignTargetValue(v) {
+  const i = (v || "").indexOf(":");
+  if (i < 0) return {};
+  const kind = v.slice(0, i), val = v.slice(i + 1);
+  if (kind === "platform") return { target_platform: val };
+  if (kind === "site") return { target_site: val };
+  if (kind === "agent") return { target_agent: val };
+  return {};
+}
+
+// A delete that fails says so, rather than leaving the row as if nothing
+// had been asked.
+async function deleteOrAlert(url) {
+  const resp = await fetch(url, { method: "DELETE" });
+  if (!resp.ok) alert("failed: " + (await resp.text()).trim());
+  return resp.ok;
+}
+
+document.getElementById("plist-osfamily").addEventListener("change", (e) => {
+  const label = document.getElementById("plist-repos-label");
+  const textarea = document.getElementById("plist-repos");
+  if (e.target.value === "dnf") {
+    label.textContent = "Repos — one repo ID per line (must already be configured on the host)";
+    textarea.placeholder = "updates\nbaseos";
+  } else {
+    label.textContent = "Repos — one sources.list line per repo";
+    textarea.placeholder = "deb http://archive.ubuntu.com/ubuntu jammy-security main restricted";
+  }
+});
+
+async function loadPatchLists() {
+  const resp = await fetch("/api/patches/lists");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  patchLists = data.patch_lists || [];
+  renderPatchLists();
+  renderPatchListSelect();
+}
+
+function renderPatchLists() {
+  const body = document.getElementById("plists-body");
+  if (patchLists.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="5">no repository lists yet — hosts use their own repos</td></tr>';
+    return;
+  }
+  body.innerHTML = patchLists.map(pl => `
+    <tr>
+      <td>${escapeHtml(pl.name)}</td>
+      <td><span class="os-pill">${escapeHtml(pl.os_family)}</span></td>
+      <td class="u-ff-mono u-fs-meta u-maxw-360 u-ws-pre">${escapeHtml(pl.repos)}</td>
+      <td>${escapeHtml(pl.description || "")}</td>
+      <td><button class="tiny danger" data-delete-plist="${escapeHtml(pl.id)}">delete</button></td>
+    </tr>
+  `).join("");
+  body.querySelectorAll("[data-delete-plist]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this repository list? Hosts assigned to it go back to their own repos.")) return;
+    await deleteOrAlert(`/api/patches/lists/${encodeURIComponent(btn.dataset.deletePlist)}`);
+    loadPatchLists();
+    loadPatchListAssignments();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "patches-scanmgmt-lists" });
+  if (dt) dt.refresh();
+}
+
+function renderPatchListSelect() {
+  const sel = document.getElementById("passign-list");
+  if (patchLists.length === 0) {
+    sel.innerHTML = `<option value="">create a repository list first</option>`;
+    renderAssignTargetOptions();
+    return;
+  }
+  const prev = sel.value;
+  sel.innerHTML = patchLists.map(pl => `<option value="${escapeHtml(pl.id)}">${escapeHtml(pl.name)} (${escapeHtml(pl.os_family)})</option>`).join("");
+  if (patchLists.some(pl => pl.id === prev)) sel.value = prev;
+  renderAssignTargetOptions();
+}
+document.getElementById("passign-list").addEventListener("change", renderAssignTargetOptions);
+
+document.getElementById("plist-add").addEventListener("click", async () => {
+  const name = document.getElementById("plist-name").value.trim();
+  if (!name) { alert("name is required"); return; }
+  const body = {
+    name,
+    os_family: document.getElementById("plist-osfamily").value,
+    repos: document.getElementById("plist-repos").value,
+    description: document.getElementById("plist-desc").value.trim(),
+  };
+  const resp = await fetch("/api/patches/lists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { alert("failed: " + await resp.text()); return; }
+  document.getElementById("plist-name").value = "";
+  document.getElementById("plist-desc").value = "";
+  document.getElementById("plist-repos").value = "";
+  loadPatchLists();
+});
+
+async function loadPatchListAssignments() {
+  const resp = await fetch("/api/patches/list-assignments");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  renderPatchListAssignments(data.assignments || []);
+}
+
+// Lists every target the rule names: a site-and-platform rule covers only
+// hosts matching both, so showing only the site would misdescribe it.
+function describeAssignTarget(a) {
+  const parts = [];
+  if (a.target_agent) {
+    const host = fleetAgents.find(x => x.agent_id === a.target_agent);
+    parts.push("device: " + (host ? host.hostname : a.target_agent));
+  }
+  if (a.target_site) parts.push("site: " + a.target_site);
+  if (a.target_platform) parts.push("platform: " + a.target_platform);
+  return parts.length ? parts.join(", ") : "—";
+}
+
+function renderPatchListAssignments(assignments) {
+  const body = document.getElementById("passign-body");
+  if (assignments.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="3">no assignments yet</td></tr>';
+    return;
+  }
+  body.innerHTML = assignments.map(a => `
+    <tr>
+      <td>${escapeHtml(a.patch_list_name)}</td>
+      <td>${escapeHtml(describeAssignTarget(a))}</td>
+      <td><button class="tiny danger" data-delete-passign="${escapeHtml(a.id)}">delete</button></td>
+    </tr>
+  `).join("");
+  body.querySelectorAll("[data-delete-passign]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this assignment? Its hosts go back to their own repos.")) return;
+    await deleteOrAlert(`/api/patches/list-assignments/${encodeURIComponent(btn.dataset.deletePassign)}`);
+    loadPatchListAssignments();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "patches-scanmgmt-assignments" });
+  if (dt) dt.refresh();
+}
+
+document.getElementById("passign-add").addEventListener("click", async () => {
+  const patchListId = document.getElementById("passign-list").value;
+  if (!patchListId) { alert("create a repository list first"); return; }
+  const target = parseAssignTargetValue(document.getElementById("passign-target").value);
+  if (!target.target_platform && !target.target_site && !target.target_agent) { alert("pick a target"); return; }
+  const body = { patch_list_id: patchListId, ...target };
+  const resp = await fetch("/api/patches/list-assignments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { alert("failed: " + await resp.text()); return; }
+  loadPatchListAssignments();
+});
+
+loadPatches();
+
+// --- Patch lists and block lists ------------------------------------
+let policies = [], editingPolicy = null, policyGroups = [];
+async function loadPolicies() {
+  const [pr, gr] = await Promise.all([fetch("/api/patch-policies"), fetch("/api/groups")]);
+  if (!pr.ok) return;
+  policies = (await pr.json()).policies || [];
+  if (gr.ok) policyGroups = (await gr.json()).groups || [];
+  const sel = document.getElementById("ppl-groups"), prev = [...sel.selectedOptions].map(o => o.value);
+  sel.innerHTML = policyGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} — ${escapeHtml(g.member_count)} device(s)</option>`).join("");
+  [...sel.options].forEach(o => o.selected = prev.includes(o.value));
+  const gname = id => (policyGroups.find(g => g.id === id) || {}).name || id;
+  const body = document.getElementById("ppl-body");
+  document.getElementById("ppl-status").textContent = policies.length ? `${policies.filter(p => p.kind === "allow").length} patch list(s), ${policies.filter(p => p.kind === "block").length} block list(s)` : "";
+  if (!policies.length) { body.innerHTML = '<tr><td class="empty" colspan="7">No lists. Every endpoint may receive everything it has pending.</td></tr>'; return; }
+  const rules = r => {
+    const parts = [];
+    if ((r.severities || []).length) parts.push("severity " + r.severities.map(x => escapeHtml(x || "unclassified")).join("/"));
+    if ((r.os || []).length) parts.push(r.os.map(x => escapeHtml(osLabel(x))).join("/"));
+    if ((r.name_patterns || []).length) parts.push("name " + r.name_patterns.map(x => `<code>${escapeHtml(x)}</code>`).join(", "));
+    if (r.min_age_days) parts.push(`at least ${escapeHtml(r.min_age_days)} day(s) old`);
+    return parts.length ? parts.join(" · ") : "everything";
+  };
+  body.innerHTML = policies.map(p => `<tr class="${p.enabled ? "" : "muted"}">
+    <td><span class="sev-pill ${p.kind === "block" ? "security" : "none"}">${p.kind === "block" ? "block list" : "patch list"}</span></td>
+    <td><strong>${escapeHtml(p.name)}</strong>${p.description ? `<div class="hint u-m-2-0-0">${escapeHtml(p.description)}</div>` : ""}</td>
+    <td>${rules(p.rules || {})}</td>
+    <td>${(p.group_ids || []).length ? p.group_ids.map(id => escapeHtml(gname(id))).join(", ") + ` <span class="hint">(${escapeHtml(p.members)} endpoint${p.members === 1 ? "" : "s"})</span>` : "every endpoint"}</td>
+    <td>${escapeHtml(p.matches)} pending patch(es)</td>
+    <td>${p.enabled ? "enabled" : "disabled"}</td>
+    <td class="row-actions"><button class="tiny" data-ppl-edit="${escapeHtml(p.id)}">edit</button> <button class="tiny" data-ppl-toggle="${escapeHtml(p.id)}">${p.enabled ? "disable" : "enable"}</button> <button class="tiny danger" data-ppl-del="${escapeHtml(p.id)}">delete</button></td>
+  </tr>`).join("");
+  body.querySelectorAll("[data-ppl-edit]").forEach(b => b.addEventListener("click", () => editPolicy(policies.find(p => p.id === b.dataset.pplEdit))));
+  body.querySelectorAll("[data-ppl-toggle]").forEach(b => b.addEventListener("click", async () => {
+    const p = policies.find(x => x.id === b.dataset.pplToggle);
+    await fetch(`/api/patch-policies/${encodeURIComponent(p.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, enabled: !p.enabled }) });
+    loadPolicies();
+  }));
+  body.querySelectorAll("[data-ppl-del]").forEach(b => b.addEventListener("click", async () => {
+    const p = policies.find(x => x.id === b.dataset.pplDel);
+    if (!confirm(`Delete "${p.name}"?`)) return;
+    await fetch(`/api/patch-policies/${encodeURIComponent(p.id)}`, { method: "DELETE" });
+    loadPolicies();
+  }));
+}
+function editPolicy(p) {
+  editingPolicy = p ? p.id : null;
+  const r = (p && p.rules) || {};
+  document.getElementById("ppl-editor-title").textContent = p ? `Edit ${p.name}` : "New list";
+  document.getElementById("ppl-kind").value = p ? p.kind : "allow";
+  document.getElementById("ppl-name").value = p ? p.name : "";
+  document.getElementById("ppl-desc").value = p ? p.description : "";
+  [...document.getElementById("ppl-groups").options].forEach(o => o.selected = !!(p && (p.group_ids || []).includes(o.value)));
+  document.getElementById("ppl-sev-security").checked = (r.severities || []).includes("security");
+  document.getElementById("ppl-sev-other").checked = (r.severities || []).includes("");
+  document.querySelectorAll(".ppl-os").forEach(c => c.checked = (r.os || []).includes(c.value));
+  document.getElementById("ppl-patterns").value = (r.name_patterns || []).join("\n");
+  document.getElementById("ppl-age").value = r.min_age_days || 0;
+  document.getElementById("ppl-enabled").checked = !p || p.enabled;
+  document.getElementById("ppl-save-status").textContent = "";
+  if (p) document.getElementById("ppl-editor-title").scrollIntoView({ block: "nearest" });
+}
+document.getElementById("ppl-cancel").addEventListener("click", () => editPolicy(null));
+document.getElementById("ppl-save").addEventListener("click", async () => {
+  const status = document.getElementById("ppl-save-status");
+  const severities = [];
+  if (document.getElementById("ppl-sev-security").checked) severities.push("security");
+  if (document.getElementById("ppl-sev-other").checked) severities.push("");
+  const body = {
+    id: editingPolicy || "", kind: document.getElementById("ppl-kind").value, name: document.getElementById("ppl-name").value.trim(),
+    description: document.getElementById("ppl-desc").value.trim(), enabled: document.getElementById("ppl-enabled").checked,
+    group_ids: [...document.getElementById("ppl-groups").selectedOptions].map(o => o.value),
+    rules: { severities, os: [...document.querySelectorAll(".ppl-os:checked")].map(c => c.value),
+      name_patterns: document.getElementById("ppl-patterns").value.split("\n").map(x => x.trim()).filter(Boolean),
+      min_age_days: Number(document.getElementById("ppl-age").value) || 0 },
+  };
+  status.textContent = "saving…";
+  const resp = await fetch(editingPolicy ? `/api/patch-policies/${encodeURIComponent(editingPolicy)}` : "/api/patch-policies",
+    { method: editingPolicy ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { status.textContent = await resp.text(); return; }
+  status.textContent = "saved";
+  editPolicy(null);
+  loadPolicies();
+  previewDeploy();
+});
+document.getElementById("ppl-export").addEventListener("click", async () => {
+  const resp = await fetch("/api/patch-policies/export");
+  if (!resp.ok) return;
+  const blob = await resp.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "mustra-patch-lists.json"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+document.getElementById("ppl-import").addEventListener("click", () => document.getElementById("ppl-import-file").click());
+document.getElementById("ppl-import-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const status = document.getElementById("ppl-io-status");
+  status.textContent = "importing…";
+  const resp = await fetch("/api/patch-policies/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() });
+  const text = await resp.text();
+  if (!resp.ok) { status.textContent = text; return; }
+  const d = JSON.parse(text);
+  status.textContent = `${d.created} created, ${d.updated} updated${(d.warnings || []).length ? "; " + d.warnings.join(" ") : ""}`;
+  e.target.value = "";
+  loadPolicies();
+});
+document.getElementById("hide-superseded").addEventListener("change", renderPatchGroups);
+</script>
+</body>
+</html>

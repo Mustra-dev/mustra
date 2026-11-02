@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or get help
+    url: https://github.com/mustra-dev/mustra#-getting-help
+    about: For questions, or anything you would rather not post publicly, email support@mustra.dev.
+  - name: Report a security vulnerability
+    url: https://github.com/mustra-dev/mustra/security/policy
+    about: Never in a public issue. Email security@mustra.dev or use the repository's private vulnerability reporting (Security tab → Report a vulnerability); SECURITY.md has the details.

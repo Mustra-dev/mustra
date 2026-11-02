@@ -1,0 +1,2158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/deploy.css">
+<script src="/static/theme.js"></script>
+<style>
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label, .cmd-block label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .cmd-block input {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px;
+  }
+  .cmd-block input { font-family: var(--mono); font-size: var(--fs-meta); }
+  .cmd-os { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 13px; margin-bottom: 10px; }
+  .cmd-os h4 { margin: 0 0 9px; font-size: 12.5px; display: flex; align-items: center; gap: 7px; }
+  .cmd-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; line-height: 1.5; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  button.tiny.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .state-pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .state-installed { background: var(--ok-bg); color: var(--ok); }
+  .state-install_eligible { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+  .state-update_eligible { background: color-mix(in srgb, var(--viz-warning) 20%, transparent); color: var(--warn); }
+  .state-not_applicable { background: var(--surface-2); color: var(--text-muted); }
+  .usage-heavy { background: var(--ok-bg); color: var(--ok); }
+  .usage-moderate { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
+  .usage-light { background: color-mix(in srgb, var(--viz-warning) 18%, transparent); color: var(--warn); }
+  .usage-unused { background: color-mix(in srgb, var(--off) 15%, transparent); color: var(--off); }
+  .usage-unknown { background: var(--surface-2); color: var(--text-muted); }
+  .usage-bar { display: inline-flex; gap: 1px; align-items: flex-end; height: 18px; }
+  .usage-bar i { display: inline-block; width: 4px; background: var(--accent); opacity: .85; border-radius: 1px 1px 0 0; min-height: 1px; }
+  .usage-bar i.zero { background: var(--border); }
+  .spark { display: flex; gap: 2px; align-items: flex-end; height: 64px; margin: 6px 0 2px; }
+  .spark i { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .85; }
+  .spark i.zero { background: var(--border); }
+  .spark-axis { display: flex; justify-content: space-between; font-size: var(--fs-meta); color: var(--text-muted); }
+  .applic { display: flex; gap: 5px; flex-wrap: wrap; }
+  .applic span { font-size: var(--fs-meta); padding: 1px 7px; border-radius: 999px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 12px; font-size: 12.5px; }
+  .checks label { display: flex; align-items: center; gap: 6px; }
+  .drawer-overlay { position: fixed; inset: 0; background: var(--scrim); z-index: 200; display: none; }
+  .drawer-overlay.open { display: block; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100vw); background: var(--surface);
+    border-left: 1px solid var(--border); z-index: 201; transform: translateX(100%); transition: transform .18s ease;
+    display: flex; flex-direction: column; }
+  .drawer.open { transform: translateX(0); }
+  @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+  .drawer-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .drawer-header h3 { margin: 0 0 6px; font-size: 15px; }
+  .drawer-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 2px 6px; }
+  .drawer-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+  .deploy-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 11px 13px;
+    background: var(--surface-2); border-radius: var(--radius-md); margin-bottom: 14px; font-size: 12.5px; }
+  .table-scroll.tall { max-height: 420px; overflow-y: auto; }
+  .table-scroll.tall thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .kind-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kind-opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border);
+              border-radius: var(--radius-md); cursor: pointer; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+  .kind-opt b { color: var(--text); font-size: 13px; }
+  .kind-opt:has(input:checked) { border-color: var(--accent); background: var(--surface-2); }
+  .sec-head { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
+              margin: 18px 0 6px; }
+  .param-row { display: grid; grid-template-columns: 1.1fr 1.4fr .9fr 1fr .9fr auto; gap: 8px;
+               align-items: end; margin-bottom: 8px; }
+  .param-row input, .param-row select { width: 100%; padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-input);
+                                        background: var(--input-bg); color: var(--text); font: inherit; font-size: 12.5px; }
+  .param-row label { display: block; font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em;
+                     color: var(--text-muted); margin-bottom: 3px; }
+  @media (max-width: 900px) { .param-row { grid-template-columns: 1fr 1fr; } }
+
+  .dep-params { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 11px 13px; margin-top: 10px; }
+  .dep-params-head { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .05em;
+                     color: var(--text-muted); margin-bottom: 8px; }
+  .dep-param { margin-bottom: 9px; }
+  .dep-param label { display: block; font-size: 12px; margin-bottom: 3px; }
+  .dep-param input[type=text], .dep-param input[type=number], .dep-param select {
+    width: 100%; padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 12.5px; }
+  .dep-param-help { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 3px; line-height: 1.45; }
+  .dep-check { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+  .kind-badge { font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+                padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+  .kind-badge.action { color: var(--accent); }
+
+  .pkgfile { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border: 1px solid var(--border);
+             border-radius: var(--radius-md); margin-bottom: 7px; font-size: 12.5px; }
+  .pkgfile-name { font-weight: 600; }
+  .pkgfile-meta { color: var(--text-muted); font-size: var(--fs-meta); }
+  .pkgfile-hash { font-family: var(--mono); font-size: var(--fs-meta); color: var(--text-muted); }
+  .pkgfile .spacer { margin-left: auto; }
+
+  /* Inventory & Usage sits in the same list panel as Action Packages: the table is ruled off from its filters. */
+  .cl-inv-wrap { border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <div class="module-section" id="section-catalog" hidden>
+      <div class="deploy-workspace"><aside class="deploy-library" id="deploy-library"></aside><div class="deploy-editor" id="deploy-editor"></div></div>
+    </div>
+    <div class="module-section" id="section-actions" hidden></div>
+    <div class="module-section" id="section-settings" hidden><h1>Deploy settings</h1><div id="deploy-settings"></div></div>
+
+
+    <div class="module-section" id="section-overview" hidden>
+      <div id="deploy-page-head"></div>
+      <div id="deploy-quick-links"></div>
+      <div class="stat-tiles" id="deploy-tiles"></div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Endpoints eligible, by package</div>
+          <div class="chart-sub">Where an install or update is waiting to be deployed</div>
+          <div class="hbars" id="chart-eligible"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Most widely installed software</div>
+          <div class="chart-sub">What the fleet already runs, by device count</div>
+          <div class="hbars" id="chart-installed"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Catalog coverage by platform</div>
+          <div class="chart-sub">Packages defining a command for each OS</div>
+          <div id="chart-platforms"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Where packages came from</div>
+          <div class="chart-sub">Authored by hand, or adopted from the fleet</div>
+          <div class="hbars" id="chart-source"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-packages" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Software packages</h2><span class="scan-status" id="pkg-status"></span></div>
+        <p class="hint">
+          A package says how to install, update and remove one piece of software on each platform, and how to
+          recognize it. Every endpoint is then classified before anything runs, so deploying only touches machines
+          the operation actually applies to.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Version</th><th>Platforms</th><th>Applicability</th><th>Scope</th><th>Self Service</th><th>Action</th></tr></thead>
+            <tbody id="pkg-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="editor-title">New software package</h2>
+
+        <div class="kind-picker">
+          <label class="kind-opt">
+            <input type="radio" name="p-kind" value="software" checked>
+            <span><b>Software package</b><br>Installs, updates or removes something, and is verified by finding it installed afterwards.</span>
+          </label>
+          <label class="kind-opt">
+            <input type="radio" name="p-kind" value="action">
+            <span><b>Action package</b><br>Runs a command. Nothing is installed, so there is nothing to detect — a reboot, a cache flush, a service restart.</span>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <div class="field"><label for="p-name">Name</label><input id="p-name" placeholder="Visual Studio Code"></div>
+          <div class="field"><label for="p-vendor">Vendor</label><input id="p-vendor" placeholder="Microsoft"></div>
+          <div class="field softonly"><label for="p-version">Target version</label><input id="p-version" placeholder="leave blank to accept any installed version"></div>
+          <div class="field softonly"><label for="p-follow">Follow latest release <button type="button" class="help-q" data-help="A GitHub project (owner/repo). Mustra reads its latest release every 6 hours and makes it the target version, so endpoints with an older version show Update without anyone editing this package. A distribution's own revision (1.8.2-1) counts as that release.">?</button></label><input id="p-follow" placeholder="GitHub owner/repo, e.g. cloudflare/cloudflared"></div>
+          <div class="field"><label for="p-category">Category</label><input id="p-category" placeholder="Developer tools"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="p-desc">Description</label><input id="p-desc" placeholder="What this is, in the words the person will read"></div>
+        </div>
+
+        <div id="cmd-blocks"></div>
+        <p class="hint">
+          Commands run with the agent's full rights through the platform's own shell — <code>sh -c</code> on
+          Linux and macOS, PowerShell on Windows — so pipes and <code>&amp;&amp;</code> work as written. On macOS a
+          <code>brew</code> command is automatically run as the account that owns the Homebrew prefix, since
+          Homebrew refuses to run as the root the agent is.
+        </p>
+
+        <h3 class="sec-head">Files</h3>
+        <div id="files-panel">
+          <p class="hint" id="files-hint">
+            Payloads staged to the endpoint before the command runs. The command runs <em>in</em> the staging
+            directory, so <code>msiexec /i setup.msi /qn</code> means the file you upload here;
+            <code>$MUSTRA_PACKAGE_DIR</code> holds the absolute path. Each file's SHA-256 is checked on the
+            endpoint after download — a file that silently truncated is worse than one that failed to arrive,
+            because the command would run against it anyway.
+          </p>
+          <div id="files-list"></div>
+          <div class="panel-actions u-mb-12">
+            <input type="file" id="p-file-input" hidden>
+            <button class="tiny" id="p-file-add" type="button">Upload a file</button>
+            <span class="scan-status" id="p-file-status"></span>
+          </div>
+        </div>
+
+        <h3 class="sec-head">Parameters</h3>
+        <p class="hint">
+          Typed values substituted into the command as <code>$(name)</code> before it runs, so
+          "restart in N seconds" is one package instead of one package per N. They are resolved
+          <em>before any endpoint is targeted</em>, so a bad value stops the deployment rather than
+          reaching half the fleet as a half-substituted command. Supplying one is as privileged as
+          writing the command itself, so a package with parameters is not offered through Self Service.
+        </p>
+        <div id="p-params"></div>
+        <div class="panel-actions u-mb-12">
+          <button class="tiny" id="p-param-add" type="button">Add parameter</button>
+        </div>
+
+        <h3 class="sec-head">Limits</h3>
+        <div class="form-grid">
+          <div class="field"><label for="p-timeout">Command timeout (seconds)</label>
+            <input id="p-timeout" type="number" min="0" placeholder="blank for the agent default (900)">
+          </div>
+          <div class="field"><label for="p-expire">Expire after (seconds)</label>
+            <input id="p-expire" type="number" min="0" placeholder="blank to never expire">
+          </div>
+        </div>
+        <p class="hint">
+          The timeout is how long the command may run on the endpoint — the right answer differs enormously
+          between flushing a DNS cache and installing an office suite. Expiry stops a deployment being worth
+          attempting at all, so one aimed at a machine that is switched off does not fire at 3am three weeks later.
+        </p>
+
+        <div class="form-grid softonly">
+          <div class="field"><label for="p-detect-name">Detect by installed application name</label><input id="p-detect-name" placeholder="defaults to the package name"></div>
+          <div class="field"><label for="p-detect-match">Match</label>
+            <select id="p-detect-match"><option value="exact">exact name</option><option value="contains">name contains</option></select>
+          </div>
+          <div class="field"><label for="p-arch">Required architectures</label><input id="p-arch" placeholder="amd64, arm64 — blank for any"></div>
+          <div class="field"><label for="p-ram">Minimum RAM (MB)</label><input id="p-ram" type="number" placeholder="blank for none"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="p-groups">Offer to (computer groups — none means every endpoint)</label>
+            <select id="p-groups" multiple size="4"></select>
+          </div>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="p-selfservice"> Publish to Self Service</label>
+          <label><input type="checkbox" id="p-requests"> Out-of-scope machines may request it</label>
+          <label><input type="checkbox" id="p-enabled" checked> Enabled</label>
+          <label><input type="checkbox" id="p-explicit"> Must be run against endpoints you select</label>
+        </div>
+        <p class="hint">
+          "Must be run against endpoints you select" removes the option to run this package fleet-wide.
+          Worth setting on anything a second run cannot undo — removing the agent, most obviously, which
+          also removes the means of putting it back. The server refuses an untargeted run either way, so
+          an API token cannot route around it.
+        </p>
+        <div class="panel-actions">
+          <button class="primary" id="p-save">Save package</button>
+          <button id="p-cancel">Cancel</button>
+          <span class="scan-status" id="p-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-discover" hidden>
+      <div class="cl-head"><h1>Installed Software</h1><div class="cl-head-actions"><button type="button" id="disc-refresh">Refresh</button></div></div>
+      <section class="cl-panel">
+        <div class="cl-bar">
+          <div class="cl-count-line" id="disc-count"></div>
+          <div class="cl-tools">
+            <label class="cl-search"><input type="search" id="disc-q" placeholder="Search software, publisher or version" aria-label="Search installed software"></label>
+          </div>
+        </div>
+        <div class="cl-filters">
+          <button type="button" class="cl-filter-toggle" id="disc-filters-toggle" aria-expanded="true"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3 2l4 3-4 3z" fill="currentColor"/></svg> Filters</button>
+          <div class="cl-filter-grid" id="disc-filter-grid">
+            <label class="cl-filter"><span>On at least (devices)</span><input id="disc-min" type="number" value="1" min="1"></label>
+            <label class="cl-filter"><span>Platform</span><select id="disc-platform"><option value="">Select…</option></select></label>
+            <label class="cl-filter"><span>Catalog</span><select id="disc-catalog"><option value="">Select…</option><option value="no">Not in catalog</option><option value="yes">In catalog</option></select></label>
+          </div>
+        </div>
+        <div class="table-scroll table-scroll-y rows-10 no-cards cl-inv-wrap">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th>Software</th><th>Publisher</th><th>Devices</th><th>Platforms</th><th>Versions seen</th><th>Action</th></tr></thead>
+            <tbody id="disc-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <p class="hint u-mt-10">
+        Everything the fleet already runs, from the inventory mustra collects anyway — no scan, no endpoint work.
+        Adopting one creates a package pre-filled with the native package-manager commands for the platforms it
+        was found on, which you then check before deploying. <span id="disc-status"></span>
+      </p>
+    </div>
+
+    <div class="module-section" id="section-inventory" hidden>
+      <div class="cl-head"><h1>Inventory &amp; Usage</h1><div class="cl-head-actions"><button type="button" id="inv-refresh">Refresh</button></div></div>
+      <div class="stat-tiles" id="inv-tiles"></div>
+      <section class="cl-panel">
+        <div class="cl-bar">
+          <div class="cl-count-line" id="inv-count"></div>
+          <div class="cl-tools">
+            <button type="button" class="cl-btn" id="inv-export">Export CSV</button>
+            <label class="cl-search"><input type="search" id="inv-q" placeholder="Filter items" aria-label="Filter products or vendors"></label>
+          </div>
+        </div>
+        <div class="cl-filters">
+          <button type="button" class="cl-filter-toggle" id="inv-filters-toggle" aria-expanded="true"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3 2l4 3-4 3z" fill="currentColor"/></svg> Filters</button>
+          <div class="cl-filter-grid" id="inv-filter-grid">
+            <label class="cl-filter"><span>Show</span>
+              <select id="inv-filter">
+                <option value="apps">Applications only</option>
+                <option value="all">Everything, components too</option>
+                <option value="tracked">Tracked products</option>
+                <option value="unused">With unused seats</option>
+              </select></label>
+            <label class="cl-filter"><span>Usage window</span>
+              <select id="inv-days"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label>
+          </div>
+        </div>
+        <div class="table-scroll table-scroll-y rows-10 no-cards cl-inv-wrap">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th>Product</th><th>Vendor</th><th>Platforms</th><th>Installed</th><th>Used</th><th>Unused</th><th>Usage</th><th>Last used</th><th>First seen</th><th>Annual cost</th><th>Waste</th><th>Action</th></tr></thead>
+            <tbody id="inv-body"><tr><td class="empty" colspan="12">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <p class="scan-status u-mt-10" id="inv-status"></p>
+      <p class="hint u-mt-6">
+        Every installed application, normalised to one product across platforms and versions, graded by how often it
+        actually runs. Usage comes from the process starts the fleet already reports and from what the endpoint itself
+        records (Windows Prefetch, Spotlight); nothing extra runs on the endpoint. <b>Unused</b> means mustra knows what
+        the product runs as and saw no launch in the window; <b>unknown</b> means it cannot tell (a library, a runtime, or
+        no known executable — add one on the tracked product). Track a product to price it: cost per seat × installed is
+        the estimated annual cost, × unused the estimated waste. Levels are graded against the usage history that
+        exists (shown in the status line) until it reaches the window, so they settle over the first weeks. <b>Remove unused</b> hands the unused endpoints to the
+        product's catalog package as an ordinary remove deployment, maintenance windows and all.
+      </p>
+    </div>
+
+    <div class="module-section" id="section-confidence" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Confidence</h2><span class="scan-status" id="cf-status"></span></div>
+        <p class="hint">
+          What <b>this fleet's own history</b> says about a package: how often it has actually worked here, on how many
+          machines, and what it did to their health in the day after. Some tools compute part of this from data pooled across
+          every customer; mustra has no such corpus and inventing one would be a lie, so this is local only.
+          <br><br>
+          A package with too little history reports <b>not enough history</b> rather than a number. Three successes out of
+          three is not certainty, it is no evidence, and a score shown without its sample size is worse than no score
+          because it looks like knowledge. A fall in health after a deployment costs a package points, capped, and a rise
+          earns it none — a machine's week improving is not the package helping.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Package</th><th>Confidence</th><th>Succeeded</th><th>Endpoints</th><th>Health after</th><th>Last run</th><th>Basis</th></tr></thead>
+            <tbody id="cf-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-deployments" hidden>
+      <div id="software-deployments"></div>
+    </div>
+
+    <div class="module-section" id="section-schedules" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Scheduled actions</h2><span class="scan-status" id="sched-status"></span></div>
+        <p class="hint">
+          Run a package on a cadence. Firing one goes through exactly the same path as deploying it by hand —
+          applicability is evaluated fresh, parameters are resolved and validated, files are staged — so a
+          schedule cannot quietly behave differently from the thing you tested. Times are UTC.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Package</th><th>Operation</th><th>Cadence</th><th>Target</th><th>Next run</th><th>Last run</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="sched-body"><tr><td class="empty" colspan="9">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="sched-editor-title">New schedule</h2>
+        <div class="form-grid">
+          <div class="field"><label for="sc-name">Name</label><input id="sc-name" placeholder="Nightly cache clear"></div>
+          <div class="field"><label for="sc-package">Package</label><select id="sc-package"></select></div>
+          <div class="field"><label for="sc-operation">Operation</label><select id="sc-operation">
+            <option value="run">Run action</option><option value="install">Install / Legacy Run</option>
+            <option value="update">Update</option>
+            <option value="remove">Remove / Cancel</option>
+          </select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="sc-kind">Repeats</label><select id="sc-kind">
+            <option value="daily">Every day</option>
+            <option value="weekly">Every week</option>
+            <option value="once">Once</option>
+          </select></div>
+          <div class="field" id="sc-time-field"><label for="sc-time">At (UTC)</label><input id="sc-time" type="time" value="03:00"></div>
+          <div class="field" id="sc-weekday-field" hidden><label for="sc-weekday">On</label><select id="sc-weekday">
+            <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+            <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option>
+            <option value="6">Saturday</option>
+          </select></div>
+          <div class="field" id="sc-runat-field" hidden><label for="sc-runat">Date and time (UTC)</label><input id="sc-runat" type="datetime-local"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="sc-target">Target</label><select id="sc-target"></select></div>
+        </div>
+        <div class="form-grid"><div class="field"><label for="sc-revision">Package version</label><select id="sc-revision"></select></div><label><input type="checkbox" id="sc-follow-latest"> Follow latest published revision</label></div>
+        <div id="sc-params"></div>
+        <div class="checks">
+          <label><input type="checkbox" id="sc-enabled" checked> Enabled</label>
+        </div>
+        <div class="panel-actions">
+          <button class="primary" id="sc-save">Save schedule</button>
+          <button id="sc-cancel">Cancel</button>
+          <span class="scan-status" id="sc-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-windows" hidden>
+      <div id="mw-list-view">
+        <div class="cl-head"><h1>Maintenance Windows</h1><div class="cl-head-actions"><button class="primary" type="button" id="mw-new">Create Window</button></div></div>
+        <section class="cl-panel">
+          <div class="cl-bar">
+            <div class="cl-count-line" id="mw-count"></div>
+            <div class="cl-tools"><label class="cl-search" id="mw-search"><input type="search" id="mw-filter" placeholder="Filter items" aria-label="Filter windows"></label></div>
+          </div>
+          <div class="table-scroll table-scroll-y rows-10">
+            <table class="mw-table">
+              <thead><tr><th>ID</th><th>Platform</th><th>Name and Schedule</th><th>Next Occurrence</th><th>Targets</th><th>Applies To</th><th>Effective Date</th><th>Window Time</th><th>Last Modified</th><th>Last Modified By</th><th><span class="sr-only">Actions</span></th></tr></thead>
+              <tbody id="mw-body"><tr><td class="empty" colspan="11">loading…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+        <p class="hint u-mt-12">
+          A window restricts only the endpoints it targets (on its platform); an endpoint no window covers is
+          unrestricted, and one covered by several may be touched while any of them is open. A queued deployment
+          outside its window waits and says so; a patch run skips the endpoint until the next firing inside the
+          window. Only an account holding <code>deploy.override_windows</code> can deploy outside a window.
+        </p>
+      </div>
+      <div id="mw-editor-view" hidden></div>
+    </div>
+
+    <div class="module-section" id="section-templates" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Deployment templates</h2><span class="scan-status" id="tpl-status"></span></div>
+        <p class="hint">
+          The choices a deployment form remembers: package, operation, plan, parameters, reboot and expiry. Pick a
+          template from the deployment form to fill it in, or save the form you just filled as one. The default
+          template pre-fills every new deployment form.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Package</th><th>Operation</th><th>Plan</th><th>Reboot</th><th>Expiry</th><th>Windows</th><th>Default</th><th>Action</th></tr></thead>
+            <tbody id="tpl-body"><tr><td class="empty" colspan="9">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="tpl-editor-title">New template</h2>
+        <div class="form-grid">
+          <div class="field"><label for="tpl-name">Name</label><input id="tpl-name" placeholder="Quiet install, reboot allowed"></div>
+          <div class="field"><label for="tpl-package">Package (optional)</label><select id="tpl-package"><option value="">any package</option></select></div>
+          <div class="field"><label for="tpl-operation">Operation</label><select id="tpl-operation">
+            <option value="">leave as is</option><option value="install">Install</option><option value="update">Update</option>
+            <option value="remove">Remove</option><option value="run">Run action</option>
+          </select></div>
+          <div class="field"><label for="tpl-plan">Deployment plan</label><select id="tpl-plan"><option value="">none (all at once)</option></select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="tpl-desc">Description</label><input id="tpl-desc" placeholder="optional"></div>
+          <div class="field"><label for="tpl-expire">Expiry (seconds; 0 = package default)</label><input id="tpl-expire" type="number" min="0" max="31536000" value="86400"></div>
+          <div class="field"><label for="tpl-params">Parameters (JSON object)</label><input id="tpl-params" placeholder='{"channel":"stable"}'></div>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="tpl-reboot"> Allow required reboot</label>
+          <label><input type="checkbox" id="tpl-force"> Override dependent uninstall protection</label>
+          <label id="tpl-override-label" hidden><input type="checkbox" id="tpl-override"> Override maintenance windows</label>
+          <label><input type="checkbox" id="tpl-default"> Default template</label>
+        </div>
+        <div class="panel-actions">
+          <button class="primary" id="tpl-save">Save template</button>
+          <button id="tpl-cancel">Cancel</button>
+          <span class="scan-status" id="tpl-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+  <div class="drawer-overlay" id="pkg-overlay"></div>
+  <aside class="drawer" id="pkg-drawer" aria-label="Package applicability">
+    <div class="drawer-header">
+      <div>
+        <div id="pkg-drawer-pills" class="u-mb-6"></div>
+        <h3 id="pkg-drawer-title">—</h3>
+      </div>
+      <button class="drawer-close" id="pkg-drawer-close" aria-label="Close">✕</button>
+    </div>
+    <div class="drawer-body" id="pkg-drawer-body"></div>
+  </aside>
+
+<script src="/static/deploy.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/deployments.js"></script>
+<script>
+const OSES = [
+  { id: "linux",   label: "Linux",   example: "apt-get install -y htop" },
+  { id: "darwin",  label: "macOS",   example: "brew install htop" },
+  { id: "windows", label: "Windows", example: "winget install --silent --id Microsoft.VisualStudioCode" },
+];
+const STATE_LABELS = {
+  installed: "Installed", install_eligible: "Install eligible",
+  update_eligible: "Update eligible", not_applicable: "Not applicable",
+};
+
+const summary = {agents:[]};
+let packages = [], applicability = {}, allGroups = [], discovered = [], editingID = null;
+let drawerPackage = null, drawerRows = [], selected = new Set();
+
+document.addEventListener("mustra:user", (e) => {
+  initModuleSections([
+    { hash: "overview", label: "Overview" },
+    { hash: "catalog", label: "Software Catalog" },
+    { hash: "actions", label: "Action Packages" },
+    { hash: "settings", label: "Settings" },
+    { hash: "discover", label: "Installed Software" },
+    { hash: "confidence", label: "Confidence" },
+    { hash: "inventory", label: "Inventory & Usage" },
+    { hash: "deployments", label: "Deployments" },
+    { hash: "schedules", label: "Schedules" },
+    { hash: "windows", label: "Maintenance Windows" },
+    { hash: "templates", label: "Templates" },
+  ]);
+  renderPageHead("deploy-page-head", "/software");
+  renderQuickLinks("deploy-quick-links", "/software", e.detail);
+  renderCommandBlocks();
+  loadGroups();
+  fetch("/api/agents").then(r=>r.json()).then(data=>{summary.agents=data.agents||[];renderScheduleOptions();}).catch(()=>{});
+  loadPackages();
+  loadDiscovered();
+  loadInventory();
+  loadConfidence();
+  loadDeployments();
+  loadWindows();
+  loadTemplates();
+});
+
+// Each section shows what it fetched when the page opened. Coming back to
+// one fetches it again, so a deployment started, a package added or an
+// endpoint reporting since then shows without reloading the page. The
+// catalog and action package sections refresh themselves (deploy.js).
+const SECTION_LOADERS = {
+  overview: () => loadPackages(),
+  discover: () => loadDiscovered(),
+  confidence: () => loadConfidence(),
+  inventory: () => loadInventory(),
+  deployments: () => softwareDeployments.reload(),
+  schedules: () => loadSchedules(),
+  windows: () => loadWindows(),
+  templates: () => loadTemplates(),
+};
+window.addEventListener("hashchange", () => {
+  const load = SECTION_LOADERS[location.hash.replace("#", "").split("?")[0]];
+  if (load) Promise.resolve(load()).catch(() => {});
+});
+
+function renderCommandBlocks() {
+  document.getElementById("cmd-blocks").innerHTML = OSES.map(os => `
+    <div class="cmd-os">
+      <h4>${escapeHtml(os.label)} <span class="os-pill">${escapeHtml(os.id)}</span></h4>
+      <div class="cmd-row">
+        <div class="cmd-block"><label for="cmd-${escapeHtml(os.id)}-install">Install</label><input id="cmd-${escapeHtml(os.id)}-install" placeholder="${escapeHtml(os.example)}"></div>
+        <div class="cmd-block"><label for="cmd-${escapeHtml(os.id)}-update">Update</label><input id="cmd-${escapeHtml(os.id)}-update" placeholder="optional"></div>
+        <div class="cmd-block"><label for="cmd-${escapeHtml(os.id)}-remove">Remove</label><input id="cmd-${escapeHtml(os.id)}-remove" placeholder="optional"></div>
+      </div>
+    </div>`).join("");
+}
+
+async function loadGroups() {
+  const resp = await fetch("/api/groups");
+  if (!resp.ok) return;
+  allGroups = (await resp.json()).groups || [];
+  document.getElementById("p-groups").innerHTML = allGroups.map(g =>
+    `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} — ${escapeHtml(g.member_count)} device(s)</option>`).join("");
+}
+const groupName = id => (allGroups.find(g => g.id === id) || {}).name || id;
+
+let scheduleRevisions = [];
+async function loadPackages() {
+  const resp = await fetch("/api/software");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const data = await resp.json();
+  packages = data.packages || [];
+  applicability = data.applicability || {};
+  const revisionsResponse = await fetch("/api/deploy/packages/all/revisions");
+  if (revisionsResponse.ok) scheduleRevisions = (await revisionsResponse.json()).revisions || [];
+  renderPackages();
+  renderOverview();
+  // The schedule form's package list and parameter inputs come from the
+  // catalog, so they are rebuilt whenever it changes rather than once at
+  // load — a package added since would otherwise be unschedulable until a
+  // page refresh.
+  renderScheduleOptions();
+  loadSchedules();
+}
+
+function applicChips(id) {
+  const c = applicability[id] || {};
+  const parts = [];
+  if (c.install_eligible) parts.push(`<span class="state-pill state-install_eligible">${escapeHtml(c.install_eligible)} to install</span>`);
+  if (c.update_eligible)  parts.push(`<span class="state-pill state-update_eligible">${escapeHtml(c.update_eligible)} to update</span>`);
+  if (c.installed)        parts.push(`<span class="state-pill state-installed">${escapeHtml(c.installed)} installed</span>`);
+  return parts.length ? `<div class="applic">${parts.join("")}</div>`
+                      : `<span class="state-pill state-not_applicable">none applicable</span>`;
+}
+
+function renderPackages() {
+  const legacyPackages=packages.filter(p=>!p.deploy_revision&&Object.keys(p.commands||{}).length>0);
+  const body = document.getElementById("pkg-body");
+  document.getElementById("pkg-status").textContent = legacyPackages.length ? `${legacyPackages.length} package(s)` : "";
+  body.innerHTML = legacyPackages.length === 0
+    ? '<tr><td class="empty" colspan="7">no packages yet — adopt something from Installed Software, or create one below</td></tr>'
+    : legacyPackages.map(p => `
+      <tr>
+        <td><strong>${escapeHtml(p.name)}</strong>
+            <span class="kind-badge ${p.kind === "action" ? "action" : ""}">${p.kind === "action" ? "action" : "software"}</span>
+            ${(p.parameters || []).length ? `<span class="kind-badge">${escapeHtml(p.parameters.length)} param</span>` : ""}
+            ${p.vendor ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(p.vendor)}</div>` : ""}</td>
+        <td>${p.kind === "action" ? "—" : escapeHtml(p.version || "any")}${p.version_source ? ` <span class="muted" title="${escapeHtml(`Follows ${p.version_source.replace(/^github:/, "")} releases`)}">latest</span>` : ""}</td>
+        <td>${Object.keys(p.commands || {}).map(os => `<span class="os-pill">${escapeHtml(osLabel(os))}</span>`).join(" ")}</td>
+        <td>${applicChips(p.id)}</td>
+        <td class="u-fs-meta u-c-text-muted u-ws-normal u-maxw-200">
+          ${(p.group_ids || []).length === 0 ? "every endpoint" : (p.group_ids || []).map(g => escapeHtml(groupName(g))).join(", ")}</td>
+        <td>${p.self_service ? '<span class="state-pill state-installed">published</span>' : "—"}</td>
+        <td class="row-actions">
+          <button class="tiny go" data-deploy="${escapeHtml(p.id)}">deploy</button>
+          <button class="tiny" data-edit="${escapeHtml(p.id)}">edit</button>
+          <button class="tiny danger" data-delete="${escapeHtml(p.id)}">delete</button>
+        </td>
+      </tr>`).join("");
+
+  body.querySelectorAll("[data-deploy]").forEach(b => b.addEventListener("click", () => openPackage(b.dataset.deploy)));
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => editPackage(b.dataset.edit)));
+  body.querySelectorAll("[data-delete]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Delete this package? Any unpublished drafts go with it. Nothing already installed is removed.")) return;
+    const resp = await fetch(`/api/software/${b.dataset.delete}`, { method: "DELETE" });
+    // A package that published a revision is refused, and the refusal says
+    // why. Reloading silently made it look like the delete had simply been
+    // ignored.
+    if (!resp.ok) { alert(await resp.text()); return; }
+    loadPackages();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "software-packages" });
+  if (dt) dt.refresh();
+}
+
+function renderOverview() {
+  const totals = { install_eligible: 0, update_eligible: 0, installed: 0 };
+  for (const id in applicability) {
+    for (const k in totals) totals[k] += applicability[id][k] || 0;
+  }
+  document.getElementById("deploy-tiles").innerHTML = [
+    { label: "Packages", value: packages.length },
+    { label: "Installs available", value: totals.install_eligible, cls: totals.install_eligible ? "ok" : "" },
+    { label: "Updates available", value: totals.update_eligible, cls: totals.update_eligible ? "bad" : "" },
+    { label: "Published to Self Service", value: packages.filter(p => p.self_service).length },
+    { label: "Distinct software in fleet", value: discovered.length },
+  ].map(t => `<div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div>
+    </div>`).join("");
+
+  hBarChart(document.getElementById("chart-eligible"),
+    packages.map(p => ({
+      label: p.name,
+      value: (applicability[p.id]?.install_eligible || 0) + (applicability[p.id]?.update_eligible || 0),
+    })).filter(r => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 10),
+    { unit: "endpoints", empty: "every endpoint is up to date on every package", collapseSingle: false });
+
+  hBarChart(document.getElementById("chart-installed"),
+    discovered.slice(0, 10).map(d => ({ label: d.name, value: d.device_count })),
+    { unit: "devices", collapseSingle: false });
+
+  const byOS = OSES.map(os => ({
+    label: os.label,
+    value: packages.filter(p => (p.commands || {})[os.id]).length,
+  }));
+  columnChart(document.getElementById("chart-platforms"), byOS, { unit: "packages" });
+
+  const bySource = ["manual", "discovered"].map(src => ({
+    label: src === "manual" ? "Authored by hand" : "Adopted from the fleet",
+    value: packages.filter(p => (p.source || "manual") === src).length,
+  })).filter(r => r.value > 0);
+  hBarChart(document.getElementById("chart-source"), bySource, { unit: "packages", collapseSingle: false });
+}
+
+// --- editor ---
+
+const PARAM_TYPES = ["text", "numeric", "select", "checkbox"];
+
+// The kind picker hides what does not apply rather than showing dead fields:
+// an action package has nothing to detect and no version to target, so
+// leaving those on screen only invites someone to fill them in.
+function currentKind() {
+  const el = document.querySelector('input[name="p-kind"]:checked');
+  return el ? el.value : "software";
+}
+
+function applyKindToForm() {
+  const action = currentKind() === "action";
+  document.querySelectorAll(".softonly").forEach(el => { el.hidden = action; });
+  document.getElementById("editor-title").textContent =
+    editingID ? document.getElementById("editor-title").textContent
+              : (action ? "New action package" : "New software package");
+  // A parameter value is as privileged as the command it lands in, so a
+  // parameterized package cannot be published to Self Service.
+  const ss = document.getElementById("p-selfservice");
+  const hasParams = document.querySelectorAll("#p-params .param-row").length > 0;
+  ss.disabled = hasParams;
+  if (hasParams) ss.checked = false;
+  ss.closest("label").style.opacity = hasParams ? .5 : 1;
+  ss.closest("label").title = hasParams
+    ? "A package with parameters cannot be offered through Self Service — filling one in is as privileged as writing the command."
+    : "";
+}
+document.querySelectorAll('input[name="p-kind"]').forEach(r =>
+  r.addEventListener("change", applyKindToForm));
+
+function paramRow(v = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "param-row";
+  wrap.innerHTML = `
+    <div><label>Name</label><input class="pp-name" placeholder="delay" value="${escapeHtml(v.name || "")}"></div>
+    <div><label>Label shown to the operator</label><input class="pp-label" placeholder="Delay (seconds)" value="${escapeHtml(v.label || "")}"></div>
+    <div><label>Type</label><select class="pp-type">
+      ${PARAM_TYPES.map(t => `<option value="${escapeHtml(t)}"${v.type === t ? " selected" : ""}>${escapeHtml(t)}</option>`).join("")}
+    </select></div>
+    <div><label>Default</label><input class="pp-default" value="${escapeHtml(v.default || "")}"></div>
+    <div><label class="pp-extra-label">Options / min,max</label><input class="pp-extra" placeholder="a, b, c  or  0,3600" value="${escapeHtml(paramExtra(v))}"></div>
+    <div><button class="tiny danger pp-del" type="button">remove</button></div>`;
+  wrap.querySelector(".pp-del").addEventListener("click", () => { wrap.remove(); applyKindToForm(); });
+  wrap.querySelector(".pp-type").addEventListener("change", () => syncExtraLabel(wrap));
+  syncExtraLabel(wrap);
+  return wrap;
+}
+
+function paramExtra(v) {
+  if (v.type === "select") return (v.options || []).join(", ");
+  if (v.type === "numeric") {
+    const lo = v.min === undefined || v.min === null ? "" : v.min;
+    const hi = v.max === undefined || v.max === null ? "" : v.max;
+    return (lo === "" && hi === "") ? "" : `${lo},${hi}`;
+  }
+  return v.validate || "";
+}
+
+function syncExtraLabel(row) {
+  const t = row.querySelector(".pp-type").value;
+  const label = row.querySelector(".pp-extra-label");
+  const input = row.querySelector(".pp-extra");
+  if (t === "select") { label.textContent = "Options (comma separated)"; input.placeholder = "restart, shutdown"; }
+  else if (t === "numeric") { label.textContent = "Min,Max"; input.placeholder = "0,3600"; }
+  else if (t === "checkbox") { label.textContent = "—"; input.placeholder = "not used"; }
+  else { label.textContent = "Validation pattern"; input.placeholder = "^[a-z0-9.-]+$"; }
+}
+
+document.getElementById("p-param-add").addEventListener("click", () => {
+  document.getElementById("p-params").appendChild(paramRow());
+  applyKindToForm();
+});
+
+function readParams() {
+  return [...document.querySelectorAll("#p-params .param-row")].map(row => {
+    const g = c => row.querySelector(c).value.trim();
+    const type = g(".pp-type");
+    const p = { name: g(".pp-name"), label: g(".pp-label"), type: type, default: g(".pp-default"), required: true };
+    const extra = g(".pp-extra");
+    if (type === "select") {
+      p.options = extra.split(",").map(x => x.trim()).filter(Boolean);
+    } else if (type === "numeric") {
+      const [lo, hi] = extra.split(",").map(x => x.trim());
+      if (lo !== "" && lo !== undefined) p.min = Number(lo);
+      if (hi !== "" && hi !== undefined) p.max = Number(hi);
+    } else if (type === "text" && extra) {
+      p.validate = extra;
+    }
+    return p;
+  }).filter(p => p.name);
+}
+
+// --- package files ---
+
+let editingFiles = [];
+
+function fmtBytes(n) {
+  if (n < 1024) return n + " B";
+  const units = ["KB", "MB", "GB"];
+  let v = n / 1024, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(v < 10 ? 1 : 0) + " " + units[i];
+}
+
+function renderFiles() {
+  const list = document.getElementById("files-list");
+  const add = document.getElementById("p-file-add");
+  // Uploading needs somewhere to put it, and a package that has not been
+  // saved has no id yet. Saying so beats a button that fails.
+  add.disabled = !editingID;
+  add.title = editingID ? "" : "Save the package first — a file needs a package to belong to.";
+  if (!editingID) {
+    list.innerHTML = '<p class="hint u-m-0-0-10">Save the package first, then upload its files here.</p>';
+    return;
+  }
+  list.innerHTML = editingFiles.length === 0
+    ? '<p class="hint u-m-0-0-10">No files — this package installs from a repository or a URL its command fetches itself.</p>'
+    : editingFiles.map(f => `
+      <div class="pkgfile">
+        <div>
+          <div class="pkgfile-name">${escapeHtml(f.name)}</div>
+          <div class="pkgfile-meta">${escapeHtml(fmtBytes(f.size_bytes))} ·
+            <span class="pkgfile-hash">sha256 ${escapeHtml((f.sha256 || "").slice(0, 16))}…</span></div>
+        </div>
+        <span class="spacer"></span>
+        <button class="tiny danger" data-file-del="${escapeHtml(f.id)}" type="button">remove</button>
+      </div>`).join("");
+  list.querySelectorAll("[data-file-del]").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest(".pkgfile") || b.parentElement, id = b.dataset.fileDel;
+    undoable({ text: "File removed from the package", hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/software/files/${encodeURIComponent(id)}`, { method: "DELETE", keepalive: true }); loadFiles(); } });
+  }));
+}
+
+async function loadFiles() {
+  if (!editingID) { editingFiles = []; renderFiles(); return; }
+  const resp = await fetch(`/api/software/${encodeURIComponent(editingID)}/files`);
+  editingFiles = resp.ok ? ((await resp.json()).files || []) : [];
+  renderFiles();
+}
+
+document.getElementById("p-file-add").addEventListener("click", () =>
+  document.getElementById("p-file-input").click());
+
+document.getElementById("p-file-input").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file || !editingID) return;
+  const status = document.getElementById("p-file-status");
+  status.textContent = `uploading ${file.name} (${fmtBytes(file.size)})…`;
+  const fd = new FormData();
+  fd.append("file", file);
+  const resp = await fetch(`/api/software/${encodeURIComponent(editingID)}/files`, { method: "POST", body: fd });
+  e.target.value = "";
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = '<span class="u-c-ok">uploaded</span>';
+  loadFiles();
+});
+
+function editPackage(id) {
+  const p = packages.find(x => x.id === id);
+  if (!p) return;
+  editingID = id;
+  document.getElementById("editor-title").textContent = `Editing ${p.name}`;
+  const set = (el, v) => { document.getElementById(el).value = v || ""; };
+  set("p-name", p.name); set("p-vendor", p.vendor); set("p-version", p.version);
+  set("p-follow", (p.version_source || "").replace(/^github:/, ""));
+  set("p-category", p.category); set("p-desc", p.description);
+  set("p-detect-name", (p.detect || {}).app_name);
+  document.getElementById("p-detect-match").value = (p.detect || {}).match || "exact";
+  set("p-arch", ((p.requirements || {}).arch || []).join(", "));
+  set("p-ram", (p.requirements || {}).min_ram_mb || "");
+  set("p-timeout", p.command_timeout_seconds || "");
+  set("p-expire", p.expire_seconds || "");
+  const kindEl = document.querySelector(`input[name="p-kind"][value="${p.kind === "action" ? "action" : "software"}"]`);
+  if (kindEl) kindEl.checked = true;
+  const params = document.getElementById("p-params");
+  params.innerHTML = "";
+  (p.parameters || []).forEach(v => params.appendChild(paramRow(v)));
+  applyKindToForm();
+  loadFiles();
+  for (const os of OSES) {
+    const ops = (p.commands || {})[os.id] || {};
+    set(`cmd-${os.id}-install`, ops.install);
+    set(`cmd-${os.id}-update`, ops.update);
+    set(`cmd-${os.id}-remove`, ops.remove);
+  }
+  document.getElementById("p-selfservice").checked = !!p.self_service;
+  document.getElementById("p-requests").checked = !!p.allow_requests;
+  document.getElementById("p-explicit").checked = !!p.require_explicit_targets;
+  document.getElementById("p-enabled").checked = !!p.enabled;
+  [...document.getElementById("p-groups").options].forEach(o => { o.selected = (p.group_ids || []).includes(o.value); });
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function resetEditor() {
+  editingID = null;
+  document.getElementById("editor-title").textContent = "New software package";
+  ["p-name","p-vendor","p-version","p-follow","p-category","p-desc","p-detect-name","p-arch","p-ram",
+   "p-timeout","p-expire"]
+    .forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("p-params").innerHTML = "";
+  const swKind = document.querySelector('input[name="p-kind"][value="software"]');
+  if (swKind) swKind.checked = true;
+  OSES.forEach(os => ["install","update","remove"].forEach(op => {
+    document.getElementById(`cmd-${os.id}-${op}`).value = "";
+  }));
+  document.getElementById("p-selfservice").checked = false;
+  document.getElementById("p-requests").checked = false;
+  document.getElementById("p-enabled").checked = true;
+  [...document.getElementById("p-groups").options].forEach(o => { o.selected = false; });
+  document.getElementById("p-status").textContent = "";
+  document.getElementById("p-file-status").textContent = "";
+  applyKindToForm();
+  loadFiles();
+}
+document.getElementById("p-cancel").addEventListener("click", resetEditor);
+
+document.getElementById("p-save").addEventListener("click", async () => {
+  const status = document.getElementById("p-status");
+  const val = id => document.getElementById(id).value.trim();
+  const commands = {};
+  for (const os of OSES) {
+    const ops = {};
+    for (const op of ["install", "update", "remove"]) {
+      const v = document.getElementById(`cmd-${os.id}-${op}`).value.trim();
+      if (v) ops[op] = v;
+    }
+    if (Object.keys(ops).length) commands[os.id] = ops;
+  }
+  if (!val("p-name")) { status.textContent = "name is required"; return; }
+  if (!Object.keys(commands).length) {
+    status.textContent = "give at least one command for at least one operating system";
+    return;
+  }
+
+  const body = {
+    kind: currentKind(),
+    name: val("p-name"), vendor: val("p-vendor"), version: val("p-version"),
+    // Accepts a pasted project URL as well as owner/repo.
+    version_source: currentKind() === "action" || !val("p-follow") ? "" :
+      "github:" + val("p-follow").replace(/^https?:\/\/github\.com\//i, "").replace(/^github:/i, "").replace(/\/+$/, "").replace(/\.git$/, ""),
+    category: val("p-category"), description: val("p-desc"), commands,
+    parameters: readParams(),
+    command_timeout_seconds: Number(val("p-timeout")) || 0,
+    expire_seconds: Number(val("p-expire")) || 0,
+    detect: { app_name: val("p-detect-name"), match: document.getElementById("p-detect-match").value },
+    requirements: {
+      arch: val("p-arch") ? val("p-arch").split(",").map(s => s.trim()).filter(Boolean) : [],
+      min_ram_mb: Number(val("p-ram")) || 0,
+    },
+    group_ids: [...document.getElementById("p-groups").selectedOptions].map(o => o.value),
+    self_service: document.getElementById("p-selfservice").checked,
+    allow_requests: document.getElementById("p-requests").checked,
+    require_explicit_targets: document.getElementById("p-explicit").checked,
+    enabled: document.getElementById("p-enabled").checked,
+  };
+
+  status.textContent = "saving…";
+  const resp = await fetch(editingID ? `/api/software/${editingID}` : "/api/software", {
+    method: editingID ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = `<span class="u-c-ok">saved</span>`;
+  resetEditor();
+  loadPackages();
+});
+
+// --- scheduled actions ---
+
+let schedules = [];
+let editingScheduleID = null;
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function cadenceText(a) {
+  if (a.kind === "once") return a.run_at ? `once, ${fmtTime(a.run_at)}` : "once";
+  if (a.kind === "weekly") return `${WEEKDAYS[a.weekday || 0]}s at ${a.time_of_day} UTC`;
+  return `daily at ${a.time_of_day} UTC`;
+}
+
+function scheduleTargetText(a) {
+  if (a.target_agent) {
+    const ag = (summary.agents || []).find(x => x.agent_id === a.target_agent);
+    return ag ? ag.hostname : "one device";
+  }
+  if (a.target_os) return osLabel(a.target_os);
+  if (a.target_site) return a.target_site;
+  return "all applicable";
+}
+
+async function loadSchedules() {
+  const resp = await fetch("/api/schedules");
+  if (!resp.ok) return;
+  schedules = (await resp.json()).schedules || [];
+  document.getElementById("sched-status").textContent =
+    schedules.length ? `${schedules.length} schedule(s)` : "";
+  const body = document.getElementById("sched-body");
+  body.innerHTML = schedules.length === 0
+    ? '<tr><td class="empty" colspan="9">none yet — schedule a package below</td></tr>'
+    : schedules.map(a => {
+        const pkg = packages.find(p => p.id === a.package_id);
+        return `<tr>
+          <td><strong>${escapeHtml(a.name)}</strong></td>
+          <td>${escapeHtml(pkg ? pkg.name : "(package deleted)")}</td>
+          <td>${escapeHtml(a.operation)}</td>
+          <td>${escapeHtml(cadenceText(a))}</td>
+          <td>${escapeHtml(scheduleTargetText(a))}</td>
+          <td>${a.next_run_at ? fmtAgo(a.next_run_at) : "—"}</td>
+          <td>${a.last_run_at ? fmtAgo(a.last_run_at) : "never"}</td>
+          <td>${a.enabled
+            ? '<span class="sev-pill u-bg-ok-bg u-c-ok">enabled</span>'
+            : '<span class="sev-pill none">disabled</span>'}</td>
+          <td class="row-actions">
+            <button class="tiny go" data-sched-run="${escapeHtml(a.id)}">run now</button>
+            <button class="tiny" data-sched-edit="${escapeHtml(a.id)}">edit</button>
+            <button class="tiny danger" data-sched-del="${escapeHtml(a.id)}">delete</button>
+          </td></tr>`;
+      }).join("");
+
+  body.querySelectorAll("[data-sched-edit]").forEach(b =>
+    b.addEventListener("click", () => editSchedule(b.dataset.schedEdit)));
+
+  // Running now deliberately does not touch the cadence: it is how you find
+  // out whether a schedule does what its author thinks without waiting a
+  // week to see.
+  body.querySelectorAll("[data-sched-run]").forEach(b => b.addEventListener("click", async () => {
+    const status = document.getElementById("sched-status");
+    status.textContent = "firing…";
+    const resp = await fetch(`/api/schedules/${encodeURIComponent(b.dataset.schedRun)}/run`, { method: "POST" });
+    if (!resp.ok) {
+      status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`;
+      return;
+    }
+    const out = await resp.json();
+    status.innerHTML = `<span class="u-c-ok">deployment ${escapeHtml(out.run_id)} on ${escapeHtml(out.targets)} endpoint(s)</span>`;
+    loadSchedules();
+  }));
+
+  body.querySelectorAll("[data-sched-del]").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest("tr"), id = b.dataset.schedDel;
+    undoable({ text: "Schedule deleted. Deployments it already made are kept.", hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/schedules/${encodeURIComponent(id)}`, { method: "DELETE", keepalive: true }); resetSchedule(); loadSchedules(); } });
+  }));
+}
+
+function syncScheduleKind() {
+  const kind = document.getElementById("sc-kind").value;
+  document.getElementById("sc-weekday-field").hidden = kind !== "weekly";
+  document.getElementById("sc-runat-field").hidden = kind !== "once";
+  document.getElementById("sc-time-field").hidden = kind === "once";
+}
+
+// The parameter inputs mirror the deploy drawer's, because a schedule is a
+// deploy that happens later — asking for the same values in a different
+// shape would invite them to be filled in differently.
+function renderScheduleParams() {
+  const pkg = packages.find(p => p.id === document.getElementById("sc-package").value);
+  renderScheduleVersions(pkg);
+  const params = scheduleParameters(pkg);
+  const el = document.getElementById("sc-params");
+  el.innerHTML = params.length === 0 ? "" : `
+    <div class="dep-params">
+      <div class="dep-params-head">Parameters</div>
+      ${params.map(p => `
+        <div class="dep-param">
+          <label for="dp-${escapeHtml(p.name)}">${escapeHtml(p.label || p.name)}</label>
+          ${depParamInput(p)}
+          ${p.help ? `<div class="dep-param-help">${escapeHtml(p.help)}</div>` : ""}
+        </div>`).join("")}
+    </div>`;
+}
+
+function readScheduleParams() {
+  const pkg = packages.find(p => p.id === document.getElementById("sc-package").value);
+  const out = {};
+  scheduleParameters(pkg).forEach(p => {
+    const el = document.getElementById(`dp-${p.name}`);
+    if (!el) return;
+    out[p.name] = (p.type === "checkbox") ? String(el.checked) : el.value;
+  });
+  return out;
+}
+
+function targetOptionsHtml() {
+ const agents=summary.agents;
+ const oses=[...new Set(agents.map(a=>a.os))].sort();
+ const sites=[...new Set(agents.map(a=>a.site))].sort();
+ return '<option value="">All online agents</option>'+oses.map(os=>`<option value="os:${escapeHtml(os)}">${escapeHtml(osLabel(os))}</option>`).join('')+sites.map(site=>`<option value="site:${escapeHtml(site)}">Site: ${escapeHtml(site)}</option>`).join('')+agents.map(a=>`<option value="agent:${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)}</option>`).join('');
+}
+function renderScheduleVersions(pkg) {
+ const el=document.getElementById('sc-revision'), selected=el.value;
+ const revisions=scheduleRevisions.filter(r=>r.package_id===pkg?.id&&r.published);
+ el.innerHTML='<option value="">Current version when saved</option>'+revisions.map(r=>`<option value="${escapeHtml(r.id)}" ${r.retired?'disabled':''}>${escapeHtml(r.label||r.id)}${r.retired?' (retired)':''}</option>`).join('');
+ if(revisions.some(r=>r.id===selected))el.value=selected;
+ el.disabled=document.getElementById('sc-follow-latest').checked||!pkg?.deploy_definition;
+}
+function scheduleParameters(pkg){
+ const pinned=document.getElementById('sc-follow-latest').checked?'':document.getElementById('sc-revision').value;
+ const definition=scheduleRevisions.find(r=>r.id===pinned&&r.package_id===pkg?.id)?.definition||pkg?.deploy_definition;
+ if(!definition)return pkg?.parameters||[];
+ const target=document.getElementById('sc-target').value;
+ const targetOS=target.startsWith('os:')?target.slice(3):target.startsWith('agent:')?summary.agents.find(a=>a.agent_id===target.slice(6))?.os:'';
+ const defs=new Map();for(const p of definition.parameters||[])defs.set(p.name,p);
+ for(const v of definition.variants||[])if(!targetOS||v.os===targetOS)for(const p of [...(v.parameters||[]),...(v.actions?.[document.getElementById('sc-operation').value]?.parameters||[])])defs.set(p.name,p);
+ return [...defs.values()];
+}
+function renderScheduleOptions() {
+  document.getElementById("sc-package").innerHTML = packages.map(p =>
+    `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+  document.getElementById("sc-target").innerHTML = targetOptionsHtml();
+  renderScheduleParams();
+}
+
+function editSchedule(id) {
+  const a = schedules.find(x => x.id === id);
+  if (!a) return;
+  editingScheduleID = id;
+ document.getElementById("sc-follow-latest").checked=!!a.follow_latest;
+  document.getElementById("sched-editor-title").textContent = `Editing ${a.name}`;
+  document.getElementById("sc-name").value = a.name || "";
+  document.getElementById("sc-package").value = a.package_id;
+  renderScheduleVersions(packages.find(p=>p.id===a.package_id));
+  document.getElementById("sc-revision").value=a.revision_id||"";
+  document.getElementById("sc-operation").value = a.operation || "install";
+  document.getElementById("sc-kind").value = a.kind || "daily";
+  document.getElementById("sc-time").value = a.time_of_day || "03:00";
+  if (a.weekday !== undefined && a.weekday !== null) document.getElementById("sc-weekday").value = String(a.weekday);
+  document.getElementById("sc-runat").value = a.run_at ? a.run_at.slice(0, 16) : "";
+  document.getElementById("sc-target").value = a.target_agent ? `agent:${a.target_agent}`
+    : a.target_os ? `os:${a.target_os}` : a.target_site ? `site:${a.target_site}` : "";
+  document.getElementById("sc-enabled").checked = !!a.enabled;
+  syncScheduleKind();
+  renderScheduleParams();
+  // Values after the inputs exist, or there is nothing to set them on.
+  Object.entries(a.parameters || {}).forEach(([k, v]) => {
+    const el = document.getElementById(`dp-${k}`);
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = v === "true"; else el.value = v;
+  });
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function resetSchedule() {
+ document.getElementById("sc-revision").value="";
+ document.getElementById("sc-follow-latest").checked=false;
+  editingScheduleID = null;
+  document.getElementById("sched-editor-title").textContent = "New schedule";
+  document.getElementById("sc-name").value = "";
+  document.getElementById("sc-kind").value = "daily";
+  document.getElementById("sc-time").value = "03:00";
+  document.getElementById("sc-runat").value = "";
+  document.getElementById("sc-target").value = "";
+  document.getElementById("sc-enabled").checked = true;
+  document.getElementById("sc-save-status").textContent = "";
+  syncScheduleKind();
+  renderScheduleParams();
+}
+
+document.getElementById("sc-kind").addEventListener("change", syncScheduleKind);
+document.getElementById("sc-package").addEventListener("change",()=>{const pkg=packages.find(p=>p.id===document.getElementById("sc-package").value);document.getElementById("sc-operation").value=pkg?.deploy_definition?.kind==="action"?"run":"install";document.getElementById("sc-revision").value="";renderScheduleParams();});
+document.getElementById("sc-operation").addEventListener("change",renderScheduleParams);
+for(const id of ["sc-revision","sc-follow-latest","sc-target"])document.getElementById(id).addEventListener("change",renderScheduleParams);
+document.getElementById("sc-cancel").addEventListener("click", resetSchedule);
+
+document.getElementById("sc-save").addEventListener("click", async () => {
+  const status = document.getElementById("sc-save-status");
+  const name = document.getElementById("sc-name").value.trim();
+  if (!name) { status.textContent = "a name is required"; return; }
+  const packageID = document.getElementById("sc-package").value;
+  if (!packageID) { status.textContent = "create a package first"; return; }
+
+  const [kind, val] = (document.getElementById("sc-target").value || ":").split(":");
+  const runAt = document.getElementById("sc-runat").value;
+  const body = {
+    name, package_id: packageID,
+ revision_id:document.getElementById("sc-revision").value.trim(),follow_latest:document.getElementById("sc-follow-latest").checked,
+    operation: document.getElementById("sc-operation").value,
+    parameters: readScheduleParams(),
+    target_os: kind === "os" ? val : "",
+    target_site: kind === "site" ? val : "",
+    target_agent: kind === "agent" ? val : "",
+    kind: document.getElementById("sc-kind").value,
+    time_of_day: document.getElementById("sc-time").value || "03:00",
+    weekday: Number(document.getElementById("sc-weekday").value),
+    run_at: runAt ? new Date(runAt).toISOString() : null,
+    enabled: document.getElementById("sc-enabled").checked,
+  };
+
+  status.textContent = "saving…";
+  const resp = await fetch(editingScheduleID ? `/api/schedules/${editingScheduleID}` : "/api/schedules", {
+    method: editingScheduleID ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  const out = await resp.json();
+  status.innerHTML = `<span class="u-c-ok">saved — next run ${escapeHtml(out.next_run_at ? fmtTime(out.next_run_at) : "not scheduled")}</span>`;
+  resetSchedule();
+  loadSchedules();
+});
+
+// --- discovery ---
+
+async function loadDiscovered() {
+  const min = document.getElementById("disc-min").value || 1;
+  const resp = await fetch(`/api/software/discover?min_devices=${encodeURIComponent(min)}`);
+  if (!resp.ok) return;
+  discovered = (await resp.json()).software || [];
+  const plat = document.getElementById("disc-platform"), keep = plat.value;
+  const plats = [...new Set(discovered.flatMap(d => d.platforms || []))].sort();
+  plat.innerHTML = `<option value="">Select…</option>` + plats.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(osLabel(p))}</option>`).join("");
+  plat.value = plats.includes(keep) ? keep : "";
+  document.getElementById("disc-status").textContent =
+    discovered.length ? `${discovered.length} distinct application(s) across the fleet.` : "";
+  renderDiscovered();
+  renderOverview();
+}
+
+// The search box and the Filters narrow the list in the page; the
+// per-column filter row in the table narrows it further.
+function renderDiscovered() {
+  const body = document.getElementById("disc-body");
+  const q = document.getElementById("disc-q").value.trim().toLowerCase();
+  const plat = document.getElementById("disc-platform").value, cat = document.getElementById("disc-catalog").value;
+  const shown = discovered.filter(d =>
+    (!q || [d.name, d.vendor, ...(d.versions || [])].some(v => String(v || "").toLowerCase().includes(q)))
+    && (!plat || (d.platforms || []).includes(plat))
+    && (!cat || (cat === "yes") === !!d.in_catalog));
+  document.getElementById("disc-count").innerHTML = `<strong>${escapeHtml(shown.length.toLocaleString())}</strong> of <strong>${escapeHtml(discovered.length.toLocaleString())}</strong> Items`;
+  body.innerHTML = shown.length === 0
+    ? `<tr><td class="empty" colspan="6">${discovered.length ? "nothing matches the search or filters" : "no installed-software inventory yet"}</td></tr>`
+    : shown.map(d => `
+      <tr>
+        <td>${escapeHtml(d.name)}</td>
+        <td class="u-c-text-muted">${escapeHtml(d.vendor || "—")}</td>
+        <td data-sort="${escapeHtml(d.device_count)}">${escapeHtml(d.device_count)}</td>
+        <td>${(d.platforms || []).map(p => `<span class="os-pill">${escapeHtml(osLabel(p))}</span>`).join(" ")}</td>
+        <td class="u-c-text-muted" title="${escapeHtml((d.versions || []).join(", "))}">
+          ${escapeHtml((d.versions || []).slice(0, 3).join(", ") || "—")}${(d.versions || []).length > 3 ? ` +${d.versions.length - 3}` : ""}</td>
+        <td class="row-actions">
+          ${d.in_catalog ? '<span class="state-pill state-installed">in catalog</span>'
+            : `<button class="tiny go" data-adopt="${escapeHtml(d.name)}">adopt</button>`}
+        </td>
+      </tr>`).join("");
+
+  body.querySelectorAll("[data-adopt]").forEach(b => b.addEventListener("click", async () => {
+    const d = discovered.find(x => x.name === b.dataset.adopt);
+    b.disabled = true; b.textContent = "adopting…";
+    const resp = await fetch("/api/software/adopt", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: d.name, vendor: d.vendor, platforms: d.platforms }),
+    });
+    if (!resp.ok) { b.disabled = false; b.textContent = "adopt"; alert(await resp.text()); return; }
+    const pkg = await resp.json();
+    await loadPackages();
+    await loadDiscovered();
+    // Adopted software opens in the versioned editor as a draft to review
+    // and publish, like every other package.
+    window.location.href = "/software?package=" + encodeURIComponent(pkg.id) + "#catalog";
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "software-discovered" });
+  if (dt) dt.refresh();
+}
+document.getElementById("disc-refresh").addEventListener("click", loadDiscovered);
+document.getElementById("disc-min").addEventListener("change", loadDiscovered);
+document.getElementById("disc-q").addEventListener("input", renderDiscovered);
+["disc-platform", "disc-catalog"].forEach(id => document.getElementById(id).addEventListener("change", renderDiscovered));
+document.getElementById("disc-filters-toggle").addEventListener("click", e => {
+  const open = e.currentTarget.getAttribute("aria-expanded") !== "true";
+  e.currentTarget.setAttribute("aria-expanded", String(open));
+  document.getElementById("disc-filter-grid").hidden = !open;
+});
+
+// --- deployment drawer ---
+
+async function openPackage(id) {
+ const published=packages.find(p=>p.id===id&&p.deploy_revision);if(published){window.location.href="/software?package="+encodeURIComponent(id)+(published.kind==="action"?"#actions":"#catalog");return;}
+  selected = new Set();
+  document.getElementById("pkg-drawer").classList.add("open");
+  document.getElementById("pkg-overlay").classList.add("open");
+  document.getElementById("pkg-drawer-body").innerHTML = '<p class="empty">loading…</p>';
+  const resp = await fetch(`/api/software/${encodeURIComponent(id)}/applicability`);
+  if (!resp.ok) {
+    document.getElementById("pkg-drawer-body").innerHTML = `<p class="empty">${escapeHtml(await resp.text())}</p>`;
+    return;
+  }
+  const data = await resp.json();
+  drawerPackage = data.package;
+  drawerRows = data.endpoints || [];
+  renderDrawer(data.counts || {});
+}
+
+// Renders one parameter's input, matching its declared type so the operator
+// is constrained the same way the server will validate them anyway.
+function depParamInput(p) {
+  const id = `dp-${escapeHtml(p.name)}`;
+  if (p.type === "select") {
+    return `<select id="${id}" class="select">${(p.options || []).map(o =>
+      `<option value="${escapeHtml(o)}"${o === p.default ? " selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select>`;
+  }
+  if (p.type === "checkbox") {
+    return `<label class="dep-check"><input type="checkbox" id="${id}"${p.default === "true" ? " checked" : ""}> enabled</label>`;
+  }
+  if (p.type === "numeric") {
+    const min = (p.min === undefined || p.min === null) ? "" : ` min="${escapeHtml(p.min)}"`;
+    const max = (p.max === undefined || p.max === null) ? "" : ` max="${escapeHtml(p.max)}"`;
+    return `<input id="${id}" type="number"${min}${max} value="${escapeHtml(p.default || "")}">`;
+  }
+  return `<input id="${id}" type="${p.secret ? "password" : "text"}" value="${escapeHtml(p.default || "")}">`;
+}
+
+function readDeployParams() {
+  const out = {};
+  ((drawerPackage || {}).parameters || []).forEach(p => {
+    const el = document.getElementById(`dp-${p.name}`);
+    if (!el) return;
+    out[p.name] = (p.type === "checkbox") ? String(el.checked) : el.value;
+  });
+  return out;
+}
+
+function renderDrawer(counts) {
+  // An action package is normally "never installed" — nothing is ever
+  // already-rebooted — so it offers Run/Cancel and every endpoint is a
+  // target. A package with fact detection is the exception: it knows what
+  // each endpoint already has, so it behaves like software here. Treating
+  // it as a plain action offered Run, which maps to install, while every
+  // endpoint sat in update_eligible — so the deploy matched nothing and
+  // failed with "no endpoint is eligible for that operation right now".
+  const hasFactDetect = !!(drawerPackage.detect && drawerPackage.detect.fact);
+  const isAction = drawerPackage.kind === "action" && !hasFactDetect;
+  const params = drawerPackage.parameters || [];
+  const applicable = (drawerRows || []).filter(r => r.state !== "not_applicable").length;
+  document.getElementById("pkg-drawer-title").textContent = drawerPackage.name;
+  document.getElementById("pkg-drawer-pills").innerHTML =
+    Object.keys(drawerPackage.commands || {}).map(os => `<span class="os-pill">${escapeHtml(osLabel(os))}</span>`).join(" ") +
+    (drawerPackage.version ? ` <span class="state-pill state-installed">target ${escapeHtml(drawerPackage.version)}</span>` : "");
+
+  // Mirrors operationApplies in software_api.go. The server filters targets
+  // by this even when endpoints are named explicitly, so a picker that
+  // offers more than this is offering choices that get silently dropped.
+  const opApplies = (op, state) => {
+    if (state === "not_applicable") return false;
+    if (isAction) return true;  // a plain action package is never "installed"
+    if (op === "install") return state === "install_eligible";
+    if (op === "update")  return state === "update_eligible";
+    if (op === "remove")  return state === "installed" || state === "update_eligible";
+    return false;
+  };
+  const whyNot = (op, state) => {
+    if (hasFactDetect && state === "installed") return "already on this version";
+    if (op === "install" && state === "installed") return "already installed";
+    if (op === "install" && state === "update_eligible") return "already installed — use Update";
+    if (op === "update" && state === "install_eligible") return "not installed — use Install";
+    if (op === "update" && state === "installed") return "already at this version";
+    if (op === "remove" && state === "install_eligible") return "not installed";
+    return "this operation does not apply";
+  };
+
+  const rows = drawerRows.filter(r => r.state !== "not_applicable");
+  document.getElementById("pkg-drawer-body").innerHTML = `
+    <div class="deploy-bar">
+      <strong>Deploy</strong>
+      <select class="select u-w-auto" id="dep-op">
+        ${isAction ? `
+          <option value="install">Run (${escapeHtml(applicable)} applicable)</option>
+          <option value="remove">Cancel (${escapeHtml(applicable)} applicable)</option>`
+        : hasFactDetect ? `
+          ${counts.update_eligible ? `<option value="update">Update (${escapeHtml(counts.update_eligible)} behind)</option>` : ""}
+          ${counts.install_eligible ? `<option value="install">Install (${escapeHtml(counts.install_eligible)} eligible)</option>` : ""}
+          ${!counts.update_eligible && !counts.install_eligible ? `<option value="update">Update (0 behind)</option>` : ""}`
+        : `
+          <option value="install">Install (${escapeHtml(counts.install_eligible || 0)} eligible)</option>
+          <option value="update">Update (${escapeHtml(counts.update_eligible || 0)} eligible)</option>
+          <option value="remove">Remove (${escapeHtml(counts.installed || 0)} installed)</option>`}
+      </select>
+      <span id="dep-scope" class="u-c-text-muted">to every eligible endpoint</span>
+      <span id="dep-eligible" class="u-c-text-muted u-fs-12"></span>
+      <button class="primary u-w-auto" id="dep-go">Deploy now</button>
+      <span class="scan-status" id="dep-msg"></span>
+    </div>
+    ${params.length === 0 ? "" : `
+    <div class="dep-params">
+      <div class="dep-params-head">Parameters</div>
+      ${params.map(p => `
+        <div class="dep-param">
+          <label for="dp-${escapeHtml(p.name)}">${escapeHtml(p.label || p.name)}</label>
+          ${depParamInput(p)}
+          ${p.help ? `<div class="dep-param-help">${escapeHtml(p.help)}</div>` : ""}
+        </div>`).join("")}
+    </div>`}
+    ${Object.entries(counts).map(([k, v]) =>
+      `<span class="state-pill state-${escapeHtml(k)} u-mr-6">${escapeHtml(v)} ${escapeHtml(STATE_LABELS[k] || k)}</span>`).join("")}
+    <div class="table-scroll tall u-mt-12">
+      <table>
+        <thead><tr><th><input type="checkbox" id="dep-all" aria-label="Select all endpoints"></th><th>Endpoint</th><th>OS</th><th>State</th><th>Found</th><th>Why</th></tr></thead>
+        <tbody id="dep-rows"></tbody>
+      </table>
+    </div>`;
+
+  // Rebuilt whenever the operation changes: an endpoint that is a valid
+  // target for Remove is not one for Install, and a list rendered once
+  // keeps offering whichever was picked first.
+  function renderDepRows() {
+    const op = document.getElementById("dep-op").value;
+    // Only what this operation can actually touch. An endpoint already on
+    // the version being pushed is not a choice to make — showing it, even
+    // greyed out, is a row somebody has to read and dismiss every time.
+    const shown = rows.filter(r => opApplies(op, r.state));
+    const hidden = rows.length - shown.length;
+    document.getElementById("dep-rows").innerHTML = shown.length === 0
+      ? `<tr><td class="empty" colspan="6">nothing needs this${
+           hidden ? ` — all ${hidden} are already there` : ""}</td></tr>`
+      : shown.map(r => `
+            <tr>
+              <td><input type="checkbox" class="dep-pick" value="${escapeHtml(r.agent_id)}" aria-label="Select ${escapeHtml(r.hostname || r.agent_id)}" checked></td>
+              <td><a href="/endpoint/${escapeHtml(r.agent_id)}">${escapeHtml(r.hostname)}</a></td>
+              <td>${escapeHtml(osLabel(r.os))}</td>
+              <td><span class="state-pill state-${escapeHtml(r.state)}">${escapeHtml(STATE_LABELS[r.state] || r.state)}</span></td>
+              <td>${escapeHtml(r.found_version || "—")}</td>
+              <td class="u-fs-meta u-c-text-muted u-ws-normal">${escapeHtml(r.reason || "")}</td>
+            </tr>`).join("");
+    // Targets handed over from an Interact result: tick exactly those, and
+    // nothing else, so the drawer opens on the operator's own selection.
+    const handoff = new URLSearchParams(location.search).get("agents");
+    if (handoff) {
+      const want = new Set(handoff.split(",").filter(Boolean));
+      document.querySelectorAll(".dep-pick").forEach(c => { c.checked = want.has(c.value); });
+    }
+    document.querySelectorAll(".dep-pick").forEach(c => c.addEventListener("change", refreshScope));
+    document.getElementById("dep-all").checked = !handoff && shown.length > 0;
+    // The hidden ones are still accounted for. A list that quietly shows
+    // fewer endpoints than the fleet has is its own kind of wrong.
+    document.getElementById("dep-eligible").textContent = hidden === 0
+      ? `${shown.length} endpoint(s) need this`
+      : `${shown.length} need this · ${hidden} already there, not shown`;
+    refreshScope();
+  }
+
+  const picks = () => [...document.querySelectorAll(".dep-pick:checked")].map(c => c.value);
+  function refreshScope() {
+    const n = picks().length;
+    document.getElementById("dep-scope").textContent =
+      n === 0 ? "to every endpoint that needs it" : `to ${n} selected endpoint(s)`;
+  }
+  document.getElementById("dep-all").addEventListener("change", e => {
+    // Select-all means all the *selectable* ones. Ticking a disabled box
+    // would put back exactly the endpoints this is meant to keep out.
+    document.querySelectorAll(".dep-pick:not(:disabled)").forEach(c => { c.checked = e.target.checked; });
+    refreshScope();
+  });
+  document.getElementById("dep-op").addEventListener("change", renderDepRows);
+  renderDepRows();
+
+  document.getElementById("dep-go").addEventListener("click", async () => {
+    const op = document.getElementById("dep-op").value;
+    const agents = picks();
+    const msg = document.getElementById("dep-msg");
+    // The server refuses this too. Checked here as well so the operator is
+    // told before a dispatch rather than by a rejected one.
+    if (drawerPackage.require_explicit_targets && !agents.length) {
+      msg.innerHTML = `<span class="u-c-off">${escapeHtml(drawerPackage.name)} must be run against endpoints you select — tick the ones you mean.</span>`;
+      return;
+    }
+    const scope = agents.length ? `${agents.length} endpoint(s)` : "every eligible endpoint";
+    const warning = drawerPackage.require_explicit_targets
+      ? "\n\nThese endpoints will stop reporting to this console. Getting them back means installing the agent on each one by hand."
+      : "";
+    if (!confirm(`${op} ${drawerPackage.name} on ${scope}?${warning}`)) return;
+    msg.textContent = "starting…";
+    const resp = await fetch("/api/software/deploy", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ package_id: drawerPackage.id, operation: op, agent_ids: agents,
+                             parameters: readDeployParams() }),
+    });
+    if (!resp.ok) { msg.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+    const out = await resp.json();
+    const skipped = out.skipped
+      ? ` · ${out.skipped} skipped, already in that state`
+      : "";
+    // A link, not a receipt. The run is where the operator is going next —
+    // to watch it land — and a message that names the run but does not
+    // take you to it makes the next click a search.
+    const href = `/software?run=${encodeURIComponent(out.run_id)}#deployments`;
+    msg.innerHTML = `<a href="${href}" class="u-c-ok u-fwt-600">deployment ${escapeHtml(out.run_id)} started on ${escapeHtml(out.targets)} endpoint(s)${escapeHtml(skipped)} — watch it →</a>`;
+    // Already on this page, so open the drawer rather than reload it.
+    msg.querySelector("a").addEventListener("click", e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      e.preventDefault();
+      closeDrawer();
+      location.hash = "deployments";
+      softwareDeployments.open(out.run_id);
+    });
+    loadDeployments();
+  });
+}
+
+function closeDrawer() {
+  document.getElementById("pkg-drawer").classList.remove("open");
+  document.getElementById("pkg-overlay").classList.remove("open");
+}
+document.getElementById("pkg-drawer-close").addEventListener("click", closeDrawer);
+document.getElementById("pkg-overlay").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+// --- deployments ---
+
+// The shared deployment dashboard (deployments.js), over the runs that
+// installed, updated or removed software or ran an action package. Catalog
+// runs link each endpoint to its console output under Deployment Progress.
+const TERMINAL_JOB = ["succeeded", "failed", "timed_out", "cancelled", "interrupted", "expired", "skipped", "unsupported", "no_response"];
+const softwareDeployments = mountDeploymentDashboard(document.getElementById("software-deployments"), {
+  id: "software",
+  title: "Software deployment",
+  create: { label: "Deploy Software", href: "#catalog" },
+  emptyText: "no software deployments yet — deploy a package and it will appear here",
+  load: () => loadRunDeployments(d => d.category === "software", "Software deployment"),
+  // Catalog runs (software and action packages) also have Deploy jobs; those
+  // say when an endpoint went silent mid-job, which the run alone cannot.
+  loadDetail: async id => {
+    const out = await loadRunDeploymentDetail(id, "Software deployment");
+    if (out.deployment.consoleOutput) {
+      try {
+        const r = await fetch(`/api/deploy/jobs?run_id=${encodeURIComponent(id)}`);
+        const jobs = r.ok ? ((await r.json()).jobs || []) : [];
+        const byID = new Map(jobs.map(j => [j.id, j]));
+        for (const dev of out.devices) {
+          const j = byID.get(dev.id);
+          if (j) dev.job = j;
+          if (j && j.stalled) dev.warning = `Endpoint silent for ${fmtSeconds(j.silent_seconds)} while its job is open`;
+        }
+      } catch (e) { /* the run detail still stands without it */ }
+    }
+    return out;
+  },
+  // Console output and cancel, which Deployment Progress used to host, live
+  // on the endpoint's row now.
+  deviceActions: (device, deployment) => {
+    if (!deployment.consoleOutput || !device.id) return [];
+    const actions = [{ label: "Console output", onClick: (dev, dep, slot) => openJobConsole(dev, slot) }];
+    if (!TERMINAL_JOB.includes(device.status)) actions.push({ label: "Cancel", danger: true, onClick: async dev => {
+      if (!confirm(`Cancel ${dev.name || "this endpoint"}'s job?\n\nIf it is already running, an action is stopped; an install that has begun finishes its current step first.`)) return;
+      const force = (dev.job && dev.job.operation === "run") || /run$/.test(dev.kind || "");
+      try { await window.mustraDeployConsole.cancel(dev.id, force); } catch (e) { alert(e.message); return; }
+      softwareDeployments.refreshOpen();
+    } });
+    return actions;
+  },
+});
+
+function fmtSeconds(sec) {
+  const s = Math.max(0, Math.round(sec || 0));
+  if (s < 90) return `${s}s`;
+  if (s < 5400) return `${Math.round(s / 60)}m`;
+  return `${Math.round(s / 3600)}h`;
+}
+
+// openJobConsole puts one endpoint's console viewer under the deployment's
+// page (deploy.js renders and follows it).
+function openJobConsole(dev, slot) {
+  if (!slot || !window.mustraDeployConsole) return;
+  const live = !TERMINAL_JOB.includes(dev.status);
+  slot.innerHTML = `
+    <section class="dv-panel dv-console" aria-label="Console output">
+      <div class="dv-panel-title">Console output <span class="dl-muted">${escapeHtml(dev.name || dev.id)}${live ? " · following live output" : ""}</span>
+        <button type="button" class="dl-btn dv-console-close">Close</button></div>
+      <div class="dv-console-body"></div>
+    </section>`;
+  slot.querySelector(".dv-console-close").addEventListener("click", () => { window.mustraDeployConsole.close(); slot.innerHTML = ""; });
+  window.mustraDeployConsole.open(dev.id, slot.querySelector(".dv-console-body"), live);
+  slot.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+let linkedRunOpened = false;
+async function loadDeployments() {
+  await softwareDeployments.reload();
+  if (linkedRunOpened || location.hash !== "#deployments") return;
+  linkedRunOpened = true;
+  // ?job=<id> (a link to one endpoint's run, from the endpoint page or an
+  // old Deployment Progress link) opens its deployment with the console.
+  const params = new URLSearchParams(location.search);
+  const jobID = params.get("job");
+  if (jobID && !params.get("run")) {
+    try {
+      const r = await fetch("/api/deploy/jobs");
+      const job = r.ok ? ((await r.json()).jobs || []).find(j => j.id === jobID) : null;
+      if (job && job.run_id) {
+        await softwareDeployments.open(job.run_id);
+        openJobConsole({ id: job.id, name: "", status: job.status }, softwareDeployments.slot());
+        return;
+      }
+    } catch (e) { /* fall through to the list */ }
+  }
+  await softwareDeployments.openLinked();
+  if (jobID && params.get("run")) openJobConsole({ id: jobID, name: "", status: "" }, softwareDeployments.slot());
+}
+
+let linkedScheduleOpened=false;
+const linkedSchedule=new URLSearchParams(location.search).get('schedule');
+// Interact hands over a package plus the endpoints it picked. A package with
+// no published Deploy revision (the built-in agent actions, software not yet
+// reviewed) is deployed from the applicability drawer; a published one opens
+// in the versioned editor (deploy.js). The old "#packages" tab is gone, so an
+// old link carrying it lands on the catalog instead of the overview.
+if (location.hash === "#packages") history.replaceState(null, "", location.pathname + location.search + "#catalog");
+// Deployment Progress merged into Deployments: its links (and ?run= / ?job=) land there.
+if (location.hash === "#jobs") history.replaceState(null, "", location.pathname + location.search + "#deployments");
+document.addEventListener("mustra:user", () => {
+  const p = new URLSearchParams(location.search);
+  if (p.get("package") && p.get("agents")) {
+    const tryOpen = () => {
+      if (!packages.length) { setTimeout(tryOpen, 300); return; }
+      const pkg = packages.find(x => x.id === p.get("package"));
+      if (pkg && !pkg.deploy_revision) openPackage(pkg.id);
+    };
+    tryOpen();
+  }
+});
+if(linkedSchedule){const check=setInterval(()=>{if(!linkedScheduleOpened&&packages.length&&schedules.some(s=>s.id===linkedSchedule)){linkedScheduleOpened=true;editSchedule(linkedSchedule);clearInterval(check);}},500);setTimeout(()=>clearInterval(check),30000);}
+
+// --- Maintenance windows -------------------------------------------
+//
+// The window math lives on the server (internal/maintenance); this page
+// lists windows the way an operator reads them ("Every month on the second
+// Tuesday from 6:30 PM to 1:00 AM") and edits one at a time on its own page.
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ORDINALS = { 1: "first", 2: "second", 3: "third", 4: "fourth", 5: "last" };
+const MW_PLATFORMS = { "": "All platforms", windows: "Windows", darwin: "macOS", linux: "Linux" };
+let windowsList = [], mwFilter = "";
+const localZone = (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || "UTC";
+const allZones = (() => { let z = []; try { z = Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : []; } catch (e) {} for (const x of [localZone, "UTC"]) if (!z.includes(x)) z.unshift(x); return z; })();
+
+// "18:30" -> "6:30 PM"
+function clock12(hhmm) {
+  const [h, m] = String(hhmm || "00:00").split(":").map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+function addMinutes(hhmm, mins) {
+  const [h, m] = String(hhmm || "00:00").split(":").map(Number);
+  const t = (h * 60 + m + mins) % 1440;
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+function mwDay(ymd) {
+  if (!ymd) return "—";
+  const [y, mo, d] = ymd.split("-").map(Number);
+  return new Date(y, mo - 1, d).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
+}
+function windowKind(w) { return w.recurrence || ((w.weekdays || []).length ? "weekly" : "daily"); }
+// The schedule in words, as the list shows it.
+function describeSchedule(w) {
+  const n = w.interval > 1 ? w.interval : 1, mins = w.duration_minutes;
+  const span = mins > 1440 ? `starting at ${clock12(w.start_time)} for ${Math.round(mins / 60)} hours`
+    : `from ${clock12(w.start_time)} to ${clock12(addMinutes(w.start_time, mins))}`;
+  switch (windowKind(w)) {
+    case "once": {
+      if (!w.start_date) return span;
+      const [y, mo, d] = w.start_date.split("-").map(Number);
+      const start = new Date(y, mo - 1, d, ...w.start_time.split(":").map(Number));
+      const end = new Date(start.getTime() + mins * 60000);
+      const day = t => t.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+      return `${day(start)} at ${clock12(w.start_time)} to ${day(end)} at ${clock12(addMinutes(w.start_time, mins))}`;
+    }
+    case "daily": return `${n === 1 ? "Every day" : `Every ${n} days`} ${span}`;
+    case "weekly": {
+      const days = (w.weekdays || []).length ? w.weekdays.slice().sort((a, b) => a - b).map(d => DAY_NAMES[d]).join(", ") : "every day";
+      return `${n === 1 ? "Every week" : `Every ${n} weeks`} on ${days} ${span}`;
+    }
+    case "monthly": {
+      const on = w.month_week ? `the ${ORDINALS[w.month_week]} ${DAY_NAMES[w.month_weekday]}` : `day ${w.month_day}`;
+      return `${n === 1 ? "Every month" : `Every ${n} months`} on ${on} ${span}`;
+    }
+  }
+  return span;
+}
+function windowTime(w) {
+  if (w.time_base === "endpoint") return "Endpoint Local Time";
+  return (w.timezone || "UTC") + (w.observe_dst === false ? " (no DST)" : "");
+}
+
+async function loadWindows() {
+  const resp = await fetch("/api/maintenance-windows");
+  if (!resp.ok) return;
+  windowsList = (await resp.json()).windows || [];
+  renderWindows();
+}
+function renderWindows() {
+  const body = document.getElementById("mw-body");
+  if (!document.getElementById("mw-search").querySelector("svg")) document.getElementById("mw-search").insertAdjacentHTML("afterbegin", icon("search"));
+  const q = mwFilter.toLowerCase();
+  const shown = windowsList.filter(w => !q || [w.name, w.description, describeSchedule(w), MW_PLATFORMS[w.platform || ""], windowTime(w), w.updated_by, w.created_by].join(" ").toLowerCase().includes(q));
+  document.getElementById("mw-count").innerHTML = `<strong>${escapeHtml(shown.length)}</strong> of <strong>${escapeHtml(windowsList.length)}</strong> Items`;
+  if (!windowsList.length) { body.innerHTML = '<tr><td class="empty" colspan="11">No windows. Every endpoint may be touched at any time.</td></tr>'; return; }
+  if (!shown.length) { body.innerHTML = '<tr><td class="empty" colspan="11">No window matches.</td></tr>'; return; }
+  body.innerHTML = shown.map(w => {
+    const plat = w.platform ? `<span class="mw-plat">${/* safe-html: fixed SVG glyph from deploy.js OS_GLYPHS; unknown platforms give "" */ osGlyph(w.platform)} ${escapeHtml(MW_PLATFORMS[w.platform])}</span>` : `<span class="mw-plat">${escapeHtml(MW_PLATFORMS[""])}</span>`;
+    const targets = (w.group_ids || []).length;
+    return `<tr class="${w.enabled ? "" : "muted"}">
+      <td class="mw-num">${escapeHtml(w.number || "")}</td>
+      <td>${plat}</td>
+      <td><a href="#windows" class="mw-name" data-mw-edit="${escapeHtml(w.id)}">${escapeHtml(w.name)}</a>${w.enabled ? "" : ' <span class="state-pill state-not_applicable">disabled</span>'}${w.open_now && w.enabled ? ' <span class="state-pill state-installed">open now</span>' : ""}<div class="mw-sched">${escapeHtml(describeSchedule(w))}</div></td>
+      <td data-sort="${escapeHtml(w.next_open || "")}">${escapeHtml(w.next_open ? fmtTime(w.next_open) : "—")}</td>
+      <td title="${escapeHtml((w.group_ids || []).map(groupName).join(", ") || "every endpoint")}">${targets ? escapeHtml(targets) : "All"}</td>
+      <td>${escapeHtml((w.applies_to || []).map(k => k === "deploy" ? "Deploy" : "Patch").join(", "))}</td>
+      <td>${escapeHtml(w.start_date ? mwDay(w.start_date) : fmtDate(w.created_at))}</td>
+      <td>${escapeHtml(windowTime(w))}</td>
+      <td data-sort="${escapeHtml(w.updated_at)}">${escapeHtml(fmtTime(w.updated_at))}</td>
+      <td>${escapeHtml(w.updated_by || w.created_by || "—")}</td>
+      <td class="row-actions"><button class="tiny" data-mw-toggle="${escapeHtml(w.id)}">${w.enabled ? "Disable" : "Enable"}</button> <button class="tiny danger" data-mw-del="${escapeHtml(w.id)}">Delete</button></td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll("[data-mw-edit]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); openWindowEditor(windowsList.find(w => w.id === a.dataset.mwEdit)); }));
+  body.querySelectorAll("[data-mw-toggle]").forEach(b => b.addEventListener("click", async () => {
+    const w = windowsList.find(x => x.id === b.dataset.mwToggle);
+    await fetch(`/api/maintenance-windows/${encodeURIComponent(w.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...w, enabled: !w.enabled }) });
+    loadWindows();
+  }));
+  body.querySelectorAll("[data-mw-del]").forEach(b => b.addEventListener("click", () => {
+    const w = windowsList.find(x => x.id === b.dataset.mwDel), row = b.closest("tr");
+    undoable({ text: `Window "${w.name}" deleted. Endpoints it covered are unrestricted.`, hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/maintenance-windows/${encodeURIComponent(w.id)}`, { method: "DELETE", keepalive: true }); loadWindows(); } });
+  }));
+}
+// The OS glyph the catalog uses (deploy.js), as markup built from a fixed set.
+function osGlyph(os) { return window.mustraOsIcon ? window.mustraOsIcon(os) : ""; }
+document.getElementById("mw-filter").addEventListener("input", e => { mwFilter = e.target.value; renderWindows(); });
+document.getElementById("mw-new").addEventListener("click", () => openWindowEditor(null));
+
+// --- The window editor: Window Details, Window Options, Targets. -----------
+function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function hm(d) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+// Minutes between two wall-clock date+time pairs, ignoring the browser's
+// own DST (the window's zone decides that, not the browser's).
+function wallMinutes(d1, t1, d2, t2) {
+  const at = (d, t) => { const [y, mo, da] = d.split("-").map(Number); const [h, mi] = t.split(":").map(Number); return Date.UTC(y, mo - 1, da, h, mi); };
+  return Math.round((at(d2, t2) - at(d1, t1)) / 60000);
+}
+function openWindowEditor(w) {
+  const now = new Date(); now.setMinutes(0, 0, 0); now.setHours(now.getHours() + 1);
+  const later = new Date(now.getTime() + 4 * 3600e3);
+  const kind = w ? windowKind(w) : "once";
+  const start = w ? (w.start_date || ymd(new Date(w.created_at || Date.now()))) : ymd(now);
+  const st = w ? w.start_time : hm(now);
+  const endAt = new Date(Date.UTC(...start.split("-").map((x, i) => i === 1 ? x - 1 : +x), ...st.split(":").map(Number)) + (w ? w.duration_minutes : 240) * 60000);
+  const m = {
+    id: w ? w.id : "", name: w ? w.name : "", description: w ? w.description : "", platform: w ? (w.platform || "") : "",
+    enabled: w ? w.enabled : true, applies: new Set(w ? w.applies_to : ["deploy", "patch"]),
+    recurrence: kind, interval: w && w.interval > 1 ? w.interval : 1, weekdays: new Set(w ? w.weekdays : [2]),
+    monthMode: w && w.month_week ? "weekday" : "day", month_day: w && w.month_day ? w.month_day : 1,
+    month_week: w && w.month_week ? w.month_week : 2, month_weekday: w && w.month_week ? w.month_weekday : 2,
+    time_base: w ? (w.time_base || "zone") : "endpoint", timezone: w ? (w.timezone || "UTC") : localZone, observe_dst: w ? w.observe_dst !== false : true,
+    start_date: start, start_time: st,
+    end_date: w ? `${endAt.getUTCFullYear()}-${String(endAt.getUTCMonth() + 1).padStart(2, "0")}-${String(endAt.getUTCDate()).padStart(2, "0")}` : ymd(later),
+    end_time: w ? `${String(endAt.getUTCHours()).padStart(2, "0")}:${String(endAt.getUTCMinutes()).padStart(2, "0")}` : hm(later),
+    groups: new Set(w ? w.group_ids : []), gq: "",
+  };
+  document.getElementById("mw-list-view").hidden = true;
+  const view = document.getElementById("mw-editor-view"); view.hidden = false;
+  const close = () => { view.hidden = true; view.innerHTML = ""; document.getElementById("mw-list-view").hidden = false; };
+  const opt = (v, l, cur) => `<option value="${escapeHtml(v)}"${String(v) === String(cur) ? " selected" : ""}>${escapeHtml(l)}</option>`;
+  function draw() {
+    const rec = m.recurrence;
+    view.innerHTML = `
+      <nav class="cl-crumb" aria-label="Breadcrumb"><a href="#windows" id="mw-back">Maintenance Windows</a><span class="cl-crumb-sep">›</span><span class="cl-crumb-here">${escapeHtml(m.id ? m.name : "Create Maintenance Window")}</span></nav>
+      <h1 class="deploy-title">${m.id ? "Edit Maintenance Window" : "Create Maintenance Window"}</h1>
+      <section class="mw-card">
+        <h2 class="mw-card-head">Window Details</h2>
+        <div class="mw-card-body mw-narrow">
+          <div class="field"><label for="mw-name">Name <span class="req">*</span></label><input id="mw-name" value="${escapeHtml(m.name)}" placeholder="Production Server Patching Staged 1830 - 0100"></div>
+          <div class="field"><label for="mw-desc">Description</label><textarea id="mw-desc" rows="2">${escapeHtml(m.description)}</textarea></div>
+          <div class="field"><label for="mw-plat">Platform <span class="req">*</span></label><select id="mw-plat">${Object.entries(MW_PLATFORMS).map(([v, l]) => opt(v, l, m.platform)).join("")}</select></div>
+          <div class="field"><label>Applies to</label><label class="mw-inline"><input type="checkbox" id="mw-deploy"${m.applies.has("deploy") ? " checked" : ""}> Software deployments</label><label class="mw-inline"><input type="checkbox" id="mw-patch"${m.applies.has("patch") ? " checked" : ""}> Patching</label></div>
+          <div class="field"><label class="mw-inline"><input type="checkbox" id="mw-enabled"${m.enabled ? " checked" : ""}> Enabled</label></div>
+        </div>
+      </section>
+      <section class="mw-card">
+        <h2 class="mw-card-head">Window Options<span class="mw-sub">Maintenance windows are recurring.</span></h2>
+        <div class="mw-card-body mw-narrow">
+          <div class="field"><label for="mw-rec">Recurrence <span class="req">*</span></label><select id="mw-rec">${opt("once", "Do not repeat", rec)}${opt("daily", "Daily", rec)}${opt("weekly", "Weekly", rec)}${opt("monthly", "Monthly", rec)}</select></div>
+          ${rec === "daily" ? `<div class="mw-line">Every <input id="mw-int" type="number" min="1" max="366" value="${escapeHtml(m.interval)}" class="mw-num-in"> day(s)</div>` : ""}
+          ${rec === "weekly" ? `<div class="mw-line">Every <input id="mw-int" type="number" min="1" max="52" value="${escapeHtml(m.interval)}" class="mw-num-in"> week(s) on</div>
+            <div class="mw-days" role="group" aria-label="Days">${DAY_NAMES.map((d, i) => `<label class="mw-day"><input type="checkbox" value="${i}"${m.weekdays.has(i) ? " checked" : ""}><span>${escapeHtml(d.slice(0, 3))}</span></label>`).join("")}</div>` : ""}
+          ${rec === "monthly" ? `<div class="mw-line">Every <input id="mw-int" type="number" min="1" max="12" value="${escapeHtml(m.interval)}" class="mw-num-in"> month(s)</div>
+            <div class="mw-line"><label class="mw-inline"><input type="radio" name="mw-mm" value="day"${m.monthMode === "day" ? " checked" : ""}> On day</label> <input id="mw-mday" type="number" min="1" max="31" value="${escapeHtml(m.month_day)}" class="mw-num-in"></div>
+            <div class="mw-line"><label class="mw-inline"><input type="radio" name="mw-mm" value="weekday"${m.monthMode === "weekday" ? " checked" : ""}> On the</label>
+              <select id="mw-mweek">${[1, 2, 3, 4, 5].map(i => opt(i, ORDINALS[i], m.month_week)).join("")}</select>
+              <select id="mw-mwd">${DAY_NAMES.map((d, i) => opt(i, d, m.month_weekday)).join("")}</select></div>` : ""}
+          <hr class="mw-rule">
+          <div class="field"><label>Window Time</label>
+            <label class="mw-inline"><input type="radio" name="mw-tb" value="endpoint"${m.time_base === "endpoint" ? " checked" : ""}> Endpoint Local Time</label>
+            <label class="mw-inline"><input type="radio" name="mw-tb" value="zone"${m.time_base === "zone" ? " checked" : ""}> Select Time Zone</label>
+            <select id="mw-tz" class="mw-indent">${allZones.map(z => opt(z, z.replaceAll("_", " "), m.timezone)).join("")}</select>
+            ${m.time_base === "endpoint" ? `<div class="hint mw-indent">Each computer reads the window in its own time zone. One that has not reported its zone yet (an agent older than 0.57.0) uses this zone.</div>` : ""}
+            <label class="mw-inline mw-indent"><input type="checkbox" id="mw-dst"${m.observe_dst ? " checked" : ""}> Observe Daylight Saving Time</label>
+          </div>
+          <div class="field"><label>${rec === "once" ? "Start Date and Time" : "Effective Date and Start Time"} <span class="req">*</span></label><div class="mw-line"><input type="date" id="mw-sd" value="${escapeHtml(m.start_date)}"> at <input type="time" id="mw-st" value="${escapeHtml(m.start_time)}"></div></div>
+          <div class="field"><label>End Time <span class="req">*</span></label><div class="mw-line"><input type="date" id="mw-ed" value="${escapeHtml(m.end_date)}"> at <input type="time" id="mw-et" value="${escapeHtml(m.end_time)}"></div>
+            <div class="hint" id="mw-len"></div></div>
+        </div>
+      </section>
+      <section class="mw-card">
+        <h2 class="mw-card-head">Targets<span class="mw-sub">Computer groups this window restricts. None = every ${escapeHtml(m.platform ? MW_PLATFORMS[m.platform] : "")} endpoint.</span></h2>
+        <div class="mw-card-body">
+          <input type="search" id="mw-gq" class="dw-search" placeholder="Filter groups" aria-label="Filter groups" value="${escapeHtml(m.gq)}">
+          <div class="dw-list" id="mw-groups"></div>
+        </div>
+      </section>
+      <div class="deploy-footer"><div class="deploy-footer-actions"><button class="primary" type="button" id="mw-save">${m.id ? "Save Window" : "Create Window"}</button><button type="button" id="mw-cancel">Cancel</button></div><div class="deploy-message" id="mw-save-status" role="status"></div></div>`;
+    drawGroups(); showLength(); wire();
+  }
+  function drawGroups() {
+    const box = view.querySelector("#mw-groups"); const q = m.gq.toLowerCase();
+    const shown = allGroups.filter(g => !q || g.name.toLowerCase().includes(q));
+    box.innerHTML = shown.length ? shown.map(g => `<label class="dw-item"><input type="checkbox" value="${escapeHtml(g.id)}"${m.groups.has(g.id) ? " checked" : ""}><span class="dw-name">${escapeHtml(g.name)}</span><span class="dw-meta">${escapeHtml(g.member_count)} computer(s) · ${escapeHtml(g.kind || "static")}</span></label>`).join("")
+      : `<p class="hint u-p-8-10">${allGroups.length ? "No group matches." : "No computer groups yet."}</p>`;
+    box.querySelectorAll("input").forEach(c => c.addEventListener("change", () => { c.checked ? m.groups.add(c.value) : m.groups.delete(c.value); }));
+  }
+  function showLength() {
+    const mins = wallMinutes(m.start_date, m.start_time, m.end_date, m.end_time);
+    const el = view.querySelector("#mw-len");
+    el.textContent = mins <= 0 ? "The end must be after the start." : `Open for ${Math.floor(mins / 60)}h ${mins % 60}m${m.recurrence !== "once" ? " each time" : ""}${mins > 10080 ? " — longer than the 7-day limit" : ""}.`;
+    el.classList.toggle("mw-bad", mins <= 0 || mins > 10080);
+  }
+  function wire() {
+    const $v = id => view.querySelector("#" + id);
+    view.querySelector("#mw-back").addEventListener("click", e => { e.preventDefault(); close(); });
+    $v("mw-cancel").addEventListener("click", close);
+    $v("mw-name").addEventListener("input", e => m.name = e.target.value);
+    $v("mw-desc").addEventListener("input", e => m.description = e.target.value);
+    $v("mw-plat").addEventListener("change", e => { m.platform = e.target.value; draw(); });
+    $v("mw-deploy").addEventListener("change", e => e.target.checked ? m.applies.add("deploy") : m.applies.delete("deploy"));
+    $v("mw-patch").addEventListener("change", e => e.target.checked ? m.applies.add("patch") : m.applies.delete("patch"));
+    $v("mw-enabled").addEventListener("change", e => m.enabled = e.target.checked);
+    $v("mw-rec").addEventListener("change", e => { m.recurrence = e.target.value; draw(); });
+    $v("mw-int")?.addEventListener("input", e => m.interval = Math.max(1, Number(e.target.value) || 1));
+    view.querySelectorAll(".mw-days input").forEach(c => c.addEventListener("change", () => { c.checked ? m.weekdays.add(+c.value) : m.weekdays.delete(+c.value); }));
+    view.querySelectorAll('input[name="mw-mm"]').forEach(r => r.addEventListener("change", () => m.monthMode = r.value));
+    $v("mw-mday")?.addEventListener("input", e => { m.month_day = Number(e.target.value); m.monthMode = "day"; view.querySelector('input[name="mw-mm"][value="day"]').checked = true; });
+    $v("mw-mweek")?.addEventListener("change", e => { m.month_week = Number(e.target.value); m.monthMode = "weekday"; view.querySelector('input[name="mw-mm"][value="weekday"]').checked = true; });
+    $v("mw-mwd")?.addEventListener("change", e => { m.month_weekday = Number(e.target.value); m.monthMode = "weekday"; view.querySelector('input[name="mw-mm"][value="weekday"]').checked = true; });
+    view.querySelectorAll('input[name="mw-tb"]').forEach(r => r.addEventListener("change", () => { m.time_base = r.value; draw(); }));
+    $v("mw-tz").addEventListener("change", e => m.timezone = e.target.value);
+    $v("mw-dst").addEventListener("change", e => m.observe_dst = e.target.checked);
+    for (const [id, key] of [["mw-sd", "start_date"], ["mw-st", "start_time"], ["mw-ed", "end_date"], ["mw-et", "end_time"]])
+      $v(id).addEventListener("input", e => { m[key] = e.target.value; showLength(); });
+    $v("mw-gq").addEventListener("input", e => { m.gq = e.target.value; drawGroups(); });
+    $v("mw-save").addEventListener("click", save);
+  }
+  async function save() {
+    const status = view.querySelector("#mw-save-status");
+    const mins = wallMinutes(m.start_date, m.start_time, m.end_date, m.end_time);
+    const problem = !m.name.trim() ? "Give the window a name." : !m.applies.size ? "Tick deployments, patching, or both."
+      : mins < 5 ? "The end must be at least 5 minutes after the start." : mins > 10080 ? "A window can last at most 7 days."
+      : m.recurrence === "weekly" && !m.weekdays.size ? "Pick at least one day." : "";
+    if (problem) { status.textContent = problem; status.style.color = "var(--off)"; return; }
+    const body = {
+      id: m.id, name: m.name.trim(), description: m.description.trim(), enabled: m.enabled, platform: m.platform,
+      applies_to: [...m.applies], group_ids: [...m.groups], recurrence: m.recurrence, interval: m.interval,
+      weekdays: m.recurrence === "weekly" ? [...m.weekdays].sort() : [],
+      month_day: m.recurrence === "monthly" && m.monthMode === "day" ? m.month_day : 0,
+      month_week: m.recurrence === "monthly" && m.monthMode === "weekday" ? m.month_week : 0,
+      month_weekday: m.recurrence === "monthly" && m.monthMode === "weekday" ? m.month_weekday : 0,
+      start_date: m.start_date, start_time: m.start_time, duration_minutes: mins,
+      time_base: m.time_base, timezone: m.timezone, observe_dst: m.observe_dst,
+    };
+    status.textContent = "Saving…"; status.style.color = "";
+    const resp = await fetch(m.id ? `/api/maintenance-windows/${encodeURIComponent(m.id)}` : "/api/maintenance-windows",
+      { method: m.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!resp.ok) { status.textContent = await resp.text(); status.style.color = "var(--off)"; return; }
+    close(); loadWindows();
+  }
+  draw();
+  view.querySelector("#mw-name").focus();
+}
+
+// --- Deployment templates ------------------------------------------
+let templatesList = [], editingTemplate = null, canOverrideWindows = false;
+async function loadTemplates() {
+  const [tr, pr] = await Promise.all([fetch("/api/deploy/templates"), fetch("/api/deployment-plans")]);
+  if (!tr.ok) return;
+  const data = await tr.json();
+  templatesList = data.templates || [];
+  canOverrideWindows = !!data.can_override;
+  document.getElementById("tpl-override-label").hidden = !canOverrideWindows;
+  const plans = pr.ok ? ((await pr.json()).plans || []) : [];
+  const planSel = document.getElementById("tpl-plan"), prevPlan = planSel.value;
+  planSel.innerHTML = '<option value="">none (all at once)</option>' + plans.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+  planSel.value = prevPlan;
+  const pkgSel = document.getElementById("tpl-package"), prevPkg = pkgSel.value;
+  pkgSel.innerHTML = '<option value="">any package</option>' + packages.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+  pkgSel.value = prevPkg;
+  const body = document.getElementById("tpl-body");
+  document.getElementById("tpl-status").textContent = templatesList.length ? `${templatesList.length}` : "";
+  if (!templatesList.length) { body.innerHTML = '<tr><td class="empty" colspan="9">No templates yet. Fill in a deployment form and choose "Save as template", or create one here.</td></tr>'; return; }
+  const pkgName = id => (packages.find(p => p.id === id) || {}).name || id;
+  const planName = id => (plans.find(p => p.id === id) || {}).name || id;
+  body.innerHTML = templatesList.map(t => `<tr>
+    <td><strong>${escapeHtml(t.name)}</strong>${t.description ? `<div class="hint u-m-2-0-0">${escapeHtml(t.description)}</div>` : ""}</td>
+    <td>${t.package_id ? escapeHtml(pkgName(t.package_id)) : "any"}</td><td>${escapeHtml(t.operation || "—")}</td><td>${t.plan_id ? escapeHtml(planName(t.plan_id)) : "—"}</td>
+    <td>${t.allow_reboot ? "allowed" : "no"}</td><td>${escapeHtml(t.expire_seconds ? t.expire_seconds + "s" : "package default")}</td>
+    <td>${t.override_windows ? '<span class="state-pill state-update_eligible">override</span>' : "honoured"}</td>
+    <td>${t.is_default ? "✓" : ""}</td>
+    <td class="row-actions"><button class="tiny" data-tpl-edit="${escapeHtml(t.id)}">edit</button> <button class="tiny danger" data-tpl-del="${escapeHtml(t.id)}">delete</button></td>
+  </tr>`).join("");
+  body.querySelectorAll("[data-tpl-edit]").forEach(b => b.addEventListener("click", () => editTemplate(templatesList.find(t => t.id === b.dataset.tplEdit))));
+  body.querySelectorAll("[data-tpl-del]").forEach(b => b.addEventListener("click", () => {
+    const t = templatesList.find(x => x.id === b.dataset.tplDel), row = b.closest("tr");
+    undoable({ text: `Template "${t.name}" deleted`, hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/deploy/templates/${encodeURIComponent(t.id)}`, { method: "DELETE", keepalive: true }); loadTemplates(); } });
+  }));
+}
+function editTemplate(t) {
+  editingTemplate = t ? t.id : null;
+  document.getElementById("tpl-editor-title").textContent = t ? `Edit ${t.name}` : "New template";
+  document.getElementById("tpl-name").value = t ? t.name : "";
+  document.getElementById("tpl-desc").value = t ? t.description : "";
+  document.getElementById("tpl-package").value = t ? t.package_id : "";
+  document.getElementById("tpl-operation").value = t ? t.operation : "";
+  document.getElementById("tpl-plan").value = t ? t.plan_id : "";
+  document.getElementById("tpl-expire").value = t ? t.expire_seconds : 86400;
+  document.getElementById("tpl-params").value = t && Object.keys(t.parameters || {}).length ? JSON.stringify(t.parameters) : "";
+  document.getElementById("tpl-reboot").checked = !!(t && t.allow_reboot);
+  document.getElementById("tpl-force").checked = !!(t && t.force_remove);
+  document.getElementById("tpl-override").checked = !!(t && t.override_windows);
+  document.getElementById("tpl-default").checked = !!(t && t.is_default);
+  document.getElementById("tpl-save-status").textContent = "";
+  if (t) document.getElementById("tpl-editor-title").scrollIntoView({ block: "nearest" });
+}
+document.getElementById("tpl-cancel").addEventListener("click", () => editTemplate(null));
+document.getElementById("tpl-save").addEventListener("click", async () => {
+  const status = document.getElementById("tpl-save-status");
+  let params = {};
+  const raw = document.getElementById("tpl-params").value.trim();
+  if (raw) { try { params = JSON.parse(raw); } catch (e) { status.textContent = "Parameters must be a JSON object."; return; } }
+  if (!params || typeof params !== "object" || Array.isArray(params)) { status.textContent = "Parameters must be a JSON object."; return; }
+  const body = {
+    id: editingTemplate || "", name: document.getElementById("tpl-name").value.trim(), description: document.getElementById("tpl-desc").value.trim(),
+    package_id: document.getElementById("tpl-package").value, operation: document.getElementById("tpl-operation").value, plan_id: document.getElementById("tpl-plan").value,
+    parameters: Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
+    allow_reboot: document.getElementById("tpl-reboot").checked, force_remove: document.getElementById("tpl-force").checked,
+    expire_seconds: Number(document.getElementById("tpl-expire").value) || 0,
+    override_windows: canOverrideWindows && document.getElementById("tpl-override").checked,
+    is_default: document.getElementById("tpl-default").checked,
+  };
+  status.textContent = "saving…";
+  const resp = await fetch(editingTemplate ? `/api/deploy/templates/${encodeURIComponent(editingTemplate)}` : "/api/deploy/templates",
+    { method: editingTemplate ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { status.textContent = await resp.text(); return; }
+  status.textContent = "saved";
+  editTemplate(null);
+  loadTemplates();
+});
+
+// ---- Software Inventory & Usage ------------------------------------------
+let inventory = [], inventorySummary = null;
+const usagePill = l => `<span class="state-pill usage-${escapeHtml(l || "unknown")}">${escapeHtml(l || "unknown")}</span>`;
+const fmtCents = (c, cur) => c ? `${cur || "USD"} ${(c / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+const fmtDay = iso => fmtDate(iso);
+function invParams() {
+  const q = document.getElementById("inv-q").value.trim(), f = document.getElementById("inv-filter").value, d = document.getElementById("inv-days").value;
+  return `days=${encodeURIComponent(d)}&filter=${encodeURIComponent(f)}&q=${encodeURIComponent(q)}`;
+}
+async function loadInventory() {
+  const resp = await fetch(`/api/software-inventory?${invParams()}`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  inventory = data.products || []; inventorySummary = data.summary || {};
+  const sm = inventorySummary;
+  document.getElementById("inv-tiles").innerHTML = [
+    { label: "Products", value: sm.products || 0 },
+    { label: "Applications", value: sm.applications || 0 },
+    { label: "Tracked", value: sm.tracked || 0 },
+    { label: "Unused seats (apps)", value: sm.unused_seats || 0, cls: sm.unused_seats ? "off" : "ok" },
+    { label: "Est. annual cost (tracked)", value: fmtCents(sm.est_annual_cents) },
+    { label: "Est. waste (tracked)", value: fmtCents(sm.est_waste_cents), cls: sm.est_waste_cents ? "off" : "" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+  const total = document.getElementById("inv-filter").value === "apps" ? (sm.applications || 0) : (sm.products || 0);
+  document.getElementById("inv-count").innerHTML = `<strong>${escapeHtml(inventory.length.toLocaleString())}</strong> of <strong>${escapeHtml(Math.max(total, inventory.length).toLocaleString())}</strong> Items`;
+  document.getElementById("inv-status").textContent = inventory.length
+    ? `${inventory.length} product(s) · ${sm.endpoints || 0} endpoint(s) · ${sm.history_days || 0} day(s) of usage history · rolled up ${sm.rolled_up_at ? fmtAgo(sm.rolled_up_at) : "not yet"}` : "";
+  const body = document.getElementById("inv-body");
+  if (!inventory.length) { body.innerHTML = '<tr><td class="empty" colspan="12">nothing yet — the first rollup runs a minute after the server starts and every 15 minutes after</td></tr>'; return; }
+  body.innerHTML = inventory.map(p => {
+    const lv = p.levels || {};
+    const mix = ["heavy", "moderate", "light", "unused", "unknown"].filter(k => lv[k]).map(k => `<span class="state-pill usage-${escapeHtml(k)}" title="${escapeHtml(k)}">${escapeHtml(lv[k])}</span>`).join(" ");
+    return `<tr data-key="${escapeHtml(p.key)}">
+      <td title="${escapeHtml((p.versions || []).length ? "Versions: " + p.versions.join(", ") : "")}"><strong>${escapeHtml(p.name)}</strong>${p.tracked ? ' <span class="state-pill state-install_eligible">tracked</span>' : ""}${p.component ? ' <span class="os-pill">component</span>' : ""}</td>
+      <td class="u-c-text-muted">${escapeHtml(p.vendor || "—")}</td>
+      <td>${(p.platforms || []).map(o => `<span class="os-pill">${escapeHtml(osLabel(o))}</span>`).join(" ")}</td>
+      <td data-sort="${escapeHtml(p.installed)}">${escapeHtml(p.installed)}</td>
+      <td data-sort="${escapeHtml(p.used)}">${escapeHtml(p.used)}</td>
+      <td data-sort="${escapeHtml(p.unused)}"${sx(`color:${p.unused ? "var(--off)" : "inherit"}`)}>${escapeHtml(p.unused)}</td>
+      <td>${mix}</td>
+      <td title="${escapeHtml(p.last_used || "")}">${escapeHtml(p.last_used ? fmtDay(p.last_used) : "—")}</td>
+      <td title="${escapeHtml(p.first_seen || "")}">${escapeHtml(fmtDay(p.first_seen))}</td>
+      <td>${escapeHtml(p.tracked ? fmtCents(p.est_annual_cents, p.currency) : "—")}</td>
+      <td${sx(`color:${p.est_waste_cents ? "var(--off)" : "inherit"}`)}>${escapeHtml(p.tracked ? fmtCents(p.est_waste_cents, p.currency) : "—")}</td>
+      <td class="row-actions"><button class="tiny" data-inv-open="${escapeHtml(p.key)}">details</button>
+        <button class="tiny" data-inv-track="${escapeHtml(p.key)}">${p.tracked ? "edit tracking" : "track"}</button>
+        ${!p.component && p.unused ? `<button class="tiny danger" data-inv-remove="${escapeHtml(p.key)}">remove unused</button>` : ""}</td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll("[data-inv-open]").forEach(b => b.addEventListener("click", () => openProduct(b.dataset.invOpen)));
+  body.querySelectorAll("[data-inv-track]").forEach(b => b.addEventListener("click", () => trackProduct(inventory.find(p => p.key === b.dataset.invTrack))));
+  body.querySelectorAll("[data-inv-remove]").forEach(b => b.addEventListener("click", () => removeUnused(inventory.find(p => p.key === b.dataset.invRemove))));
+}
+function sparkline(history, days) {
+  const byDay = {}; (history || []).forEach(h => { byDay[h.day] = h.devices; });
+  const out = []; const max = Math.max(1, ...Object.values(byDay));
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    const v = byDay[d] || 0;
+    out.push(`<i class="${v ? "" : "zero"}"${sx(`height:${Math.max(3, Math.round(v / max * 100))}%`)} title="${d}: ${escapeHtml(v)} device(s)"></i>`);
+  }
+  const first = new Date(Date.now() - (days - 1) * 86400000).toLocaleDateString();
+  return `<div class="spark">${out.join("")}</div><div class="spark-axis"><span>${first}</span><span>devices launching it per day</span><span>today</span></div>`;
+}
+async function openProduct(key) {
+  const days = document.getElementById("inv-days").value;
+  const resp = await fetch(`/api/software-inventory/product/${encodeURIComponent(key)}?days=${encodeURIComponent(days)}`);
+  if (!resp.ok) { alert(await resp.text()); return; }
+  const d = await resp.json(), p = d.product;
+  openModal(p.name, `
+    <p class="hint">${escapeHtml(p.vendor || "unknown vendor")} · runs as ${(p.executables || []).length ? (p.executables || []).map(e => `<code>${escapeHtml(e)}</code>`).join(", ") : "unknown"}
+      · ${escapeHtml(p.installed)} installed, ${escapeHtml(p.used)} used, ${escapeHtml(p.unused)} unused, ${escapeHtml(p.unknown)} unknown in the last ${escapeHtml(d.window_days)} days${p.package_id ? " · catalog package linked" : ""}</p>
+    ${sparkline(d.history, +d.window_days)}
+    <div class="table-scroll u-maxh-50vh u-mt-10"><table>
+      <thead><tr><th>Endpoint</th><th>OS</th><th>Version</th><th>Installed</th><th>First seen</th><th>Last used</th><th>Days used</th><th>Launches</th><th>Usage</th></tr></thead>
+      <tbody>${(d.devices || []).map(x => `<tr>
+        <td><a href="/endpoint?id=${encodeURIComponent(x.agent_id)}">${escapeHtml(x.hostname)}</a>${x.online ? "" : ' <span class="os-pill">offline</span>'}</td>
+        <td><span class="os-pill">${escapeHtml(osLabel(x.os))}</span></td><td>${escapeHtml(x.version || "—")}</td>
+        <td>${escapeHtml(x.install_date || "—")}</td><td>${escapeHtml(fmtDay(x.first_seen))}</td><td>${escapeHtml(x.last_used ? fmtDay(x.last_used) : "never seen")}</td>
+        <td>${escapeHtml(x.days_used)}</td><td>${escapeHtml(x.launches)}</td><td>${usagePill(x.usage)}</td></tr>`).join("")}</tbody>
+    </table></div>`);
+}
+function trackProduct(p) {
+  if (!p) return;
+  const pkgOpts = packages.map(k => `<option value="${escapeHtml(k.id)}" ${k.id === p.package_id ? "selected" : ""}>${escapeHtml(k.name)}</option>`).join("");
+  openModal(`${p.tracked ? "Edit" : "Track"} ${p.name}`, `
+    <p class="hint">A tracked product is priced and can carry extra executables that count as use of it (one per line, without .exe) and the catalog package that removes it.</p>
+    <div class="form-grid">
+      <div class="field"><label for="trk-name">Name</label><input id="trk-name" value="${escapeHtml(p.name)}"></div>
+      <div class="field"><label for="trk-vendor">Vendor</label><input id="trk-vendor" value="${escapeHtml(p.vendor || "")}"></div>
+      <div class="field"><label for="trk-cost">Cost per seat per year</label><input id="trk-cost" type="number" min="0" step="0.01" value="${p.cost_per_seat_cents ? (p.cost_per_seat_cents / 100).toFixed(2) : ""}" placeholder="0.00"></div>
+      <div class="field"><label for="trk-cur">Currency</label><input id="trk-cur" value="${escapeHtml(p.currency || "USD")}" class="u-w-80"></div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="trk-exes">Extra executables</label><textarea id="trk-exes" rows="3" class="u-w-100p" placeholder="chrome&#10;chrome_proxy">${escapeHtml((p.executables || []).filter(e => !["", p.key, p.key.replace(/ /g, "")].includes(e)).join("\n"))}</textarea></div>
+      <div class="field"><label for="trk-pkg">Catalog package (remove/install)</label><select id="trk-pkg"><option value="">none</option>${pkgOpts}</select></div>
+    </div>
+    <div class="field"><label for="trk-notes">Notes</label><input id="trk-notes" placeholder="licence owner, renewal date…"></div>
+    <div class="u-d-flex u-gap-8 u-jc-flex-end">
+      ${p.tracked ? '<button class="tiny danger" id="trk-untrack">stop tracking</button>' : ""}
+      <button class="tiny go" id="trk-save">Save</button>
+    </div>`, wrap => {
+    wrap.querySelector("#trk-save").addEventListener("click", async () => {
+      const body = {
+        product_key: p.key, name: wrap.querySelector("#trk-name").value.trim(), vendor: wrap.querySelector("#trk-vendor").value.trim(),
+        cost_per_seat_cents: Math.round(parseFloat(wrap.querySelector("#trk-cost").value || "0") * 100), currency: wrap.querySelector("#trk-cur").value.trim() || "USD",
+        executables: wrap.querySelector("#trk-exes").value.split("\n").map(x => x.trim()).filter(Boolean),
+        package_id: wrap.querySelector("#trk-pkg").value, notes: wrap.querySelector("#trk-notes").value,
+      };
+      const resp = await fetch(p.tracked ? `/api/tracked-products/${encodeURIComponent(p.tracked_id)}` : "/api/tracked-products",
+        { method: p.tracked ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!resp.ok) { alert(await resp.text()); return; }
+      document.getElementById("mustra-modal")?.remove(); loadInventory();
+    });
+    wrap.querySelector("#trk-untrack")?.addEventListener("click", async () => {
+      if (!confirm(`Stop tracking ${p.name}? Its cost and extra executables are forgotten.`)) return;
+      await fetch(`/api/tracked-products/${encodeURIComponent(p.tracked_id)}`, { method: "DELETE" });
+      document.getElementById("mustra-modal")?.remove(); loadInventory();
+    });
+  });
+}
+async function removeUnused(p) {
+  if (!p) return;
+  const days = +document.getElementById("inv-days").value;
+  const preview = await fetch(`/api/software-inventory/product/${encodeURIComponent(p.key)}/remove-unused`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unused_days: days, dry_run: true }) });
+  if (!preview.ok) { alert(await preview.text()); return; }
+  const d = await preview.json();
+  openModal(`Remove unused ${p.name}`, `
+    <p class="hint">Runs the <b>remove</b> command of <b>${escapeHtml(d.package)}</b> on every endpoint where ${escapeHtml(p.name)} has not run for ${days} days, as an ordinary software deployment: applicability, maintenance windows and per-endpoint results all apply. Endpoints first seen inside the window are skipped — mustra has not watched them long enough to call the product unused.</p>
+    ${d.devices.length ? `<div class="table-scroll u-maxh-40vh"><table><thead><tr><th>Endpoint</th><th>OS</th><th>Version</th><th>Last used</th><th>First seen</th></tr></thead><tbody>
+      ${d.devices.map(x => `<tr><td>${escapeHtml(x.hostname)}${x.online ? "" : ' <span class="os-pill">offline</span>'}</td><td>${escapeHtml(osLabel(x.os))}</td><td>${escapeHtml(x.version || "—")}</td><td>${escapeHtml(x.last_used ? fmtDay(x.last_used) : "never seen")}</td><td>${escapeHtml(fmtDay(x.first_seen))}</td></tr>`).join("")}
+    </tbody></table></div>` : '<p class="hint">No endpoint qualifies right now.</p>'}
+    <div class="u-d-flex u-gap-8 u-jc-flex-end u-ai-center u-mt-10">
+      <label id="ru-override-label" class="u-fs-12" ${canOverrideWindows ? "" : "hidden"}><input type="checkbox" id="ru-override"> override maintenance windows</label>
+      <button class="tiny danger" id="ru-go" ${d.devices.length ? "" : "disabled"}>Remove from ${escapeHtml(d.devices.length)} endpoint(s)</button>
+    </div>`, wrap => {
+    wrap.querySelector("#ru-go").addEventListener("click", async () => {
+      const resp = await fetch(`/api/software-inventory/product/${encodeURIComponent(p.key)}/remove-unused`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unused_days: days, override_windows: !!wrap.querySelector("#ru-override")?.checked }) });
+      const text = await resp.text();
+      if (!resp.ok) { alert(text); return; }
+      document.getElementById("mustra-modal")?.remove();
+      alert(`Remove deployment started.\n${text.slice(0, 300)}`);
+      loadDeployments();
+    });
+  });
+}
+document.getElementById("inv-refresh").addEventListener("click", async () => {
+  const b = document.getElementById("inv-refresh"); b.disabled = true; b.textContent = "rolling up…";
+  await fetch("/api/software-inventory/refresh", { method: "POST" }).catch(() => {});
+  b.disabled = false; b.textContent = "Refresh"; loadInventory();
+});
+document.getElementById("inv-filters-toggle").addEventListener("click", e => {
+  const open = e.currentTarget.getAttribute("aria-expanded") !== "true";
+  e.currentTarget.setAttribute("aria-expanded", String(open));
+  document.getElementById("inv-filter-grid").hidden = !open;
+});
+document.getElementById("inv-export").addEventListener("click", () => { window.location = `/api/software-inventory?${invParams()}&format=csv`; });
+["inv-filter", "inv-days"].forEach(id => document.getElementById(id).addEventListener("change", loadInventory));
+let invTimer = null;
+document.getElementById("inv-q").addEventListener("input", () => { clearTimeout(invTimer); invTimer = setTimeout(loadInventory, 250); });
+
+
+// ---- confidence ----------------------------------------------------------
+async function loadConfidence() {
+  const r = await fetch("/api/confidence");
+  if (!r.ok) { document.getElementById("cf-body").innerHTML = '<tr><td class="empty" colspan="7">could not load</td></tr>'; return; }
+  const d = await r.json();
+  const rows = d.packages || [];
+  document.getElementById("cf-status").textContent =
+    `${rows.filter(p => p.score != null).length} of ${rows.length} scoreable · ${d.health_samples || 0} health sample(s) · last ${d.window_days} days`;
+  const bandClass = { high: "state-installed", moderate: "state-update_eligible", low: "state-not_applicable", unknown: "state-not_applicable" };
+  document.getElementById("cf-body").innerHTML = rows.length ? rows.map(p => `<tr>
+    <td><b>${escapeHtml(p.package)}</b></td>
+    <td>${p.score == null
+      ? '<span class="state-pill state-not_applicable">not enough history</span>'
+      : `<span class="state-pill ${escapeHtml(bandClass[p.band] || "")}">${escapeHtml(p.score)}% ${escapeHtml(p.band)}</span>`}</td>
+    <td>${p.attempts ? `${escapeHtml(p.succeeded)}/${escapeHtml(p.attempts)}` : "—"}</td>
+    <td>${escapeHtml(p.endpoints || 0)}</td>
+    <td>${p.health_delta == null ? "—" : `<span${sx(`color:${p.health_delta < 0 ? "var(--off)" : "var(--ok)"}`)}>${p.health_delta > 0 ? "+" : ""}${p.health_delta.toFixed(1)}</span> <span class="hint">(${escapeHtml(p.health_samples)})</span>`}</td>
+    <td>${p.last_seen ? escapeHtml(fmtAgo(p.last_seen)) : "never"}</td>
+    <td class="u-ws-normal u-fs-meta u-c-text-muted u-maxw-320">${escapeHtml(p.reason)}</td></tr>`).join("")
+    : '<tr><td class="empty" colspan="7">no packages in the catalog</td></tr>';
+}
+</script>
+</body>
+</html>

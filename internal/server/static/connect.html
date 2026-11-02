@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select { width: 100%; padding: 8px 10px; border-radius: var(--radius-md);
+    border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; line-height: 1.55; }
+  .hint code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.err { background: var(--off-bg); color: var(--off); }
+  .pill.off { background: var(--surface-2); color: var(--text-muted); }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="connect-page-head"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Exports</h2><span class="scan-status" id="exp-status"></span></div>
+        <p class="hint">
+          Standing instructions to send mustra's answers somewhere else. What goes out is the result of a
+          query or a history — the same thing the console shows — so you can always reproduce in the UI what
+          the destination received. History sources keep a cursor, so a run sends what's new rather than
+          everything again.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Source</th><th>Format</th><th>Destination</th><th>Every</th><th>Last run</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="exp-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="editor-title">New export</h2>
+        <div class="form-grid">
+          <div class="field"><label for="e-name">Name</label><input id="e-name" placeholder="Nightly patch report to Discord"></div>
+          <div class="field"><label for="e-source">Source</label>
+            <select id="e-source">
+              <option value="endpoints">Endpoints — full inventory</option>
+              <option value="deployments">Deployments — incremental</option>
+              <option value="question_history">Query history — incremental</option>
+              <option value="findings">Vulnerability findings</option>
+              <option value="question">A saved query's answer</option>
+            </select>
+          </div>
+          <div class="field" id="sq-field" hidden><label for="e-saved">Saved query</label>
+            <select id="e-saved"></select>
+          </div>
+          <div class="field"><label for="e-format">Format</label>
+            <select id="e-format">
+              <option value="json">JSON</option>
+              <option value="ndjson">NDJSON — one object per line (Loki, Vector)</option>
+              <option value="csv">CSV</option>
+              <option value="cef">CEF — ArcSight/SIEM</option>
+              <option value="syslog">Syslog RFC 5424</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="e-dest">Destination</label>
+            <select id="e-dest">
+              <option value="webhook">HTTP webhook</option>
+              <option value="file">File on the server</option>
+              <option value="syslog">Syslog socket</option>
+            </select>
+          </div>
+          <div class="field"><label for="e-style">Webhook style</label>
+            <select id="e-style">
+              <option value="">Plain — POST the body as-is</option>
+              <option value="discord">Discord</option>
+              <option value="slack">Slack</option>
+            </select>
+          </div>
+          <div class="field"><label for="e-target">Target</label><input id="e-target" placeholder="https://discord.com/api/webhooks/…"></div>
+          <div class="field"><label for="e-interval">Run every (minutes)</label><input id="e-interval" type="number" min="0" value="0" placeholder="0 = manual only"></div>
+        </div>
+        <p class="hint">
+          A file target that's a directory gets a timestamped filename, so runs don't overwrite each other.
+          A syslog target is <code>udp://host:514</code> or <code>tcp://host:514</code> — a Loki receiver
+          accepts the former.
+        </p>
+        <div class="u-d-flex u-gap-14 u-ai-center u-mb-12 u-fs-12_5">
+          <label class="u-d-flex u-gap-6 u-ai-center"><input type="checkbox" id="e-enabled" checked> Enabled</label>
+        </div>
+        <div class="panel-actions">
+          <button class="primary" id="e-save">Save export</button>
+          <button id="e-cancel">Cancel</button>
+          <span class="scan-status" id="e-status"></span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let exports_ = [], savedQueries = [], editingID = null;
+
+document.addEventListener("mustra:user", () => {
+  renderPageHead("connect-page-head", "/connect", { title: "Connect" }); loadSaved(); load(); });
+
+document.getElementById("e-source").addEventListener("change", e => {
+  document.getElementById("sq-field").hidden = e.target.value !== "question";
+});
+
+async function loadSaved() {
+  const resp = await fetch("/api/interact/saved");
+  if (!resp.ok) return;
+  savedQueries = (await resp.json()).questions || [];
+  document.getElementById("e-saved").innerHTML = savedQueries.length
+    ? savedQueries.map(q => `<option value="${escapeHtml(q.id)}">${escapeHtml(q.name)}</option>`).join("")
+    : '<option value="">(save a query in Interact first)</option>';
+}
+
+async function load() {
+  const resp = await fetch("/api/connect/exports");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  exports_ = (await resp.json()).exports || [];
+  render();
+}
+
+function render() {
+  document.getElementById("exp-status").textContent = exports_.length ? `${exports_.length} export(s)` : "";
+  const body = document.getElementById("exp-body");
+  body.innerHTML = exports_.length === 0
+    ? '<tr><td class="empty" colspan="8">nothing exported yet</td></tr>'
+    : exports_.map(x => `
+      <tr>
+        <td><strong>${escapeHtml(x.name)}</strong></td>
+        <td>${escapeHtml(x.source)}</td>
+        <td>${escapeHtml(x.format)}</td>
+        <td class="mono u-ws-normal u-maxw-240">${escapeHtml(shortTarget(x))}</td>
+        <td>${escapeHtml(x.interval_minutes > 0 ? x.interval_minutes + " min" : "manual")}</td>
+        <td data-sort="${escapeHtml(x.last_run_at || "")}">${x.last_run_at ? fmtAgo(x.last_run_at) + ` · ${escapeHtml(x.last_row_count)} rows` : "never"}</td>
+        <td>${x.last_error
+              ? `<span class="pill err" title="${escapeHtml(x.last_error)}">failing</span>`
+              : (x.enabled ? '<span class="pill ok">enabled</span>' : '<span class="pill off">disabled</span>')}</td>
+        <td class="row-actions">
+          <button class="tiny" data-run="${escapeHtml(x.id)}">run now</button>
+          <button class="tiny" data-edit="${escapeHtml(x.id)}">edit</button>
+          <button class="tiny danger" data-del="${escapeHtml(x.id)}">delete</button>
+        </td>
+      </tr>`).join("");
+
+  body.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "running…";
+    const resp = await fetch(`/api/connect/exports/${b.dataset.run}/run`, { method: "POST" });
+    const txt = resp.ok ? `sent ${(await resp.json()).rows} row(s)` : await resp.text();
+    alert(txt);
+    load();
+  }));
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => edit(b.dataset.edit)));
+  body.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest("tr"), id = b.dataset.del;
+    undoable({ text: "Export deleted", hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/connect/exports/${encodeURIComponent(id)}`, { method: "DELETE", keepalive: true }); load(); } });
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "connect-exports" });
+  if (dt) dt.refresh();
+}
+
+function shortTarget(x) {
+  if (x.destination !== "webhook") return x.target;
+  // Never render a full webhook URL: the path is the credential.
+  try {
+    const u = new URL(x.target);
+    return u.origin + "/…";
+  } catch (e) { return "webhook"; }
+}
+
+function edit(id) {
+  const x = exports_.find(e => e.id === id);
+  if (!x) return;
+  editingID = id;
+  document.getElementById("editor-title").textContent = `Editing ${x.name}`;
+  document.getElementById("e-name").value = x.name;
+  document.getElementById("e-source").value = x.source;
+  document.getElementById("e-saved").value = x.saved_question_id || "";
+  document.getElementById("sq-field").hidden = x.source !== "question";
+  document.getElementById("e-format").value = x.format;
+  document.getElementById("e-dest").value = x.destination;
+  document.getElementById("e-style").value = x.webhook_style || "";
+  document.getElementById("e-target").value = x.target;
+  document.getElementById("e-interval").value = x.interval_minutes;
+  document.getElementById("e-enabled").checked = x.enabled;
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function reset() {
+  editingID = null;
+  document.getElementById("editor-title").textContent = "New export";
+  ["e-name","e-target"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("e-interval").value = 0;
+  document.getElementById("e-enabled").checked = true;
+  document.getElementById("e-status").textContent = "";
+}
+document.getElementById("e-cancel").addEventListener("click", reset);
+
+document.getElementById("e-save").addEventListener("click", async () => {
+  const status = document.getElementById("e-status");
+  const body = {
+    name: document.getElementById("e-name").value.trim(),
+    source: document.getElementById("e-source").value,
+    saved_question_id: document.getElementById("e-saved").value,
+    format: document.getElementById("e-format").value,
+    destination: document.getElementById("e-dest").value,
+    webhook_style: document.getElementById("e-style").value,
+    target: document.getElementById("e-target").value.trim(),
+    interval_minutes: Number(document.getElementById("e-interval").value) || 0,
+    enabled: document.getElementById("e-enabled").checked,
+  };
+  if (!body.name || !body.target) { status.textContent = "name and target are required"; return; }
+  status.textContent = "saving…";
+  const resp = await fetch(editingID ? `/api/connect/exports/${editingID}` : "/api/connect/exports", {
+    method: editingID ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = '<span class="u-c-ok">saved</span>';
+  reset(); load();
+});
+</script>
+</body>
+</html>

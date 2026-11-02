@@ -1,0 +1,11 @@
+{
+  "name": "always-times-out (test)",
+  "kind": "action",
+  "category": "Test",
+  "commands": {
+    "linux": {
+      "install": "echo sleeping; sleep 120"
+    }
+  },
+  "command_timeout_seconds": 10
+}

@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threat Response — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 12px; font-size: 12.5px; }
+  .checks label { display: flex; align-items: center; gap: 6px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .ioc-value { font-family: var(--mono); font-size: var(--fs-meta); word-break: break-all; }
+  .kind-badge { font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+                padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+  .finding-row.open { background: color-mix(in oklab, var(--bad) 8%, transparent); }
+  .scope-note { border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                padding: 10px 13px; font-size: 12.5px; line-height: 1.55; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-findings" hidden>
+      <div id="hunt-page-head"></div>
+      <div id="hunt-quick-links"></div>
+      <div class="stat-tiles" id="hunt-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Findings</h2>
+          <span class="scan-status" id="findings-status"></span></div>
+        <div class="scope-note">
+          A hunt matches indicators against the sensor snapshots the fleet has already published, so asking
+          &ldquo;is this hash anywhere in my estate&rdquo; costs a few queries rather than waking every machine to
+          search its own disk. The limit matters and is worth stating: <strong>a hunt sees exactly what the
+          sensors see</strong>. A file outside the integrity watch set, or a process that started and exited
+          between two collections, is invisible to it. This finds known-bad where mustra already looks — it is
+          not a filesystem sweep, and it is not real-time detection.
+        </div>
+        <div class="panel-actions u-mb-12">
+          <button class="primary" id="hunt-run">Hunt now</button>
+          <span class="scan-status" id="hunt-run-status"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Indicator</th><th>Endpoint</th><th>What matched</th><th>First seen</th><th>Last seen</th><th>Action</th></tr></thead>
+            <tbody id="findings-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Signal findings</h2><span class="scan-status" id="sigf-status"></span></div>
+        <div class="scope-note">
+          A <b>signal</b> is a behavioural rule evaluated on every process, file, registry, network, DNS and logon
+          event as it arrives — &ldquo;PowerShell with an encoded command&rdquo;, &ldquo;a Run key written&rdquo;,
+          &ldquo;a connection to port 4444&rdquo;. One row per signal per endpoint, counted, so a rule that fires a
+          thousand times overnight is one thing to look at. Acknowledging a row hides it until the signal fires there again.
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Signal</th><th>Endpoint</th><th>Kind</th><th>Last event</th><th>Hits</th><th>First</th><th>Last</th><th>Action</th></tr></thead>
+            <tbody id="sigf-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-activity" hidden>
+      <div class="stat-tiles" id="act-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Live activity</h2><span class="scan-status" id="act-status"></span></div>
+        <div class="scope-note">
+          Every process start, reported <b>as it starts</b> rather than at the next snapshot. Identical invocations
+          inside a five-second window collapse into one row with a count — a hypervisor runs
+          <code>systemctl status</code> several hundred times a minute, and &ldquo;×587&rdquo; is a fact where five
+          hundred and eighty-seven identical rows are noise. This is the half a
+          timed hunt structurally cannot have: the processes sensor is a snapshot every fifteen minutes, so anything
+          that runs and exits in between never existed as far as it is concerned — and &ldquo;runs and exits&rdquo;
+          describes most of what somebody who should not be there does. An indicator on a process name is matched
+          here at exec, so it raises its finding while the thing is still running.
+        </div>
+        <div class="scope-note" id="act-source-note"></div>
+        <div class="panel-actions u-mb-8" id="act-kinds">
+          <button class="tiny active" data-kind="process">Processes</button>
+          <button class="tiny" data-kind="network">Network</button>
+          <button class="tiny" data-kind="dns">DNS</button>
+          <button class="tiny" data-kind="registry">Registry</button>
+          <button class="tiny" data-kind="logon">Logons</button>
+        </div>
+        <div class="panel-actions u-mb-12">
+          <input class="search-input u-maxw-320" id="act-search" type="search" placeholder="Filter by name or command line…">
+          <label class="u-fs-12 u-c-text-muted u-d-flex u-ai-center u-gap-6">
+            <input type="checkbox" id="act-matched"> only what matched an indicator
+          </label>
+          <button class="tiny" id="act-refresh">Refresh</button>
+        </div>
+        <div class="table-scroll table-scroll-y">
+          <table>
+            <thead id="act-head"><tr><th>When</th><th>Endpoint</th><th>Process</th><th>User</th><th>Command line</th><th>Indicator</th></tr></thead>
+            <tbody id="act-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-indicators" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Indicators</h2><span class="scan-status" id="iocs-status"></span></div>
+        <p class="hint">
+          What mustra looks for. Each kind is matched against the sensor that can actually answer it, so an
+          indicator can only be one of the kinds below — anything else would be a search with nowhere to run.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Kind</th><th>Value</th><th>Severity</th><th>Source</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="iocs-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="ioc-editor-title">New indicator</h2>
+        <div class="form-grid">
+          <div class="field"><label for="i-name">Name</label><input id="i-name" placeholder="Cobalt Strike beacon"></div>
+          <div class="field"><label for="i-kind">Kind</label><select id="i-kind">
+            <option value="file_hash">File hash (SHA-256)</option>
+            <option value="file_path">File path or name</option>
+            <option value="process_name">Process name</option>
+            <option value="ip">IP address</option>
+            <option value="app_name">Installed application</option>
+          </select></div>
+          <div class="field"><label for="i-severity">Severity</label><select id="i-severity">
+            <option value="info">Info</option>
+            <option value="warning" selected>Warning</option>
+            <option value="critical">Critical</option>
+          </select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="i-value">Value</label><input id="i-value" placeholder=""></div>
+        </div>
+        <p class="hint" id="i-kind-hint"></p>
+        <div class="form-grid">
+          <div class="field"><label for="i-source">Source (where this came from)</label><input id="i-source" placeholder="CISA AA23-108, internal IR"></div>
+          <div class="field"><label for="i-description">Description</label><input id="i-description" placeholder="Why anyone should care"></div>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="i-enabled" checked> Enabled</label>
+        </div>
+        <div class="panel-actions">
+          <button class="primary" id="i-save">Save indicator</button>
+          <button id="i-cancel">Cancel</button>
+          <span class="scan-status" id="i-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-signals" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Signals</h2><span class="scan-status" id="sig-status"></span></div>
+        <div class="scope-note">
+          Rules in the shape <code>object.property condition value</code>, joined with <b>AND</b>, <b>OR</b>,
+          <b>NOT</b> and parentheses, evaluated live against every event of the objects they name. String
+          comparisons ignore case. Operators: <code>contains</code>, <code>not contains</code>,
+          <code>starts with</code>, <code>ends with</code>, <code>equals</code> / <code>==</code> / <code>is</code>,
+          <code>!=</code> / <code>is not</code>, <code>matches</code> (regular expression), <code>in [a, b]</code>,
+          <code>not in [a, b]</code>, and <code>&gt; &lt; &gt;= &lt;=</code> on numbers.
+        </div>
+        <div class="scope-note" id="sig-objects"></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Severity</th><th>Reads</th><th>Expression</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="sig-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="sig-editor-title">New signal</h2>
+        <div class="form-grid">
+          <div class="field"><label for="s-name">Name</label><input id="s-name" placeholder="PowerShell with an encoded command"></div>
+          <div class="field"><label for="s-severity">Severity</label><select id="s-severity"><option value="info">info</option><option value="warning" selected>warning</option><option value="critical">critical</option></select></div>
+          <div class="field"><label for="s-example">Start from an example</label><select id="s-example"><option value="">—</option></select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="s-expression">Expression</label><textarea id="s-expression" rows="3" placeholder="process.name contains 'powershell' AND process.command_line contains '-enc'"></textarea></div>
+          <div class="field u-gc-full"><label for="s-description">Description</label><input id="s-description" placeholder="Why this matters and what to do when it fires"></div>
+        </div>
+        <div class="checks"><label><input type="checkbox" id="s-enabled" checked> Enabled</label></div>
+        <div class="panel-actions">
+          <button class="primary" id="s-save">Save signal</button>
+          <button id="s-test">Test against recent events</button>
+          <button id="s-cancel">Cancel</button>
+          <span class="scan-status" id="s-save-status"></span>
+        </div>
+        <div id="s-test-out"></div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+let iocs = [];
+let findings = [];
+let editingIOC = null;
+
+// What each kind is matched against, said plainly — the difference between
+// an indicator that can match and one that silently never will.
+const KIND_HINT = {
+  file_hash: "Matched against the integrity sensor's SHA-256 hashes, so it can only find files inside the watched set (auth, sudoers, SSH, cron, systemd units). 64 hex characters.",
+  file_path: "Matched as a substring against watched file paths — a filename is usually enough, and requiring the full path would mean knowing where it landed before going to look for it.",
+  process_name: "Matched against the processes sensor. A snapshot, so something that ran and exited between two collections will not appear.",
+  ip: "Matched against the network-neighbours sensor — the endpoints that have recently talked to this address.",
+  app_name: "Matched as a substring against installed applications.",
+};
+
+let canManage = false;
+document.addEventListener("mustra:user", (e) => {
+  canManage = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("settings.manage")));
+  initModuleSections([
+    { hash: "findings", label: "Findings" },
+    { hash: "activity", label: "Live Activity" },
+    { hash: "indicators", label: "Indicators" },
+    { hash: "signals", label: "Signals" },
+  ]);
+  document.querySelectorAll("#act-kinds [data-kind]").forEach(b => b.addEventListener("click", () => {
+    actKind = b.dataset.kind;
+    document.querySelectorAll("#act-kinds [data-kind]").forEach(x => x.classList.toggle("active", x === b));
+    document.getElementById("act-search").placeholder = actKind === "process" ? "Filter by name or command line…" : "Filter by summary, process or user…";
+    loadActivity();
+  }));
+  loadSignals();
+  loadSignalFindings();
+  renderPageHead("hunt-page-head", "/hunt", { title: "Threat Response",
+    sub: "What mustra is looking for, and where it has been seen." });
+  renderQuickLinks("hunt-quick-links", "/hunt", e.detail, [
+    { label: "Integrity Monitor", href: "/integrity", icon: "integrity" },
+    { label: "Interact", href: "/interact", icon: "interact" },
+  ]);
+  document.getElementById("i-kind").addEventListener("change", syncKindHint);
+  syncKindHint();
+  document.getElementById("act-refresh").addEventListener("click", loadActivity);
+  document.getElementById("act-matched").addEventListener("change", loadActivity);
+  let debounce = null;
+  document.getElementById("act-search").addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(loadActivity, 300);
+  });
+  load();
+  loadActivity();
+});
+
+// --- live activity ----------------------------------------------------
+
+let actKind = "process";
+async function loadActivity() {
+  if (actKind !== "process") return loadRecorderActivity();
+  document.getElementById("act-head").innerHTML = "<tr><th>When</th><th>Endpoint</th><th>Process</th><th>User</th><th>Command line</th><th>Indicator</th></tr>";
+  const q = document.getElementById("act-search").value.trim();
+  const matched = document.getElementById("act-matched").checked;
+  const resp = await fetch("/api/process-events?limit=300"
+    + (q ? "&q=" + encodeURIComponent(q) : "") + (matched ? "&matched=1" : ""));
+  if (!resp.ok) {
+    document.getElementById("act-body").innerHTML =
+      `<tr><td class="empty" colspan="6">couldn't load activity</td></tr>`;
+    return;
+  }
+  const d = await resp.json();
+  const events = d.events || [];
+  const sum = d.summary || {};
+
+  document.getElementById("act-tiles").innerHTML = [
+    { label: "Starts, last 24h", value: sum.last_24h || 0 },
+    { label: "Matched an indicator", value: sum.matched_24h || 0, cls: (sum.matched_24h || 0) ? "off" : "ok" },
+    { label: "Too fast to identify", value: sum.unidentified_24h || 0 },
+    { label: "Endpoints reporting", value: sum.endpoints_reporting || 0 },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+
+  // The mechanism decides what an empty feed proves, so it is stated rather
+  // than left to be assumed.
+  const kernel = sum.endpoints_kernel_sourced || 0;
+  const total = sum.endpoints_reporting || 0;
+  document.getElementById("act-source-note").innerHTML = total === 0
+    ? `No endpoint has reported yet. Real-time process events need agent 0.31.0 or newer.`
+    : `<b>${escapeHtml(kernel)} of ${escapeHtml(total)}</b> reporting endpoints read exec events straight from the kernel, so nothing is
+       too short-lived to be seen. The rest sample the process table every few seconds — a real limit worth knowing
+       before reading a quiet feed as a quiet machine, and the reason a batch says which mechanism produced it.
+       Linux gets the kernel feed; Windows and macOS need machinery (ETW sessions, an Apple entitlement) mustra
+       does not have.`;
+
+  document.getElementById("act-status").textContent =
+    `${events.length} shown · timeline kept ${d.retention_hours || 48}h, matches ${d.matched_retention_days || 30} days`;
+
+  document.getElementById("act-body").innerHTML = events.length === 0
+    ? `<tr><td class="empty" colspan="6">nothing recorded yet</td></tr>`
+    : events.map(e => {
+        if (e.kind !== "start") {
+          const what = e.kind === "suppressed"
+            ? `${e.count} more starts in this window, not reported individually — too many at once`
+            : `${e.count} processes exec'd and were gone before they could be identified`;
+          return `<tr>
+            <td data-sort="${escapeHtml(e.at)}">${fmtAgo(e.at)}</td>
+            <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.agent_id)}</a></td>
+            <td colspan="4" class="u-c-text-muted">${escapeHtml(what)}</td>
+          </tr>`;
+        }
+        return `<tr${e.matched_ioc ? ' class="u-bg-off-bg"' : ""}>
+          <td data-sort="${escapeHtml(e.at)}">${fmtAgo(e.at)}</td>
+          <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.agent_id)}</a></td>
+          <td><b>${escapeHtml(e.name)}</b>${e.count > 1 ? ` <span class="kind-badge" title="identical invocations collapsed into one row">×${escapeHtml(e.count)}</span>` : ""}
+              <span class="u-c-text-muted u-fs-meta">${escapeHtml(e.pid)}${escapeHtml(e.ppid ? " ← " + e.ppid : "")}</span></td>
+          <td>${escapeHtml(e.username || "—")}</td>
+          <td class="ioc-value u-maxw-340">${escapeHtml(e.cmdline || "—")}</td>
+          <td>${e.ioc_name ? `<a href="#findings" class="u-c-off u-fwt-600">${escapeHtml(e.ioc_name)}</a>` : "—"}</td>
+        </tr>`;
+      }).join("");
+}
+
+function syncKindHint() {
+  const k = document.getElementById("i-kind").value;
+  document.getElementById("i-kind-hint").textContent = KIND_HINT[k] || "";
+  const ph = { file_hash: "e3b0c44298fc1c149afbf4c8996fb924…", file_path: "/tmp/.hidden or beacon.exe",
+               process_name: "xmrig", ip: "203.0.113.42", app_name: "AnyDesk" };
+  document.getElementById("i-value").placeholder = ph[k] || "";
+}
+
+async function load() {
+  const [iocResp, findResp] = await Promise.all([
+    fetch("/api/hunt/iocs"), fetch("/api/hunt/findings"),
+  ]);
+  if (iocResp.ok) iocs = (await iocResp.json()).iocs || [];
+  let outstanding = 0;
+  if (findResp.ok) {
+    const d = await findResp.json();
+    findings = d.findings || [];
+    outstanding = d.outstanding || 0;
+  }
+  renderTiles(outstanding);
+  renderIOCs();
+  renderFindings();
+}
+
+function renderTiles(outstanding) {
+  const enabled = iocs.filter(i => i.enabled).length;
+  const hosts = new Set(findings.filter(f => !f.acknowledged).map(f => f.agent_id)).size;
+  document.getElementById("hunt-tiles").innerHTML = [
+    { label: "Indicators watched", value: enabled, cls: "" },
+    { label: "Outstanding findings", value: outstanding, cls: outstanding > 0 ? "bad" : "ok" },
+    { label: "Endpoints affected", value: hosts, cls: hosts > 0 ? "bad" : "ok" },
+    { label: "Total sightings", value: findings.length, cls: "" },
+  ].map(t => `
+    <div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls)}">${escapeHtml(String(t.value))}</div>
+    </div>`).join("");
+}
+
+function renderIOCs() {
+  const body = document.getElementById("iocs-body");
+  document.getElementById("iocs-status").textContent = iocs.length ? `${iocs.length} indicator(s)` : "";
+  body.innerHTML = iocs.length === 0
+    ? '<tr><td class="empty" colspan="7">none yet — add a hash, filename, process or address below</td></tr>'
+    : iocs.map(i => `
+      <tr>
+        <td><strong>${escapeHtml(i.name)}</strong>
+          ${i.description ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(i.description)}</div>` : ""}</td>
+        <td><span class="kind-badge">${escapeHtml(i.kind)}</span></td>
+        <td class="ioc-value">${escapeHtml(i.value)}</td>
+        <td>${sevPill(i.severity)}</td>
+        <td class="u-fs-meta u-c-text-muted">${escapeHtml(i.source || "—")}</td>
+        <td>${i.enabled
+          ? '<span class="sev-pill u-bg-ok-bg u-c-ok">enabled</span>'
+          : '<span class="sev-pill none">disabled</span>'}</td>
+        <td class="row-actions">
+          <button class="tiny" data-ioc-edit="${escapeHtml(i.id)}">edit</button>
+          <button class="tiny danger" data-ioc-del="${escapeHtml(i.id)}">delete</button>
+        </td>
+      </tr>`).join("");
+  body.querySelectorAll("[data-ioc-edit]").forEach(b =>
+    b.addEventListener("click", () => editIOC(b.dataset.iocEdit)));
+  body.querySelectorAll("[data-ioc-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Delete this indicator? Its findings go with it.")) return;
+    await fetch(`/api/hunt/iocs/${encodeURIComponent(b.dataset.iocDel)}`, { method: "DELETE" });
+    resetIOC();
+    load();
+  }));
+}
+
+function sevPill(sev) {
+  if (sev === "critical") return '<span class="sev-pill security">critical</span>';
+  if (sev === "info") return '<span class="sev-pill none">info</span>';
+  return '<span class="sev-pill u-bg-warn-bg u-c-off">warning</span>';
+}
+
+function renderFindings() {
+  const body = document.getElementById("findings-body");
+  document.getElementById("findings-status").textContent =
+    findings.length ? `${findings.length} sighting(s)` : "";
+  body.innerHTML = findings.length === 0
+    ? '<tr><td class="empty" colspan="6">nothing found. That means none of the watched indicators appear in the sensor data mustra holds — read it with the scope above in mind.</td></tr>'
+    : findings.map(f => `
+      <tr class="finding-row ${f.acknowledged ? "" : "open"}">
+        <td><strong>${escapeHtml(f.ioc_name)}</strong> ${sevPill(f.ioc_severity)}
+          <div><span class="kind-badge">${escapeHtml(f.ioc_kind)}</span></div></td>
+        <td>${escapeHtml(f.hostname || f.agent_id)}</td>
+        <td>${escapeHtml(f.context || f.matched_value)}</td>
+        <td>${fmtAgo(f.first_seen)}</td>
+        <td>${fmtAgo(f.last_seen)}</td>
+        <td class="row-actions">
+          <button class="tiny" data-ack="${escapeHtml(f.id)}" data-ackval="${f.acknowledged ? "false" : "true"}">
+            ${f.acknowledged ? "reopen" : "acknowledge"}</button>
+        </td>
+      </tr>`).join("");
+  body.querySelectorAll("[data-ack]").forEach(b => b.addEventListener("click", async () => {
+    await fetch(`/api/hunt/findings/${encodeURIComponent(b.dataset.ack)}/ack`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acknowledged: b.dataset.ackval === "true" }),
+    });
+    load();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "hunt-findings" });
+  if (dt) dt.refresh();
+}
+
+document.getElementById("hunt-run").addEventListener("click", async () => {
+  const status = document.getElementById("hunt-run-status");
+  status.textContent = "hunting…";
+  const resp = await fetch("/api/hunt/run", { method: "POST" });
+  if (!resp.ok) {
+    status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`;
+    return;
+  }
+  const out = await resp.json();
+  status.innerHTML = out.new_findings > 0
+    ? `<span class="u-c-off">${escapeHtml(out.new_findings)} new sighting(s)</span>`
+    : '<span class="u-c-ok">no new sightings</span>';
+  load();
+});
+
+function editIOC(id) {
+  const i = iocs.find(x => x.id === id);
+  if (!i) return;
+  editingIOC = id;
+  document.getElementById("ioc-editor-title").textContent = `Editing ${i.name}`;
+  document.getElementById("i-name").value = i.name || "";
+  document.getElementById("i-kind").value = i.kind;
+  document.getElementById("i-value").value = i.value || "";
+  document.getElementById("i-severity").value = i.severity || "warning";
+  document.getElementById("i-source").value = i.source || "";
+  document.getElementById("i-description").value = i.description || "";
+  document.getElementById("i-enabled").checked = !!i.enabled;
+  syncKindHint();
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function resetIOC() {
+  editingIOC = null;
+  document.getElementById("ioc-editor-title").textContent = "New indicator";
+  ["i-name", "i-value", "i-source", "i-description"].forEach(id =>
+    { document.getElementById(id).value = ""; });
+  document.getElementById("i-severity").value = "warning";
+  document.getElementById("i-enabled").checked = true;
+  document.getElementById("i-save-status").textContent = "";
+  syncKindHint();
+}
+document.getElementById("i-cancel").addEventListener("click", resetIOC);
+
+document.getElementById("i-save").addEventListener("click", async () => {
+  const status = document.getElementById("i-save-status");
+  const name = document.getElementById("i-name").value.trim();
+  const value = document.getElementById("i-value").value.trim();
+  if (!name || !value) { status.textContent = "a name and a value are required"; return; }
+  const body = {
+    name, value,
+    kind: document.getElementById("i-kind").value,
+    severity: document.getElementById("i-severity").value,
+    source: document.getElementById("i-source").value.trim(),
+    description: document.getElementById("i-description").value.trim(),
+    enabled: document.getElementById("i-enabled").checked,
+  };
+  status.textContent = "saving…";
+  const resp = await fetch(editingIOC ? `/api/hunt/iocs/${editingIOC}` : "/api/hunt/iocs", {
+    method: editingIOC ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = '<span class="u-c-ok">saved — press Hunt now to check the fleet</span>';
+  resetIOC();
+  load();
+});
+
+// --- recorder activity (registry, network, dns, logon) --------------------
+const KIND_LABEL = { network: "Network connections", dns: "DNS resolutions", registry: "Registry changes", logon: "Logons" };
+const SOURCE_NOTE = {
+  network: "A diff of the connection table every five seconds on every platform; a connection shorter than that is missed. Sysmon event 3 is taken as well where Sysmon is installed. Loopback peers are not reported.",
+  dns: "Windows: new entries in the DNS client cache (with Sysmon 22 where present). Linux and macOS report none — seeing queries there needs eBPF or a packet tap the agent does not carry.",
+  registry: "Windows: a diff of the persistence keys every five seconds — Run, RunOnce, Winlogon, Image File Execution Options, services, scheduled tasks, LSA packages, Defender exclusions — plus Sysmon 12/13/14 where present. Linux and macOS have no registry.",
+  logon: "Linux from the journal (sshd, sudo, su, login); Windows from the Security log (4624, 4625, 4648; service and machine-account logons filtered); macOS from `last`.",
+};
+async function loadRecorderActivity() {
+  const q = document.getElementById("act-search").value.trim();
+  const matched = document.getElementById("act-matched").checked;
+  const resp = await fetch(`/api/recorder-events?limit=300&kind=${encodeURIComponent(actKind)}` + (q ? "&q=" + encodeURIComponent(q) : "") + (matched ? "&matched=1" : ""));
+  if (!resp.ok) { document.getElementById("act-body").innerHTML = `<tr><td class="empty" colspan="7">couldn't load ${escapeHtml(actKind)} events</td></tr>`; return; }
+  const d = await resp.json();
+  const events = d.events || [];
+  const sum = (d.summary || {})[actKind] || {};
+  document.getElementById("act-tiles").innerHTML = [
+    { label: `${KIND_LABEL[actKind]}, last 24h`, value: sum.events || 0 },
+    { label: "Matched a signal", value: sum.matched || 0, cls: (sum.matched || 0) ? "off" : "ok" },
+    { label: "Suppressed", value: sum.suppressed || 0 },
+    { label: "Endpoints reporting", value: sum.endpoints || 0 },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  const sources = Object.entries(sum.sources || {}).filter(([k]) => k).map(([k, n]) => `${n} via ${k}`).join(", ");
+  document.getElementById("act-source-note").innerHTML = `${escapeHtml(SOURCE_NOTE[actKind])}${sources ? ` <b>Reporting now:</b> ${escapeHtml(sources)}.` : " No endpoint has reported this kind yet (agent 0.46.0 or newer)."}`;
+  document.getElementById("act-status").textContent = `${events.length} shown · timeline kept ${d.retention_hours || 48}h, matches ${d.matched_retention_days || 30} days`;
+  const heads = {
+    network: ["When", "Endpoint", "Process", "Direction", "Remote", "Local", "Signal"],
+    dns: ["When", "Endpoint", "Process", "Query", "Answers", "", "Signal"],
+    registry: ["When", "Endpoint", "Process", "Op", "Key", "Data", "Signal"],
+    logon: ["When", "Endpoint", "User", "Outcome", "Type", "From", "Signal"],
+  }[actKind];
+  document.getElementById("act-head").innerHTML = "<tr>" + heads.map(h => `<th>${escapeHtml(h)}</th>`).join("") + "</tr>";
+  const cell = (e, f) => escapeHtml(e.fields[f] || "—");
+  document.getElementById("act-body").innerHTML = events.length === 0 ? `<tr><td class="empty" colspan="7">nothing recorded yet</td></tr>` : events.map(e => {
+    if (e.kind === "suppressed") return `<tr><td data-sort="${escapeHtml(e.at)}">${fmtAgo(e.at)}</td><td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.agent_id)}</a></td><td colspan="5" class="u-c-text-muted">${escapeHtml(e.summary)}</td></tr>`;
+    const count = e.count > 1 ? ` <span class="kind-badge" title="identical events collapsed">×${escapeHtml(e.count)}</span>` : "";
+    const sig = e.matched_signal ? `<span class="sev-pill security">${escapeHtml(e.signal_name || e.matched_signal)}</span>` : "";
+    const when = `<td data-sort="${escapeHtml(e.at)}">${fmtAgo(e.at)}</td><td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.agent_id)}</a></td>`;
+    const row = { network: `<td><b>${escapeHtml(e.process || "—")}</b>${count}</td><td>${cell(e, "network.direction")} ${cell(e, "network.protocol")}</td><td>${cell(e, "network.remote_ip")}:${cell(e, "network.remote_port")}</td><td>${cell(e, "network.local_ip")}:${cell(e, "network.local_port")}</td>`,
+      dns: `<td><b>${escapeHtml(e.process || "—")}</b>${count}</td><td>${cell(e, "dns.query")}</td><td class="ioc-value u-maxw-300">${cell(e, "dns.answers")}</td><td></td>`,
+      registry: `<td><b>${escapeHtml(e.process || "—")}</b>${count}</td><td>${escapeHtml(e.op)}</td><td class="ioc-value u-maxw-340">${cell(e, "registry.key")}${e.fields["registry.value"] ? "\\" + escapeHtml(e.fields["registry.value"]) : ""}</td><td class="ioc-value u-maxw-260">${cell(e, "registry.data")}</td>`,
+      logon: `<td><b>${cell(e, "logon.domain") === "—" ? "" : cell(e, "logon.domain") + "\\"}${cell(e, "logon.user")}</b>${count}</td><td>${e.op === "failure" ? `<span class="sev-pill security">failure</span> ${cell(e, "logon.reason")}` : escapeHtml(e.op)}</td><td>${cell(e, "logon.type")}</td><td>${cell(e, "logon.source")}</td>`,
+    }[actKind];
+    return `<tr${e.matched_signal ? ' class="u-bg-off-bg"' : ""}>${when}${/* safe-html: one of the per-kind row templates above, each escaped */ row}<td>${sig}</td></tr>`;
+  }).join("");
+}
+
+// --- signals ---------------------------------------------------------------
+let signalsList = [], signalExamples = [], editingSignal = null;
+async function loadSignals() {
+  const resp = await fetch("/api/hunt/signals");
+  if (!resp.ok) return;
+  const d = await resp.json();
+  signalsList = d.signals || []; signalExamples = d.examples || [];
+  const objs = d.objects || {};
+  document.getElementById("sig-objects").innerHTML = "<b>Objects and properties:</b> " + Object.keys(objs).sort().map(o => `<code>${escapeHtml(o)}</code>.{${objs[o].map(escapeHtml).join(", ")}}`).join(" · ");
+  const ex = document.getElementById("s-example");
+  ex.innerHTML = '<option value="">—</option>' + signalExamples.map((e, i) => `<option value="${i}">${escapeHtml(e.name)}</option>`).join("");
+  document.getElementById("sig-status").textContent = signalsList.length ? `${signalsList.filter(x => x.enabled).length} enabled of ${signalsList.length}` : "";
+  const body = document.getElementById("sig-body");
+  if (!signalsList.length) { body.innerHTML = '<tr><td class="empty" colspan="6">No signals yet. Pick an example below to start from.</td></tr>'; return; }
+  body.innerHTML = signalsList.map(sg => `<tr class="${sg.enabled ? "" : "muted"}">
+    <td><b>${escapeHtml(sg.name)}</b>${sg.description ? `<div class="hint u-m-2-0-0">${escapeHtml(sg.description)}</div>` : ""}</td>
+    <td><span class="sev-pill ${sg.severity === "critical" ? "security" : "none"}">${escapeHtml(sg.severity)}</span></td>
+    <td>${(sg.objects || []).map(escapeHtml).join(", ")}</td>
+    <td class="ioc-value u-maxw-420"><code>${escapeHtml(sg.expression)}</code></td>
+    <td>${sg.enabled ? "enabled" : "disabled"}</td>
+    <td class="row-actions">${canManage ? `<button class="tiny" data-sig-edit="${escapeHtml(sg.id)}">edit</button> <button class="tiny" data-sig-toggle="${escapeHtml(sg.id)}">${sg.enabled ? "disable" : "enable"}</button> <button class="tiny danger" data-sig-del="${escapeHtml(sg.id)}">delete</button>` : ""}</td>
+  </tr>`).join("");
+  body.querySelectorAll("[data-sig-edit]").forEach(b => b.addEventListener("click", () => editSignal(signalsList.find(x => x.id === b.dataset.sigEdit))));
+  body.querySelectorAll("[data-sig-toggle]").forEach(b => b.addEventListener("click", async () => {
+    const sg = signalsList.find(x => x.id === b.dataset.sigToggle);
+    await fetch(`/api/hunt/signals/${encodeURIComponent(sg.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...sg, enabled: !sg.enabled }) });
+    loadSignals();
+  }));
+  body.querySelectorAll("[data-sig-del]").forEach(b => b.addEventListener("click", async () => {
+    const sg = signalsList.find(x => x.id === b.dataset.sigDel);
+    if (!confirm(`Delete the signal "${sg.name}" and its findings?`)) return;
+    await fetch(`/api/hunt/signals/${encodeURIComponent(sg.id)}`, { method: "DELETE" });
+    loadSignals(); loadSignalFindings();
+  }));
+}
+function editSignal(sg) {
+  editingSignal = sg ? sg.id : null;
+  document.getElementById("sig-editor-title").textContent = sg ? "Editing: " + sg.name : "New signal";
+  document.getElementById("s-name").value = sg ? sg.name : "";
+  document.getElementById("s-severity").value = sg ? sg.severity : "warning";
+  document.getElementById("s-expression").value = sg ? sg.expression : "";
+  document.getElementById("s-description").value = sg ? sg.description : "";
+  document.getElementById("s-enabled").checked = !sg || sg.enabled;
+  document.getElementById("s-save-status").textContent = "";
+  document.getElementById("s-test-out").innerHTML = "";
+  if (sg) { window.location.hash = "signals"; document.getElementById("sig-editor-title").scrollIntoView({ block: "nearest" }); }
+}
+document.getElementById("s-example").addEventListener("change", (e) => {
+  const ex = signalExamples[Number(e.target.value)]; e.target.value = "";
+  if (!ex) return;
+  document.getElementById("s-name").value = ex.name; document.getElementById("s-severity").value = ex.severity; document.getElementById("s-expression").value = ex.expression;
+});
+document.getElementById("s-cancel").addEventListener("click", () => editSignal(null));
+document.getElementById("s-save").addEventListener("click", async () => {
+  const status = document.getElementById("s-save-status");
+  const body = { id: editingSignal || "", name: document.getElementById("s-name").value, severity: document.getElementById("s-severity").value,
+    expression: document.getElementById("s-expression").value, description: document.getElementById("s-description").value, enabled: document.getElementById("s-enabled").checked };
+  status.textContent = "saving…";
+  const resp = await fetch(editingSignal ? `/api/hunt/signals/${encodeURIComponent(editingSignal)}` : "/api/hunt/signals", { method: editingSignal ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const text = await resp.text();
+  if (!resp.ok) { status.textContent = text.trim(); return; }
+  status.textContent = "saved"; editSignal(null); loadSignals();
+});
+document.getElementById("s-test").addEventListener("click", async () => {
+  const out = document.getElementById("s-test-out");
+  out.innerHTML = '<p class="hint">testing…</p>';
+  const resp = await fetch("/api/hunt/signals/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expression: document.getElementById("s-expression").value }) });
+  const text = await resp.text();
+  if (!resp.ok) { out.innerHTML = `<div class="scope-note warn">${escapeHtml(text.trim())}</div>`; return; }
+  const d = JSON.parse(text);
+  out.innerHTML = `<p class="hint">Reads ${escapeHtml((d.objects || []).join(", "))}; scanned ${escapeHtml(d.scanned)} recent event(s); <b>${escapeHtml((d.hits || []).length)} would have fired</b>.</p>` +
+    ((d.hits || []).length ? `<div class="table-scroll"><table><thead><tr><th>When</th><th>Endpoint</th><th>Kind</th><th>Event</th></tr></thead><tbody>` +
+      d.hits.map(h => `<tr><td>${fmtAgo(h.at)}</td><td>${escapeHtml(h.hostname)}</td><td>${escapeHtml(h.kind)}</td><td class="ioc-value u-maxw-520">${escapeHtml(h.summary)}</td></tr>`).join("") + "</tbody></table></div>" : "");
+});
+async function loadSignalFindings() {
+  const resp = await fetch("/api/hunt/signal-findings");
+  if (!resp.ok) return;
+  const list = (await resp.json()).findings || [];
+  const open = list.filter(f => !f.acknowledged).length;
+  document.getElementById("sigf-status").textContent = list.length ? `${open} open of ${list.length}` : "";
+  const body = document.getElementById("sigf-body");
+  if (!list.length) { body.innerHTML = '<tr><td class="empty" colspan="8">No signal has fired. Signals are evaluated as events arrive; write one under Signals.</td></tr>'; return; }
+  body.innerHTML = list.map(f => `<tr class="${f.acknowledged ? "muted" : ""}">
+    <td><b>${escapeHtml(f.signal_name || f.signal_id)}</b> <span class="sev-pill ${f.signal_severity === "critical" ? "security" : "none"}">${escapeHtml(f.signal_severity || "")}</span></td>
+    <td><a href="/endpoint/${escapeHtml(f.agent_id)}">${escapeHtml(f.hostname || f.agent_id)}</a></td>
+    <td>${escapeHtml(f.kind)}</td><td class="ioc-value u-maxw-380">${escapeHtml(f.summary)}</td><td>${escapeHtml(f.count)}</td>
+    <td>${fmtAgo(f.first_seen)}</td><td>${fmtAgo(f.last_seen)}</td>
+    <td>${canManage ? `<button class="tiny" data-sigf-ack="${escapeHtml(f.id)}" data-val="${f.acknowledged ? "false" : "true"}">${f.acknowledged ? "reopen" : "acknowledge"}</button>` : ""}</td>
+  </tr>`).join("");
+  body.querySelectorAll("[data-sigf-ack]").forEach(b => b.addEventListener("click", async () => {
+    await fetch(`/api/hunt/signal-findings/${encodeURIComponent(b.dataset.sigfAck)}/ack`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acknowledged: b.dataset.val === "true" }) });
+    loadSignalFindings();
+  }));
+}
+</script>
+</body>
+</html>

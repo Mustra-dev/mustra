@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impact — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .lvl { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; text-transform: capitalize; }
+  .lvl.critical { background: var(--off-bg); color: var(--off); }
+  .lvl.high     { background: color-mix(in srgb, var(--off) 14%, transparent); color: var(--off); }
+  .lvl.medium   { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .lvl.low      { background: var(--surface-2); color: var(--text); }
+  .lvl.none     { background: var(--surface-2); color: var(--text-muted); }
+  .sev { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .sev.critical { background: var(--off-bg); color: var(--off); }
+  .sev.high { background: color-mix(in srgb, var(--off) 14%, transparent); color: var(--off); }
+  .sev.medium { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .sev.low { background: var(--surface-2); color: var(--text-muted); }
+  .kind { font-size: var(--fs-meta); color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+  .clickable { cursor: pointer; }
+  .clickable:hover { background: var(--surface-2); }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .levels { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
+  .levels span { font-size: var(--fs-meta); padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+  .levels span b { color: var(--text); }
+  .finding { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+  .finding:last-child { border-bottom: 0; }
+  .finding .what { font-weight: 600; font-size: 12.5px; }
+  .finding .detail { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 2px; line-height: 1.5; }
+  .finding .who { font-size: 12px; white-space: nowrap; }
+  /* Phones: the account moves under the finding instead of taking the
+     middle column's width. */
+  @media (max-width: 760px) {
+    .finding { grid-template-columns: auto minmax(0, 1fr); }
+    .finding .who { grid-column: 2; white-space: normal; }
+  }
+  .drawer-overlay { position: fixed; inset: 0; background: var(--scrim); z-index: 200; display: none; }
+  .drawer-overlay.open { display: block; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 100vw); background: var(--surface);
+    border-left: 1px solid var(--border); z-index: 201; transform: translateX(100%); transition: transform .18s ease; display: flex; flex-direction: column; }
+  .drawer.open { transform: translateX(0); }
+  @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+  .drawer-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .drawer-header h3 { margin: 0 0 4px; font-size: 15px; word-break: break-all; }
+  .drawer-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 2px 6px; }
+  .drawer-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .drawer-tabs button { background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 10px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+  .drawer-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+  .drawer-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+  .detail-row { display: flex; justify-content: space-between; gap: 14px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .detail-row .k { color: var(--text-muted); flex: 0 0 45%; }
+  .detail-row .v { text-align: right; }
+  .sec-title { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 18px 0 8px; }
+  .path { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; padding: 10px 0; }
+  .path .node { padding: 5px 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface-2); font-size: 12.5px; }
+  .path .node.endpoint { border-color: var(--accent); }
+  .path .node.user, .path .node.local { border-color: var(--viz-warning); }
+  .path .node.group { border-color: var(--text-muted); }
+  .path .node .kind { display: block; font-size: var(--fs-meta); }
+  .path .edge { font-size: var(--fs-meta); color: var(--text-muted); padding: 0 4px; }
+  .picker { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 8px; align-items: end; }
+  @media (max-width: 720px) { .picker { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-overview" hidden>
+      <div id="impact-page-head"></div>
+      <div id="impact-quick-links"></div>
+      <div id="impact-directory-note"></div>
+      <div class="stat-tiles" id="impact-tiles"></div>
+      <div class="grid-3">
+        <div class="panel"><div class="panel-header"><h2>Users with the most reach</h2></div><div class="levels" id="lv-users"></div><div class="table-scroll"><table><thead><tr><th>Account</th><th>Level</th><th class="num">Administers</th><th class="num">Sessions</th></tr></thead><tbody id="top-users"></tbody></table></div></div>
+        <div class="panel"><div class="panel-header"><h2>Groups that grant the most</h2></div><div class="levels" id="lv-groups"></div><div class="table-scroll"><table><thead><tr><th>Group</th><th>Level</th><th class="num">Administers</th><th class="num">Users</th></tr></thead><tbody id="top-groups"></tbody></table></div></div>
+        <div class="panel"><div class="panel-header"><h2>Endpoints that reach the most</h2></div><div class="levels" id="lv-endpoints"></div><div class="table-scroll"><table><thead><tr><th>Endpoint</th><th>Level</th><th class="num">Reaches</th><th class="num">Reached from</th></tr></thead><tbody id="top-endpoints"></tbody></table></div></div>
+      </div>
+      <div class="panel u-mt-14"><div class="panel-header"><h2>What to fix first</h2><span class="scan-status" id="ov-findings-status"></span></div><div id="ov-findings"></div></div>
+    </div>
+
+    <div class="module-section" id="section-findings" hidden>
+      <div class="panel"><div class="panel-header"><h2>Findings</h2><span class="scan-status" id="findings-status"></span></div>
+        <p class="hint">Each finding is a shape of excessive rights, attached to the object that would fix it. A privileged account signed in on an ordinary workstation is the classic one: whoever administers that workstation can take the credential.</p>
+        <div id="findings"></div></div>
+    </div>
+
+    <div class="module-section" id="section-users" hidden>
+      <div class="panel"><div class="panel-header"><h2>Users</h2><span class="scan-status" id="users-status"></span></div>
+        <p class="hint">Every directory account, rated by the endpoints it can administer — by name or through the groups it is in, nested as deep as they go — weighted by criticality. Local accounts appear under their endpoint.</p>
+        <div class="table-scroll"><table><thead><tr><th>Account</th><th>Domain</th><th>Level</th><th class="num">Administers</th><th class="num">By name</th><th class="num">Critical</th><th class="num">Signed in on</th><th>State</th></tr></thead><tbody id="users-body"></tbody></table></div></div>
+    </div>
+
+    <div class="module-section" id="section-groups" hidden>
+      <div class="panel"><div class="panel-header"><h2>Groups</h2><span class="scan-status" id="groups-status"></span></div>
+        <p class="hint">Every group rated by what its members inherit. A group that administers half the fleet is not a problem until it has members; one with three is.</p>
+        <div class="table-scroll"><table><thead><tr><th>Group</th><th>Level</th><th class="num">Administers</th><th class="num">Critical</th><th class="num">Users inside</th><th>Privileged</th></tr></thead><tbody id="groups-body"></tbody></table></div></div>
+    </div>
+
+    <div class="module-section" id="section-endpoints" hidden>
+      <div class="panel"><div class="panel-header"><h2>Endpoints</h2><span class="scan-status" id="endpoints-status"></span></div>
+        <p class="hint">Outbound is what a compromise here reaches: the accounts signed in, then everything they administer, then the accounts signed in <em>there</em>, and so on. Inbound is the reverse — from how many endpoints an attacker could get here.</p>
+        <div class="table-scroll"><table><thead><tr><th>Endpoint</th><th>Level</th><th class="num">Administrators</th><th class="num">Reaches</th><th class="num">Reached from</th><th>Criticality</th><th>Status</th></tr></thead><tbody id="endpoints-body"></tbody></table></div></div>
+    </div>
+
+    <div class="module-section" id="section-paths" hidden>
+      <div class="panel"><div class="panel-header"><h2>Shortest path</h2></div>
+        <p class="hint">From one object to another, one step at a time: an endpoint exposes the accounts signed in on it, an account is a member of its groups, and an account or group administers the endpoints it holds a grant on. The path is what an attacker would actually do.</p>
+        <div class="picker">
+          <div class="field"><label for="path-from">From</label><input id="path-from" list="impact-objects" placeholder="an endpoint, account or group" autocomplete="off"></div>
+          <div class="u-pb-16 u-c-text-muted">→</div>
+          <div class="field"><label for="path-to">To</label><input id="path-to" list="impact-objects" placeholder="usually a domain controller" autocomplete="off"></div>
+          <div class="field"><button class="primary" id="path-go">Find path</button></div>
+        </div>
+        <datalist id="impact-objects"></datalist>
+        <div id="path-result"></div></div>
+    </div>
+
+    </main>
+  </div>
+
+  <div class="drawer-overlay" id="obj-overlay"></div>
+  <div class="drawer" id="obj-drawer" role="dialog" aria-modal="true" aria-labelledby="obj-title">
+    <div class="drawer-header"><div><h3 id="obj-title">—</h3><div id="obj-sub" class="kind"></div></div><button class="drawer-close" id="obj-close" aria-label="Close">×</button></div>
+    <div class="drawer-tabs" id="obj-tabs"></div>
+    <div class="drawer-body" id="obj-body"></div>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let overview = null;
+const lists = {};
+let objects = [];
+
+document.addEventListener("mustra:user", (e) => {
+  initModuleSections([
+    { hash: "overview", label: "Overview" },
+    { hash: "findings", label: "Findings" },
+    { hash: "users", label: "Users" },
+    { hash: "groups", label: "Groups" },
+    { hash: "endpoints", label: "Endpoints" },
+    { hash: "paths", label: "Paths" },
+  ]);
+  renderPageHead("impact-page-head", "/impact", { title: "Impact" });
+  renderQuickLinks("impact-quick-links", "/impact", e.detail);
+  loadOverview();
+  loadList("users"); loadList("groups"); loadList("endpoints"); loadFindings();
+  loadObjects();
+});
+
+const lvl = l => `<span class="lvl ${escapeHtml(l || "none")}">${escapeHtml(l || "none")}</span>`;
+const KIND = { user: "user", group: "group", local: "local account", local_group: "local group", endpoint: "endpoint" };
+const kindLabel = k => KIND[k] || k;
+const sev = s => `<span class="sev ${escapeHtml(s)}">${escapeHtml(s)}</span>`;
+const nameCell = (r) => `<a href="#" data-obj="${escapeHtml(r.id)}">${escapeHtml(r.name || r.hostname || r.id)}</a>`;
+const levelsBar = (m) => ["critical","high","medium","low","none"].map(k => `<span>${escapeHtml(k)} <b>${escapeHtml(m[k] || 0)}</b></span>`).join("");
+
+function bindObjectLinks(root) {
+  root.querySelectorAll("[data-obj]").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); openObject(a.dataset.obj); }));
+}
+
+async function loadOverview() {
+  const resp = await fetch("/api/impact/overview");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) { document.getElementById("impact-directory-note").innerHTML = `<div class="empty">${escapeHtml(await resp.text())}</div>`; return; }
+  overview = await resp.json();
+  const d = overview.directory || {}, c = overview.coverage || {};
+  const note = document.getElementById("impact-directory-note");
+  if (!(d.counts && d.counts.users)) {
+    note.innerHTML = `<div class="panel u-bc-viz-warning"><strong>No directory yet.</strong> Impact rates local administrators on their own, but the question it exists to answer — what else can this account reach — needs the domain's users and groups. Configure it under <a href="/settings#directory">Administration → Directory</a>${d.last_error ? `; the last sync failed: <code>${escapeHtml(d.last_error)}</code>` : ""}.</div>`;
+  } else if (d.last_error) {
+    note.innerHTML = `<div class="panel u-bc-off">The last directory sync failed (<code>${escapeHtml(d.last_error)}</code>); the analysis uses the directory as of ${escapeHtml(fmtAgo(d.last_sync))}.</div>`;
+  } else {
+    note.innerHTML = "";
+  }
+  const crit = (overview.findings || []).filter(f => f.severity === "critical").length;
+  document.getElementById("impact-tiles").innerHTML = [
+    { label: "Directory users", value: (d.counts && d.counts.users) || 0 },
+    { label: "Directory groups", value: (d.counts && d.counts.groups) || 0 },
+    { label: "Endpoints reporting administrators", value: `${c.reporting_admins || 0} / ${c.endpoints || 0}`, cls: (c.reporting_admins || 0) < (c.endpoints || 0) ? "bad" : "ok" },
+    { label: "Endpoints with sessions", value: c.with_sessions || 0 },
+    { label: "Critical findings", value: crit, cls: crit ? "bad" : "ok" },
+    { label: "Unresolved grants", value: c.unresolved_grants || 0, cls: c.unresolved_grants ? "bad" : "" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+  document.getElementById("lv-users").innerHTML = levelsBar(overview.levels.users);
+  document.getElementById("lv-groups").innerHTML = levelsBar(overview.levels.groups);
+  document.getElementById("lv-endpoints").innerHTML = levelsBar(overview.levels.endpoints);
+  const rows = (list, f) => list.length ? /* safe-html: f is one of the escaped row builders passed below */ list.map(f).join("") : '<tr><td class="empty" colspan="4">nothing yet</td></tr>';
+  document.getElementById("top-users").innerHTML = rows(overview.top_users || [], r => `<tr><td>${nameCell(r)}</td><td>${lvl(r.level)}</td><td class="num">${escapeHtml(r.controls)}</td><td class="num">${escapeHtml(r.sessions)}</td></tr>`);
+  document.getElementById("top-groups").innerHTML = rows(overview.top_groups || [], r => `<tr><td>${nameCell(r)}</td><td>${lvl(r.level)}</td><td class="num">${escapeHtml(r.controls)}</td><td class="num">${escapeHtml(r.member_users)}</td></tr>`);
+  document.getElementById("top-endpoints").innerHTML = rows(overview.top_endpoints || [], r => `<tr><td>${nameCell(r)}</td><td>${lvl(r.level)}</td><td class="num">${escapeHtml(r.outbound)}</td><td class="num">${escapeHtml(r.inbound)}</td></tr>`);
+  renderFindings(document.getElementById("ov-findings"), (overview.findings || []).slice(0, 8));
+  document.getElementById("ov-findings-status").textContent = overview.findings.length ? `${overview.findings.length} finding(s)` : "";
+  bindObjectLinks(document.getElementById("section-overview"));
+}
+
+function renderFindings(el, findings) {
+  el.innerHTML = findings.length === 0
+    ? '<div class="empty">no findings — either the graph is clean, or it does not have enough data yet to say</div>'
+    : findings.map(f => `<div class="finding">${sev(f.severity)}<div><div class="what">${escapeHtml(f.category)}</div><div class="detail">${escapeHtml(f.detail)}</div></div><div class="who"><span class="kind">${escapeHtml(kindLabel(f.subject_kind))}</span> <a href="#" data-obj="${escapeHtml(f.subject_id)}">${escapeHtml(f.subject_name)}</a></div></div>`).join("");
+  bindObjectLinks(el);
+}
+
+async function loadFindings() {
+  const resp = await fetch("/api/impact/findings");
+  if (!resp.ok) return;
+  const rows = (await resp.json()).rows || [];
+  document.getElementById("findings-status").textContent = rows.length ? `${rows.length} finding(s)` : "";
+  renderFindings(document.getElementById("findings"), rows);
+}
+
+async function loadList(kind) {
+  const resp = await fetch(`/api/impact/${kind}`);
+  if (!resp.ok) return;
+  const rows = (await resp.json()).rows || [];
+  lists[kind] = rows;
+  document.getElementById(`${kind}-status`).textContent = rows.length ? `${rows.length}` : "";
+  const body = document.getElementById(`${kind}-body`);
+  if (rows.length === 0) { body.innerHTML = '<tr><td class="empty" colspan="8">nothing yet</td></tr>'; return; }
+  if (kind === "users") {
+    body.innerHTML = rows.map(r => `<tr class="clickable" data-obj="${escapeHtml(r.id)}"><td><span class="kind">${escapeHtml(kindLabel(r.kind))}</span> ${escapeHtml(r.name)}</td><td>${escapeHtml(r.domain || "")}</td><td>${lvl(r.level)}</td><td class="num" data-sort="${escapeHtml(r.controls)}">${escapeHtml(r.controls)}</td><td class="num">${escapeHtml(r.direct_controls)}</td><td class="num">${escapeHtml(r.controls_critical)}</td><td class="num">${escapeHtml(r.sessions)}</td><td>${r.enabled ? "" : '<span class="lvl none">disabled</span>'}${r.admin_count ? ' <span class="lvl high">privileged</span>' : ""}</td></tr>`).join("");
+  } else if (kind === "groups") {
+    body.innerHTML = rows.map(r => `<tr class="clickable" data-obj="${escapeHtml(r.id)}"><td>${escapeHtml(r.name)}${r.kind === "local_group" ? ` <span class="kind">local · ${escapeHtml(r.domain || "")}</span>` : ""}</td><td>${lvl(r.level)}</td><td class="num" data-sort="${escapeHtml(r.controls)}">${escapeHtml(r.controls)}</td><td class="num">${escapeHtml(r.controls_critical)}</td><td class="num">${escapeHtml(r.member_users)}</td><td>${r.admin_count ? '<span class="lvl high">privileged</span>' : ""}</td></tr>`).join("");
+  } else {
+    body.innerHTML = rows.map(r => `<tr class="clickable" data-obj="${escapeHtml(r.id)}"><td>${escapeHtml(r.hostname)}${r.domain_controller ? ' <span class="lvl critical">DC</span>' : ""}</td><td>${lvl(r.level)}</td><td class="num">${escapeHtml(r.admins)}</td><td class="num" data-sort="${escapeHtml(r.outbound)}">${escapeHtml(r.outbound)}</td><td class="num">${escapeHtml(r.inbound)}</td><td>${escapeHtml(r.criticality || "—")}</td><td><span class="badge-pill ${r.online ? "online" : "offline"}">${r.online ? "online" : "offline"}</span></td></tr>`).join("");
+  }
+  body.querySelectorAll("[data-obj]").forEach(tr => tr.addEventListener("click", () => openObject(tr.dataset.obj)));
+  const dt = initDataTable(body.closest("table"), { storageKey: "impact-" + kind });
+  if (dt) dt.refresh();
+}
+
+// ---- object drawer ----
+
+let current = null;
+async function openObject(id) {
+  const resp = await fetch(`/api/impact/object/${encodeURIComponent(id)}`);
+  if (!resp.ok) return;
+  current = await resp.json();
+  const r = current.rating;
+  document.getElementById("obj-title").textContent = r.name || r.hostname || r.id;
+  document.getElementById("obj-sub").innerHTML = `${escapeHtml(kindLabel(r.kind))}${r.domain ? " · " + escapeHtml(r.domain) : ""} · ${lvl(r.level)}`;
+  const tabs = r.kind === "endpoint"
+    ? [["summary","Summary"],["control","Administrators"],["sessions","Signed in"],["outbound","Reaches"],["inbound","Reached from"],["path","Path"]]
+    : [["summary","Summary"],["control","Administers"],["sessions","Signed in on"],["outbound","Reaches"],["members", r.kind === "group" ? "Members" : "Member of"],["path","Path"]];
+  document.getElementById("obj-tabs").innerHTML = tabs.map(([k, l], i) => `<button data-tab="${escapeHtml(k)}" class="${i === 0 ? "active" : ""}">${escapeHtml(l)}</button>`).join("");
+  document.querySelectorAll("#obj-tabs button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("#obj-tabs button").forEach(x => x.classList.toggle("active", x === b));
+    renderObjTab(b.dataset.tab);
+  }));
+  renderObjTab("summary");
+  document.getElementById("obj-drawer").classList.add("open");
+  document.getElementById("obj-overlay").classList.add("open");
+}
+function closeObject() { document.getElementById("obj-drawer").classList.remove("open"); document.getElementById("obj-overlay").classList.remove("open"); }
+document.getElementById("obj-close").addEventListener("click", closeObject);
+document.getElementById("obj-overlay").addEventListener("click", closeObject);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeObject(); });
+
+const crow = (x, how) => `<tr><td><span class="kind">${escapeHtml(kindLabel(x.kind))}</span> <a href="#" data-obj="${escapeHtml(x.id)}">${escapeHtml(x.name)}</a>${x.domain_controller ? ' <span class="lvl critical">DC</span>' : ""}</td><td class="u-c-text-muted">${escapeHtml(how || x.how || "")}</td></tr>`;
+const table = (head, /* html-param: callers pass rows they built with escapeHtml */ rows, empty) => rows.length ? `<div class="table-scroll"><table><thead><tr>${head.map(h => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${escapeHtml(empty)}</div>`;
+
+function renderObjTab(tab) {
+  const d = current, r = d.rating, el = document.getElementById("obj-body");
+  if (tab === "summary") {
+    const rows = r.kind === "endpoint"
+      ? [["Administrators (nested groups resolved)", r.admins], ["Reaches", r.outbound + " endpoint(s)"], ["Reached from", r.inbound + " endpoint(s)"], ["Criticality", r.criticality || "not set"], ["Domain controller", r.domain_controller ? "yes" : "no"], ["Online", r.online ? "yes" : "no"]]
+      : [["Administers", r.controls + " endpoint(s)"], ["By name", r.direct_controls], ["Critical or DC among them", r.controls_critical], ["Signed in on", r.sessions + " endpoint(s)"], r.kind === "group" ? ["Users inside (nested)", r.member_users] : ["Enabled", r.enabled ? "yes" : "no — still holds its grants"], ["Privileged (adminCount)", r.admin_count ? "yes" : "no"]];
+    el.innerHTML = rows.map(([k, v]) => `<div class="detail-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(String(v))}</span></div>`).join("") +
+      `<div class="detail-row"><span class="k">Score</span><span class="v">${escapeHtml(r.score)}</span></div>` +
+      (r.kind === "endpoint" ? `<p class="hint u-mt-14"><a href="/endpoint/${encodeURIComponent(r.id)}">Open the endpoint →</a></p>` : "");
+  } else if (tab === "control") {
+    el.innerHTML = `<div class="sec-title">By name</div>${table(["Who / what", "How"], d.direct_control.map(x => crow(x)), "nothing held by name")}
+      <div class="sec-title">Through a group</div>${table(["Who / what", "How"], d.indirect_control.map(x => crow(x)), "nothing inherited")}`;
+  } else if (tab === "sessions") {
+    el.innerHTML = table(["Who / where", ""], d.sessions.map(x => crow(x, "")), r.kind === "endpoint" ? "nobody signed in at the last collection" : "not signed in anywhere at the last collection");
+  } else if (tab === "outbound" || tab === "inbound") {
+    const list = tab === "outbound" ? d.outbound : d.inbound;
+    el.innerHTML = `<p class="hint">${tab === "outbound" ? "Hops: 1 is administered directly by an account signed in here (or by this account); each further hop goes through another endpoint's sessions." : "From how many hops away this endpoint can be reached."}</p>` +
+      table(["Endpoint", "Hops"], list.map(x => `<tr><td><a href="#" data-obj="${escapeHtml(x.id)}">${escapeHtml(x.hostname)}</a>${x.domain_controller ? ' <span class="lvl critical">DC</span>' : ""}${x.criticality ? ` <span class="kind">${escapeHtml(x.criticality)}</span>` : ""}</td><td class="num">${escapeHtml(x.hops)}</td></tr>`), tab === "outbound" ? "reaches nothing" : "not reachable from anywhere");
+  } else if (tab === "members") {
+    const list = r.kind === "group" ? d.members : d.member_of;
+    el.innerHTML = table(["Name", "Level", "Administers"], list.map(x => `<tr><td><span class="kind">${escapeHtml(x.kind)}</span> <a href="#" data-obj="${escapeHtml(x.id)}">${escapeHtml(x.name)}</a></td><td>${lvl(x.level)}</td><td class="num">${escapeHtml(x.controls)}</td></tr>`), r.kind === "group" ? "no users inside" : "not in any group");
+  } else if (tab === "path") {
+    el.innerHTML = `<div class="field"><label for="obj-path-to">Shortest path from here to</label><input id="obj-path-to" list="impact-objects" placeholder="usually a domain controller" autocomplete="off"></div><button class="primary" id="obj-path-go">Find path</button><div id="obj-path-result" class="u-mt-12"></div>`;
+    document.getElementById("obj-path-go").addEventListener("click", () => findPath(r.id, resolveObject(document.getElementById("obj-path-to").value), document.getElementById("obj-path-result")));
+  }
+  bindObjectLinks(el);
+}
+
+// ---- paths ----
+
+async function loadObjects() {
+  const resp = await fetch("/api/impact/search");
+  if (!resp.ok) return;
+  objects = (await resp.json()).hits || [];
+  document.getElementById("impact-objects").innerHTML = objects.map(o => `<option value="${escapeHtml(o.name)}">${escapeHtml(o.kind)}</option>`).join("");
+}
+function resolveObject(text) {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return "";
+  const exact = objects.find(o => o.name.toLowerCase() === t) || objects.find(o => o.id === text);
+  return exact ? exact.id : "";
+}
+async function findPath(from, to, el) {
+  if (!from || !to) { el.innerHTML = '<div class="empty">pick both ends from the list</div>'; return; }
+  const resp = await fetch(`/api/impact/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  if (!resp.ok) { el.innerHTML = `<div class="empty">${escapeHtml(await resp.text())}</div>`; return; }
+  const p = await resp.json();
+  if (!p.reachable) { el.innerHTML = '<div class="empty">no path — through sessions and administrative rights as currently reported, one does not lead to the other</div>'; return; }
+  el.innerHTML = `<div class="path">${p.path.map((s, i) => `${i ? `<span class="edge">→ ${escapeHtml(s.edge)} →</span>` : ""}<span class="node ${escapeHtml(s.kind)}"><span class="kind">${escapeHtml(s.kind)}</span><a href="#" data-obj="${escapeHtml(s.id)}">${escapeHtml(s.name)}</a></span>`).join("")}</div><p class="hint">${p.path.length - 1} step(s).</p>`;
+  bindObjectLinks(el);
+}
+document.getElementById("path-go").addEventListener("click", () => findPath(resolveObject(document.getElementById("path-from").value), resolveObject(document.getElementById("path-to").value), document.getElementById("path-result")));
+</script>
+</body>
+</html>

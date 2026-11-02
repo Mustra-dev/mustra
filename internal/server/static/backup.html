@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backup — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; line-height: 1.55; }
+  .hint code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .form-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .form-row label { font-size: 12.5px; }
+  .form-row input[type="number"], .form-row input[type="text"] { padding: 7px 9px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 12.5px; }
+  .form-row input[type="number"] { width: 84px; }
+  .form-row input[type="text"] { min-width: 240px; flex: 1; }
+  /* The excluded-from-backup list is the thing on this page most likely to
+     be skipped and most expensive to learn later, so it gets the weight of
+     a warning rather than a footnote. */
+  .caveat { border: 1px solid var(--viz-warning); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px;
+    background: color-mix(in srgb, var(--viz-warning) 8%, transparent); font-size: 12.5px; line-height: 1.55; }
+  .caveat h3 { margin: 0 0 6px; font-size: 13px; }
+  .caveat ul { margin: 6px 0 0; padding-left: 18px; }
+  .caveat li { margin-bottom: 5px; }
+  .caveat code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .danger-zone { border: 1px solid var(--off); border-radius: var(--radius); padding: 14px 16px; }
+  .danger-zone h2 { margin: 0 0 4px; font-size: 14px; color: var(--off); }
+  .status { font-size: 12px; color: var(--text-muted); }
+  .status.err { color: var(--off); }
+  .status.ok { color: var(--ok); }
+  .note-cell { color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="backup-page-head"></div>
+
+      <div class="caveat" id="caveat">
+        <h3>Two things a backup does not carry</h3>
+        <div id="caveat-list">loading…</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Backups</h2><span class="status" id="list-status"></span></div>
+        <p class="hint">
+          Every archive holds a full dump of the database — endpoints, history, saved queries, policies,
+          playbooks, roles and audit. Package files are the installers staged to endpoints; they are large
+          and re-uploadable, so they are left out unless you ask for them.
+        </p>
+        <div class="form-row">
+          <input type="text" id="b-note" aria-label="Backup note" placeholder="What is this backup for? (optional)" autocomplete="off">
+          <label><input type="checkbox" id="b-packages"> include package files</label>
+          <button class="primary u-w-auto" id="b-now">Back up now</button>
+          <span class="status" id="create-status"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Taken</th><th>By</th><th>Size</th><th>Contents</th><th>Note</th><th>Version</th><th>Action</th></tr></thead>
+            <tbody id="b-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Nightly backup</h2>
+        <p class="hint">
+          Checked every fifteen minutes, so turning it on or moving it takes effect without a restart, and a
+          server that was down at the hour still takes one when it comes back that day. One per day, oldest
+          pruned past the number you keep. A failed nightly backup raises a critical notification rather than
+          only a log line.
+        </p>
+        <div class="form-row">
+          <label><input type="checkbox" id="s-enabled"> take a backup every night</label>
+          <label>at <input type="number" id="s-hour" min="0" max="23"> :00 UTC</label>
+          <label>keep <input type="number" id="s-keep" min="1" max="365"></label>
+          <label><input type="checkbox" id="s-packages"> include package files</label>
+          <button class="secondary u-w-auto" id="s-save">Save schedule</button>
+          <span class="status" id="sched-status"></span>
+        </div>
+      </div>
+
+      <div class="panel danger-zone">
+        <h2>Restore</h2>
+        <p class="hint">
+          A restore replaces <b>every row</b> in the database with the contents of the archive, and the server
+          restarts to come back onto it. Anything that happened since the backup was taken is gone. Restore
+          onto a deployment whose <code>MUSTRA_CREDENTIAL_ENCRYPTION_KEY</code> differs from the one that took
+          it and the stored credentials will not decrypt.
+        </p>
+        <div class="form-row">
+          <input type="file" id="r-file" aria-label="Backup file to restore" accept=".gz,.tar.gz">
+          <button class="tiny danger" id="r-upload">Restore from this file</button>
+          <span class="status" id="restore-status"></span>
+        </div>
+        <div id="r-external-row" hidden>
+          <div class="form-row">
+            <label><input type="checkbox" id="r-external"> import an external backup</label>
+          </div>
+          <p class="hint">
+            Only for an archive this server did not sign: taken by another deployment, or by a version
+            before backups were signed. It is screened strictly before anything is applied, and anything
+            beyond plain SQL data (shell escapes, <code>COPY … PROGRAM</code>, psql meta-commands) refuses
+            the whole restore. Administrators only.
+          </p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script src="/static/charts.js"></script>
+<script>
+let backups = [], settings = null;
+
+document.addEventListener("mustra:user", () => {
+  renderPageHead("backup-page-head", "/backup", {
+    title: "Backup",
+    sub: "Take, keep and restore a full copy of the control plane's data.",
+  });
+  document.getElementById("b-now").addEventListener("click", createBackup);
+  document.getElementById("s-save").addEventListener("click", saveSchedule);
+  document.getElementById("r-upload").addEventListener("click", restoreFromFile);
+  // The server enforces this (external=1 needs an administrator); hiding it
+  // from everyone else only keeps the option off screens where it would 403.
+  document.getElementById("r-external-row").hidden = !(currentUser && currentUser.is_admin);
+  load();
+});
+
+function fmtBytes(n) {
+  if (!n) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0, v = n;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}
+
+async function load() {
+  const resp = await fetch("/api/backups");
+  if (!resp.ok) {
+    document.getElementById("list-status").textContent = await resp.text();
+    document.getElementById("list-status").className = "status err";
+    return;
+  }
+  const data = await resp.json();
+  backups = data.backups || [];
+  settings = data.settings || {};
+  document.getElementById("caveat-list").innerHTML =
+    `<ul>${(data.excluded || []).map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`;
+
+  document.getElementById("s-enabled").checked = !!settings.enabled;
+  document.getElementById("s-hour").value = settings.hour_utc ?? 3;
+  document.getElementById("s-keep").value = settings.keep ?? 7;
+  document.getElementById("s-packages").checked = !!settings.include_package_files;
+
+  renderList();
+}
+
+function renderList() {
+  const body = document.getElementById("b-body");
+  document.getElementById("list-status").textContent =
+    backups.length ? `${backups.length} kept` : "";
+  document.getElementById("list-status").className = "status";
+  if (!backups.length) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">No backups yet — take one now, or turn on the nightly job.</td></tr>`;
+    return;
+  }
+  body.innerHTML = backups.map(b => `
+    <tr>
+      <td data-sort="${escapeHtml(b.created_at || "")}">${fmtAgo(b.created_at)}</td>
+      <td>${escapeHtml(b.created_by || "—")}</td>
+      <td>${escapeHtml(fmtBytes(b.bytes))}</td>
+      <td>${b.includes_package_files ? "database + package files" : "database"}</td>
+      <td class="note-cell">${escapeHtml(b.note || "—")}</td>
+      <td>${escapeHtml(b.server_version || "—")}</td>
+      <td class="row-actions">
+        <a class="tiny u-td-none u-d-iblock"
+           href="/api/backups/${encodeURIComponent(b.id)}/download">download</a>
+        <button class="tiny" data-restore="${escapeHtml(b.id)}">restore</button>
+        <button class="tiny danger" data-del="${escapeHtml(b.id)}">delete</button>
+      </td>
+    </tr>`).join("");
+
+  body.querySelectorAll("[data-del]").forEach(el => el.addEventListener("click", () => remove(el.dataset.del)));
+  body.querySelectorAll("[data-restore]").forEach(el =>
+    el.addEventListener("click", () => restore(`/api/backups/restore?confirm=replace-everything&id=${encodeURIComponent(el.dataset.restore)}`, null, el.dataset.restore)));
+}
+
+async function createBackup() {
+  const btn = document.getElementById("b-now"), status = document.getElementById("create-status");
+  btn.disabled = true;
+  status.className = "status";
+  status.textContent = "taking a backup — this reads the whole database, so give it a moment…";
+  try {
+    const resp = await fetch("/api/backups", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        note: document.getElementById("b-note").value,
+        include_package_files: document.getElementById("b-packages").checked,
+      }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const rec = await resp.json();
+    status.className = "status ok";
+    status.textContent = `written — ${fmtBytes(rec.bytes)}`;
+    document.getElementById("b-note").value = "";
+    await load();
+  } catch (e) {
+    status.className = "status err";
+    status.textContent = String(e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveSchedule() {
+  const status = document.getElementById("sched-status");
+  status.className = "status";
+  status.textContent = "saving…";
+  try {
+    const resp = await fetch("/api/backups/settings", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: document.getElementById("s-enabled").checked,
+        hour_utc: Number(document.getElementById("s-hour").value),
+        keep: Number(document.getElementById("s-keep").value),
+        include_package_files: document.getElementById("s-packages").checked,
+      }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    status.className = "status ok";
+    status.textContent = "saved";
+  } catch (e) {
+    status.className = "status err";
+    status.textContent = String(e.message || e);
+  }
+}
+
+async function remove(id) {
+  const b = backups.find(x => x.id === id);
+  if (!confirm(`Delete the backup taken ${fmtAgo(b && b.created_at)}? This cannot be undone.`)) return;
+  const resp = await fetch(`/api/backups/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!resp.ok) { alert(await resp.text()); return; }
+  await load();
+}
+
+// Restoring is typed-confirmation rather than a dialog box, because the
+// mistake worth preventing is the reflex click, and a reflex cannot type.
+async function restore(url, body, label, external) {
+  const taken = label ? (backups.find(x => x.id === label) || {}).created_at : null;
+  const what = taken ? `the backup taken ${fmtAgo(taken)}` : external ? "the external archive" : "the uploaded archive";
+  const typed = prompt(
+    `Restoring ${what} replaces EVERY row in the database and restarts the server.\n\n` +
+    `Anything that has happened since it was taken will be gone.\n\n` +
+    `Type RESTORE to continue.`);
+  if (typed !== "RESTORE") return;
+
+  const status = document.getElementById("restore-status");
+  status.className = "status";
+  status.textContent = "restoring…";
+  try {
+    const resp = await fetch(url, body ? { method: "POST", body } : { method: "POST" });
+    if (!resp.ok) {
+      const text = (await resp.text()).trim();
+      // An unsigned archive is refused unless imported as external; say
+      // where that option is rather than leaving only the server's wording.
+      const hint = resp.status === 422 && !external && !label && currentUser && currentUser.is_admin && /external backup/i.test(text)
+        ? " Tick \u201cimport an external backup\u201d below to screen and restore it." : "";
+      throw new Error(text + hint);
+    }
+    const result = await resp.json();
+    status.className = "status ok";
+    status.textContent =
+      `restored the backup taken ${fmtAgo(result.manifest.created_at)}. The server is restarting; ` +
+      `this page will fail to load for a few seconds, then reload it.`;
+  } catch (e) {
+    status.className = "status err";
+    status.textContent = String(e.message || e);
+  }
+}
+
+function restoreFromFile() {
+  const input = document.getElementById("r-file");
+  if (!input.files || !input.files.length) {
+    const status = document.getElementById("restore-status");
+    status.className = "status err";
+    status.textContent = "choose an archive first";
+    return;
+  }
+  const form = new FormData();
+  form.append("file", input.files[0]);
+  const external = !!document.getElementById("r-external")?.checked;
+  restore("/api/backups/restore?confirm=replace-everything" + (external ? "&external=1" : ""), form, null, external);
+}
+</script>
+</body>
+</html>
