@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enforce — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .form-grid textarea { font-family: var(--mono); font-size: 12px; min-height: 66px; resize: vertical; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .scope-note { border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                padding: 10px 13px; font-size: 12.5px; line-height: 1.55; margin-bottom: 14px; }
+  .scope-note.warn { border-left-color: var(--off); }
+  .state-pill { font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+                padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+  .state-compliant { background: var(--ok-bg); color: var(--ok); }
+  .state-remediated { background: var(--ok-bg); color: var(--accent); }
+  .state-drifted { background: var(--surface-2); color: var(--text-muted); }
+  .state-unknown { background: var(--surface-2); color: var(--text-muted); }
+  .state-failed, .state-failing { background: var(--off-bg); color: var(--off); }
+  .mode-pill { font-size: var(--fs-meta); font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .mode-report { background: var(--surface-2); color: var(--text-muted); }
+  .mode-enforce { background: var(--off-bg); color: var(--off); }
+  .setting-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px;
+                  background: var(--surface); }
+  .setting-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .setting-card-head b { font-size: 13px; }
+  .setting-card-head .spacer { margin-left: auto; }
+  .detail-cell { white-space: normal; max-width: 420px; color: var(--text-muted); font-size: 12px; }
+  .tile-sub { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 4px; }
+  .out-pre { font-family: var(--mono); font-size: var(--fs-meta); white-space: pre-wrap; word-break: break-word;
+             background: var(--surface-2); border-radius: var(--radius-md); padding: 9px 11px; margin: 6px 0 0; max-height: 240px; overflow: auto; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-standing" hidden>
+      <div id="enf-page-head"></div>
+      <div id="enf-quick-links"></div>
+      <div class="stat-tiles" id="enf-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Policies</h2><span class="scan-status" id="enf-policy-status"></span></div>
+        <div class="scope-note">
+          Comply tells you the firewall is off. Enforce turns it back on — on a timer, with nobody watching — which
+          makes it the sharpest tool here, so three things are deliberate. A policy starts in
+          <b>report</b> mode and stays there until you switch it, so you can see what it <em>would</em> do first.
+          The endpoint <b>re-checks after fixing</b>, because a command exiting zero is not evidence the setting took.
+          And a fix that fails <b id="enf-max">3</b> times in a row on one endpoint <b>stops being sent there</b> —
+          otherwise a broken command runs every <span id="enf-interval">30</span> minutes on every affected machine, forever.
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Policy</th><th>Mode</th><th>Targets</th><th>Settings</th>
+              <th>Compliant</th><th>Drifted</th><th>Remediated</th><th>Failing</th><th>Last run</th><th>Action</th></tr></thead>
+            <tbody id="enf-policies-body"><tr><td class="empty" colspan="10">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Standing, per endpoint</h2>
+          <span class="scan-status" id="enf-results-status"></span></div>
+        <div class="panel-actions u-mb-12">
+          <select id="enf-filter-policy" aria-label="Filter results by policy" class="u-p-7-10 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-fs-13"></select>
+          <select id="enf-filter-state" aria-label="Filter results by state" class="u-p-7-10 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-fs-13">
+            <option value="">Every state</option>
+            <option value="problem" selected>Needs attention (drifted, failed, failing)</option>
+            <option value="compliant">Compliant</option>
+            <option value="remediated">Remediated</option>
+            <option value="failing">Given up on</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </div>
+        <div class="table-scroll table-scroll-y">
+          <table>
+            <thead><tr><th>Endpoint</th><th>Policy</th><th>Setting</th><th>State</th><th>What happened</th>
+              <th>Fixes</th><th>Checked</th></tr></thead>
+            <tbody id="enf-results-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-policies" hidden>
+      <div class="panel">
+        <h2 id="enf-editor-title">New policy</h2>
+        <p class="hint">
+          A setting says what must be true, using the same rule dialect Comply uses — so
+          <code>c:systemctl is-active ufw -&gt; r:^active</code> means what it looks like. The remediation is what
+          runs when it isn't true, per platform. Leave a platform blank and that setting simply reports drift there
+          rather than pretending it was fixed.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="p-kind">Policy type</label><select id="p-kind">
+            <option value="">Custom — rules and fixes you write</option>
+          </select></div>
+          <div class="field"><label for="p-name">Name</label><input id="p-name" placeholder="Host firewall must be on"></div>
+          <div class="field"><label for="p-os">Platform</label><select id="p-os">
+            <option value="">Any platform</option>
+            <option value="linux">Linux</option>
+            <option value="windows">Windows</option>
+            <option value="darwin">macOS</option>
+          </select></div>
+          <div class="field"><label for="p-group">Targets</label><select id="p-group"><option value="">Every endpoint</option></select></div>
+          <div class="field"><label for="p-mode">Mode</label><select id="p-mode">
+            <option value="report">Report — check and record only</option>
+            <option value="enforce">Enforce — fix what has drifted</option>
+          </select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="p-description">Description</label>
+            <input id="p-description" placeholder="Why this must hold, and who decided"></div>
+        </div>
+        <div class="u-d-flex u-gap-14 u-fw-wrap u-fs-12_5 u-mb-12">
+          <label class="u-d-flex u-ai-center u-gap-6"><input type="checkbox" id="p-enabled" checked> Enabled (runs on the schedule)</label>
+        </div>
+        <div id="p-mode-warning"></div>
+
+        <div id="p-kind-form" hidden></div>
+        <h3 class="u-fs-12 u-tt-upper u-ls-006em u-c-text-muted u-m-18-0-10" id="p-settings-title">Settings</h3>
+        <div id="p-settings"></div>
+        <div class="panel-actions u-mb-14" id="p-settings-actions">
+          <button class="tiny" id="p-add-setting">Add a setting</button>
+          <select id="p-template" class="u-p-5-9 u-br-radius-sm u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-fs-meta">
+            <option value="">Start from an example…</option>
+          </select>
+        </div>
+
+        <div class="panel-actions">
+          <button class="primary" id="p-save">Save policy</button>
+          <button id="p-cancel">Cancel</button>
+          <span class="scan-status" id="p-save-status"></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Existing policies</h2></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Mode</th><th>Platform</th><th>Targets</th><th>Settings</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="enf-list-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-coverage" hidden>
+      <div class="stat-tiles" id="cov-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Security posture, per endpoint</h2><span class="scan-status" id="cov-status"></span></div>
+        <p class="hint">From each endpoint's security posture sensor: firewall, disk encryption, antimalware and application control as they are right now, whether or not a policy holds them. Recovery keys are escrowed from the same sensor; reading one needs <code>enforce.recovery_keys</code> and is audited.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>OS</th><th>Firewall</th><th>Encryption</th><th>Antimalware</th><th>App control</th><th>Recovery key</th><th>Reported</th></tr></thead>
+            <tbody id="cov-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+let policies = [];
+let results = [];
+let groups = [];
+let editing = null;      // the policy being edited, or null for a new one
+let draftSettings = [];  // the editor's working copy
+let canManage = false;
+let maxAttempts = 3;
+
+// Examples rather than seeded policies. Seeding would put something on the
+// schedule that nobody wrote and nobody expects; an example the author
+// copies is the same head start with none of the surprise.
+const TEMPLATES = [
+  { key: "ufw", label: "Linux — host firewall active", os: "linux", setting: {
+      name: "Host firewall is active",
+      severity: "high",
+      rules: ["c:systemctl is-active ufw -> r:^active"],
+      remediate_linux: "systemctl enable --now ufw",
+    } },
+  { key: "sshroot", label: "Linux — SSH root login disabled", os: "linux", setting: {
+      name: "SSH refuses direct root login",
+      severity: "high",
+      rules: ["not f:/etc/ssh/sshd_config -> r:^\\s*PermitRootLogin\\s+yes"],
+      remediate_linux: "sed -i 's/^\\s*PermitRootLogin\\s\\+yes/PermitRootLogin no/' /etc/ssh/sshd_config && systemctl reload ssh || systemctl reload sshd",
+    } },
+  { key: "winfw", label: "Windows — Defender Firewall on for every profile", os: "windows", setting: {
+      name: "Defender Firewall is on for every profile",
+      severity: "high",
+      rules: ["c:powershell -NoProfile -Command \"(Get-NetFirewallProfile).Enabled -join ','\" -> r:True,True,True"],
+      remediate_windows: "Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True",
+    } },
+  { key: "rdpnla", label: "Windows — RDP requires Network Level Authentication", os: "windows", setting: {
+      name: "RDP requires NLA",
+      severity: "high",
+      rules: ["r:HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp -> UserAuthentication -> 1"],
+      remediate_windows: "Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp' -Name UserAuthentication -Value 1",
+    } },
+  { key: "agent", label: "Any — the mustra agent is running", os: "", setting: {
+      name: "The mustra agent service is running",
+      severity: "medium",
+      rules: ["p:mustra-agent"],
+      remediate_linux: "systemctl restart mustra-agent",
+      remediate_windows: "Restart-Service mustra-agent",
+      remediate_darwin: "launchctl kickstart -k system/dev.mustra.agent",
+    } },
+];
+
+document.addEventListener("mustra:user", (e) => {
+  canManage = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("deploy.manage")));
+  initModuleSections([
+    { hash: "standing", label: "Standing" },
+    { hash: "policies", label: "Policies" },
+    { hash: "coverage", label: "Coverage" },
+  ]);
+  loadCoverage();
+  renderPageHead("enf-page-head", "/enforce", { title: "Enforce",
+    sub: "Settings that must hold, and what mustra did when they moved." });
+  renderQuickLinks("enf-quick-links", "/enforce", e.detail, [
+    { label: "Comply", href: "/compliance", icon: "comply" },
+    { label: "Computer Groups", href: "/groups", icon: "groups" },
+    { label: "Audit Log", href: "/logs", icon: "list" },
+  ]);
+  wireEditor();
+  load();
+});
+
+async function load() {
+  const [pResp, rResp, gResp] = await Promise.all([
+    fetch("/api/enforce/policies"),
+    fetch("/api/enforce/results"),
+    fetch("/api/groups"),
+  ]);
+  if (pResp.ok) {
+    const d = await pResp.json();
+    policies = d.policies || [];
+    maxAttempts = d.max_attempts || 3;
+    document.getElementById("enf-max").textContent = maxAttempts;
+    document.getElementById("enf-interval").textContent = d.interval_minutes || 30;
+  }
+  if (rResp.ok) results = (await rResp.json()).results || [];
+  if (gResp.ok) groups = (await gResp.json()).groups || [];
+  renderTiles();
+  renderPolicies();
+  renderList();
+  renderFilters();
+  renderResults();
+  renderGroupOptions();
+}
+
+function renderTiles() {
+  const tally = { compliant: 0, drifted: 0, remediated: 0, failed: 0, failing: 0, unknown: 0 };
+  const endpoints = new Set();
+  for (const r of results) {
+    tally[r.state] = (tally[r.state] || 0) + 1;
+    endpoints.add(r.agent_id);
+  }
+  const enforcing = policies.filter(p => p.enabled && p.mode === "enforce").length;
+  const tiles = [
+    ["Policies", policies.length, `${enforcing} enforcing`],
+    ["Endpoints covered", endpoints.size, "with at least one result"],
+    ["Compliant", tally.compliant, "settings holding"],
+    ["Drifted", tally.drifted, "wrong, not fixed"],
+    ["Remediated", tally.remediated, "put back last pass"],
+    ["Given up on", tally.failing + tally.failed, `after ${maxAttempts} failures`],
+  ];
+  document.getElementById("enf-tiles").innerHTML = tiles.map(([label, value, sub]) => `
+    <div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(label)}</div>
+      <div class="stat-tile-value ${label === "Given up on" && value > 0 ? "off" : ""}">${escapeHtml(value)}</div>
+      <div class="tile-sub">${escapeHtml(sub)}</div>
+    </div>`).join("");
+}
+
+function modePill(mode) {
+  return `<span class="mode-pill mode-${mode === "enforce" ? "enforce" : "report"}">${mode === "enforce" ? "enforce" : "report"}</span>`;
+}
+
+function targetLabel(p) {
+  // An orphan is called out rather than shown as "Every endpoint", which is
+  // what a blank group would otherwise read as — and would be exactly wrong.
+  if (p.group_deleted) {
+    return `<span class="u-c-off u-fwt-600">no targets — its group was deleted</span>`;
+  }
+  const where = escapeHtml(p.group_name ? p.group_name : "Every endpoint");
+  return p.os ? `${where} · ${escapeHtml(osLabel(p.os))}` : where;
+}
+
+function renderPolicies() {
+  const body = document.getElementById("enf-policies-body");
+  if (policies.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="10">No policies yet — write one under <a href="#policies">Policies</a>.</td></tr>`;
+    return;
+  }
+  body.innerHTML = policies.map(p => `
+    <tr${p.enabled ? "" : ' class="u-op-055"'}>
+      <td><b>${escapeHtml(p.name)}</b>${p.enabled ? "" : " <span class=\"state-pill state-unknown\">disabled</span>"}
+        ${p.description ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(p.description)}</div>` : ""}</td>
+      <td>${modePill(p.mode)}</td>
+      <td>${targetLabel(p)}</td>
+      <td>${escapeHtml(p.setting_count)}</td>
+      <td>${escapeHtml(p.compliant)}</td>
+      <td>${escapeHtml(p.drifted)}</td>
+      <td>${escapeHtml(p.remediated)}</td>
+      <td>${p.failed + p.failing > 0 ? `<span class="u-c-off u-fwt-700">${escapeHtml(p.failed + p.failing)}</span>` : "0"}</td>
+      <td>${p.last_run_at ? escapeHtml(fmtAgo(p.last_run_at)) : "never"}</td>
+      <td class="u-ws-nowrap">${canManage ? `
+        <button class="tiny" data-dry="${escapeHtml(p.id)}" title="Check every target and record what would happen, without changing anything">Dry run</button>
+        <button class="tiny" data-run="${escapeHtml(p.id)}">Run now</button>
+        <button class="tiny" data-edit="${escapeHtml(p.id)}">Edit</button>` : ""}</td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-dry]").forEach(b => b.addEventListener("click", () => runPolicy(b.dataset.dry, true, b)));
+  body.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", () => runPolicy(b.dataset.run, false, b)));
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => editPolicy(b.dataset.edit)));
+}
+
+function renderList() {
+  const body = document.getElementById("enf-list-body");
+  if (policies.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">nothing yet</td></tr>`;
+    return;
+  }
+  body.innerHTML = policies.map(p => `
+    <tr>
+      <td><b>${escapeHtml(p.name)}</b></td>
+      <td>${modePill(p.mode)}</td>
+      <td>${escapeHtml(p.os ? osLabel(p.os) : "Any")}</td>
+      <td>${targetLabel(p)}</td>
+      <td>${escapeHtml(p.setting_count)}</td>
+      <td>${p.enabled ? "enabled" : "disabled"}</td>
+      <td class="u-ws-nowrap">${canManage ? `
+        <button class="tiny" data-edit2="${escapeHtml(p.id)}">Edit</button>
+        <button class="tiny" data-reset="${escapeHtml(p.id)}" title="Clear this policy's history, including the counters that stopped it retrying">Reset history</button>
+        <button class="tiny danger" data-del="${escapeHtml(p.id)}">Delete</button>` : ""}</td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-edit2]").forEach(b => b.addEventListener("click", () => editPolicy(b.dataset.edit2)));
+  body.querySelectorAll("[data-reset]").forEach(b => b.addEventListener("click", () => resetPolicy(b.dataset.reset)));
+  body.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => deletePolicy(b.dataset.del)));
+}
+
+function renderFilters() {
+  const sel = document.getElementById("enf-filter-policy");
+  const keep = sel.value;
+  sel.innerHTML = `<option value="">Every policy</option>` +
+    policies.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+  sel.value = keep;
+  sel.onchange = renderResults;
+  document.getElementById("enf-filter-state").onchange = renderResults;
+}
+
+function renderResults() {
+  const wantPolicy = document.getElementById("enf-filter-policy").value;
+  const wantState = document.getElementById("enf-filter-state").value;
+  const shown = results.filter(r => {
+    if (wantPolicy && r.policy_id !== wantPolicy) return false;
+    if (!wantState) return true;
+    if (wantState === "problem") return ["drifted", "failed", "failing"].includes(r.state);
+    return r.state === wantState;
+  });
+  document.getElementById("enf-results-status").textContent =
+    `${shown.length} of ${results.length}`;
+  const body = document.getElementById("enf-results-body");
+  if (shown.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">nothing matches — which for "needs attention" is the good answer</td></tr>`;
+    return;
+  }
+  const byPolicy = {};
+  for (const p of policies) byPolicy[p.id] = p.name;
+  body.innerHTML = shown.map((r, i) => `
+    <tr>
+      <td><a href="/endpoint/${encodeURIComponent(r.agent_id)}">${escapeHtml(r.hostname || r.agent_id)}</a></td>
+      <td>${escapeHtml(byPolicy[r.policy_id] || r.policy_id)}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td><span class="state-pill state-${escapeHtml(r.state)}">${escapeHtml(stateLabel(r.state))}</span></td>
+      <td class="detail-cell">${escapeHtml(r.detail || "—")}
+        ${r.output ? `<button class="tiny u-ml-6" data-out="${i}">output</button><pre class="out-pre" id="out-${i}" hidden>${escapeHtml(r.output)}</pre>` : ""}
+        ${r.consecutive_failures > 0 ? `<div class="u-c-off u-fs-meta u-mt-3">${escapeHtml(r.consecutive_failures)} failure${r.consecutive_failures === 1 ? "" : "s"} in a row${r.consecutive_failures >= maxAttempts ? " — not retried until something changes" : ""}</div>` : ""}
+      </td>
+      <td>${escapeHtml(r.remediation_count || 0)}</td>
+      <td data-sort="${escapeHtml(r.checked_at)}">${escapeHtml(fmtAgo(r.checked_at))}</td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-out]").forEach(b => b.addEventListener("click", () => {
+    const pre = document.getElementById("out-" + b.dataset.out);
+    pre.hidden = !pre.hidden;
+  }));
+}
+
+function stateLabel(state) {
+  return state === "failing" ? "given up" : state;
+}
+
+// --- editor ---------------------------------------------------------
+
+function renderGroupOptions() {
+  const sel = document.getElementById("p-group");
+  const keep = sel.value;
+  sel.innerHTML = `<option value="">Every endpoint</option>` +
+    groups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${escapeHtml(g.member_count)})</option>`).join("");
+  sel.value = keep;
+}
+
+function wireEditor() {
+  const tmpl = document.getElementById("p-template");
+  tmpl.innerHTML = `<option value="">Start from an example…</option>` +
+    TEMPLATES.map(t => `<option value="${escapeHtml(t.key)}">${escapeHtml(t.label)}</option>`).join("");
+  tmpl.addEventListener("change", () => {
+    const t = TEMPLATES.find(x => x.key === tmpl.value);
+    tmpl.value = "";
+    if (!t) return;
+    draftSettings.push(JSON.parse(JSON.stringify(t.setting)));
+    if (t.os && !document.getElementById("p-os").value) document.getElementById("p-os").value = t.os;
+    renderSettings();
+  });
+  document.getElementById("p-add-setting").addEventListener("click", () => {
+    draftSettings.push({ name: "", severity: "medium", rules: [], condition: "all" });
+    renderSettings();
+  });
+  document.getElementById("p-save").addEventListener("click", savePolicy);
+  document.getElementById("p-cancel").addEventListener("click", resetEditor);
+  document.getElementById("p-mode").addEventListener("change", syncModeWarning);
+  if (!canManage) {
+    document.querySelectorAll("#section-policies input, #section-policies select, #section-policies textarea, #p-save, #p-add-setting")
+      .forEach(el => { el.disabled = true; });
+  }
+  syncModeWarning();
+  renderSettings();
+}
+
+function syncModeWarning() {
+  const enforcing = document.getElementById("p-mode").value === "enforce";
+  document.getElementById("p-mode-warning").innerHTML = enforcing
+    ? `<div class="scope-note warn">In enforce mode this runs its remediation commands on every matching endpoint,
+       unattended, every half hour. Try <b>Dry run</b> first — it checks everything and records what it found without
+       changing anything.</div>`
+    : `<div class="scope-note">In report mode nothing is ever changed: settings are checked and their state recorded.
+       This is where a policy should live until you have read what it found.</div>`;
+}
+
+function renderSettings() {
+  const host = document.getElementById("p-settings");
+  if (draftSettings.length === 0) {
+    host.innerHTML = `<div class="empty">No settings yet — add one, or start from an example.</div>`;
+    return;
+  }
+  host.innerHTML = draftSettings.map((s, i) => `
+    <div class="setting-card">
+      <div class="setting-card-head">
+        <b>Setting ${i + 1}</b>
+        <span class="spacer"></span>
+        ${canManage ? `<button class="tiny danger" data-rm="${i}">Remove</button>` : ""}
+      </div>
+      <div class="form-grid">
+        <div class="field"><label>Name</label><input data-f="name" data-i="${i}" value="${escapeHtml(s.name || "")}" placeholder="Host firewall is active"></div>
+        <div class="field"><label>Severity</label><select data-f="severity" data-i="${i}">
+          ${["low", "medium", "high", "critical"].map(v => `<option value="${escapeHtml(v)}"${(s.severity || "medium") === v ? " selected" : ""}>${escapeHtml(v)}</option>`).join("")}
+        </select></div>
+        <div class="field"><label>Rules must be</label><select data-f="condition" data-i="${i}">
+          ${[["all", "all true"], ["any", "any true"], ["none", "none true"]].map(([v, l]) => `<option value="${escapeHtml(v)}"${(s.condition || "all") === v ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}
+        </select></div>
+      </div>
+      <div class="form-grid">
+        <div class="field u-gc-full"><label>Rules — one per line, the same dialect Comply uses</label>
+          <textarea data-f="rules" data-i="${i}" placeholder="c:systemctl is-active ufw -> r:^active">${escapeHtml((s.rules || []).join("\n"))}</textarea></div>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label>Fix on Linux</label><textarea data-f="remediate_linux" data-i="${i}" placeholder="systemctl enable --now ufw">${escapeHtml(s.remediate_linux || "")}</textarea></div>
+        <div class="field"><label>Fix on Windows (PowerShell)</label><textarea data-f="remediate_windows" data-i="${i}">${escapeHtml(s.remediate_windows || "")}</textarea></div>
+        <div class="field"><label>Fix on macOS</label><textarea data-f="remediate_darwin" data-i="${i}">${escapeHtml(s.remediate_darwin || "")}</textarea></div>
+      </div>
+    </div>`).join("");
+
+  host.querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", () => {
+    const s = draftSettings[Number(el.dataset.i)];
+    if (el.dataset.f === "rules") s.rules = el.value.split("\n").map(x => x.trim()).filter(Boolean);
+    else s[el.dataset.f] = el.value;
+  }));
+  host.querySelectorAll("select[data-f]").forEach(el => el.addEventListener("change", () => {
+    draftSettings[Number(el.dataset.i)][el.dataset.f] = el.value;
+  }));
+  host.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", () => {
+    draftSettings.splice(Number(b.dataset.rm), 1);
+    renderSettings();
+  }));
+  if (!canManage) host.querySelectorAll("input, select, textarea").forEach(el => { el.disabled = true; });
+}
+
+async function editPolicy(id) {
+  const resp = await fetch(`/api/enforce/policies/${encodeURIComponent(id)}`);
+  if (!resp.ok) { alert("couldn't load that policy"); return; }
+  const p = (await resp.json()).policy;
+  editing = p;
+  document.getElementById("enf-editor-title").textContent = "Editing: " + p.name;
+  document.getElementById("p-name").value = p.name;
+  document.getElementById("p-description").value = p.description || "";
+  document.getElementById("p-os").value = p.os || "";
+  document.getElementById("p-group").value = p.group_id || "";
+  document.getElementById("p-mode").value = p.mode;
+  document.getElementById("p-enabled").checked = !!p.enabled;
+  draftSettings = Array.isArray(p.settings) ? p.settings : JSON.parse(p.settings || "[]");
+  draftKind = p.kind || "";
+  draftConfig = draftKind ? (typeof p.config === "string" ? JSON.parse(p.config || "{}") : (p.config || {})) : null;
+  document.getElementById("p-kind").value = draftKind;
+  syncModeWarning();
+  renderKindForm();
+  window.location.hash = "policies";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function resetEditor() {
+  editing = null;
+  draftSettings = [];
+  document.getElementById("enf-editor-title").textContent = "New policy";
+  ["p-name", "p-description"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("p-os").value = "";
+  document.getElementById("p-group").value = "";
+  document.getElementById("p-mode").value = "report";
+  document.getElementById("p-enabled").checked = true;
+  draftKind = ""; draftConfig = null;
+  document.getElementById("p-kind").value = "";
+  syncModeWarning();
+  renderKindForm();
+  document.getElementById("p-save-status").textContent = "";
+}
+
+async function savePolicy() {
+  const status = document.getElementById("p-save-status");
+  const body = {
+    id: editing ? editing.id : "",
+    name: document.getElementById("p-name").value,
+    description: document.getElementById("p-description").value,
+    os: document.getElementById("p-os").value,
+    group_id: document.getElementById("p-group").value,
+    mode: document.getElementById("p-mode").value,
+    enabled: document.getElementById("p-enabled").checked,
+    settings: draftSettings,
+    kind: draftKind,
+    config: draftConfig || {},
+  };
+  status.textContent = "saving…";
+  try {
+    const resp = await fetch("/api/enforce/policies", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const text = await resp.text();
+    if (!resp.ok) { status.textContent = text.trim(); return; }
+    status.textContent = "saved";
+    resetEditor();
+    await load();
+  } catch (e) {
+    status.textContent = "failed: " + e.message;
+  }
+}
+
+async function runPolicy(id, dryRun, btn) {
+  const p = policies.find(x => x.id === id);
+  if (!dryRun && p && p.mode === "enforce" &&
+      !confirm(`Run "${p.name}" now in enforce mode?\n\nEvery matching endpoint that has drifted will have its remediation command run.`)) {
+    return;
+  }
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const resp = await fetch(`/api/enforce/policies/${encodeURIComponent(id)}/run`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dry_run: dryRun }),
+    });
+    const text = await resp.text();
+    if (!resp.ok) { alert(text.trim()); return; }
+    const s = JSON.parse(text);
+    alert(`${s.policy} — ${dryRun ? "dry run" : s.mode}\n\n` +
+      `${s.endpoints} endpoints\ncompliant ${s.compliant}\ndrifted ${s.drifted}\n` +
+      `remediated ${s.remediated}\nfailed ${s.failed}\nunknown ${s.unknown}\nunreachable ${s.unreached}`);
+    await load();
+  } catch (e) {
+    alert("run failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+async function resetPolicy(id) {
+  const p = policies.find(x => x.id === id);
+  if (!confirm(`Clear the recorded history for "${p ? p.name : id}"?\n\nThis also clears the failure counters, so any setting mustra had given up on will be attempted again on the next run.`)) return;
+  const resp = await fetch(`/api/enforce/policies/${encodeURIComponent(id)}/reset`, { method: "POST" });
+  if (!resp.ok) { alert(await resp.text()); return; }
+  await load();
+}
+
+async function deletePolicy(id) {
+  const p = policies.find(x => x.id === id);
+  if (!confirm(`Delete "${p ? p.name : id}" and everything it has recorded?`)) return;
+  const resp = await fetch(`/api/enforce/policies/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!resp.ok) { alert(await resp.text()); return; }
+  if (editing && editing.id === id) resetEditor();
+  await load();
+}
+
+// --- Typed policies -------------------------------------------------
+//
+// A typed policy is a form the server compiles into settings; the editor
+// shows the compiled settings read-only so the author sees exactly what
+// the endpoint will check and run. Kind and config are what get saved.
+let kinds = [];
+let draftKind = "";
+let draftConfig = null;
+async function loadKinds() {
+  const resp = await fetch("/api/enforce/kinds");
+  if (!resp.ok) return;
+  kinds = (await resp.json()).kinds || [];
+  const sel = document.getElementById("p-kind");
+  sel.innerHTML = `<option value="">Custom — rules and fixes you write</option>` +
+    kinds.map(k => `<option value="${escapeHtml(k.kind)}">${escapeHtml(k.label)}</option>`).join("");
+  sel.addEventListener("change", () => {
+    draftKind = sel.value;
+    const k = kinds.find(x => x.kind === draftKind);
+    draftConfig = k ? JSON.parse(JSON.stringify(k.defaults)) : null;
+    if (k) { document.getElementById("p-os").value = k.os; if (!document.getElementById("p-name").value) document.getElementById("p-name").value = k.label; }
+    renderKindForm();
+  });
+}
+function kindField(label, /* html-param: callers pass form controls they built */ inner) { return `<div class="field"><label>${escapeHtml(label)}</label>${inner}</div>`; }
+function chk(id, checked, label) { return `<label class="u-d-flex u-ai-center u-gap-6 u-fs-12_5"><input type="checkbox" data-k="${escapeHtml(id)}" ${checked ? "checked" : ""}> ${escapeHtml(label)}</label>`; }
+function sel(id, value, options) { return `<select data-k="${escapeHtml(id)}">${options.map(([v, l]) => `<option value="${escapeHtml(v)}"${v === value ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select>`; }
+function renderKindForm() {
+  const host = document.getElementById("p-kind-form");
+  const settingsTitle = document.getElementById("p-settings-title");
+  const actions = document.getElementById("p-settings-actions");
+  const k = kinds.find(x => x.kind === draftKind);
+  document.getElementById("p-os").disabled = !!k;
+  if (!k) { host.hidden = true; host.innerHTML = ""; settingsTitle.textContent = "Settings"; actions.hidden = false; renderSettings(); return; }
+  host.hidden = false; actions.hidden = true; settingsTitle.textContent = "Compiled settings (read-only) — what the endpoint will check and run";
+  const c = draftConfig;
+  let html = `<p class="hint">${escapeHtml(k.description)}</p>`;
+  if (draftKind === "windows_firewall") {
+    html += ["domain", "private", "public"].map(pr => { const p = c.profiles[pr] || { enabled: true, default_inbound: "block", default_outbound: "allow" }; c.profiles[pr] = p;
+      return `<div class="form-grid u-ai-end">${kindField(pr.charAt(0).toUpperCase() + pr.slice(1) + " profile", chk("profiles." + pr + ".enabled", p.enabled, "enabled"))}${kindField("Inbound default", sel("profiles." + pr + ".default_inbound", p.default_inbound, [["block", "block"], ["allow", "allow"]]))}${kindField("Outbound default", sel("profiles." + pr + ".default_outbound", p.default_outbound, [["allow", "allow"], ["block", "block"]]))}</div>`; }).join("");
+    html += `<div class="form-grid">${kindField("Logging", chk("log_dropped", c.log_dropped, "log dropped packets on every profile"))}</div>`;
+    html += `<h4 class="u-fs-12 u-c-text-muted u-m-12-0-6">Managed rules (created as "mustra: name")</h4><div id="fw-rules">` +
+      (c.rules || []).map((r, i) => `<div class="form-grid u-ai-end u-bt-1-solid-border u-pt-8">
+        ${kindField("Name", `<input data-r="${i}" data-f="name" value="${escapeHtml(r.name || "")}">`)}
+        ${kindField("Direction", `<select data-r="${i}" data-f="direction"><option value="in"${r.direction === "in" ? " selected" : ""}>inbound</option><option value="out"${r.direction === "out" ? " selected" : ""}>outbound</option></select>`)}
+        ${kindField("Action", `<select data-r="${i}" data-f="action"><option value="allow"${r.action === "allow" ? " selected" : ""}>allow</option><option value="block"${r.action === "block" ? " selected" : ""}>block</option></select>`)}
+        ${kindField("Protocol", `<select data-r="${i}" data-f="protocol"><option value="tcp"${r.protocol === "tcp" ? " selected" : ""}>TCP</option><option value="udp"${r.protocol === "udp" ? " selected" : ""}>UDP</option><option value="any"${r.protocol === "any" ? " selected" : ""}>any</option></select>`)}
+        ${kindField("Local ports", `<input data-r="${i}" data-f="local_ports" value="${escapeHtml(r.local_ports || "")}" placeholder="3389 or 5000-5010">`)}
+        ${kindField("Remote addresses", `<input data-r="${i}" data-f="remote_addresses" value="${escapeHtml(r.remote_addresses || "")}" placeholder="10.0.0.0/8, LocalSubnet">`)}
+        ${kindField("Program", `<input data-r="${i}" data-f="program" value="${escapeHtml(r.program || "")}" placeholder="optional path">`)}
+        ${kindField("", chk("rules." + i + ".enabled", r.enabled !== false, "enabled") + ` <button class="tiny danger" data-rmrule="${i}">remove</button>`)}
+      </div>`).join("") + `</div><div class="panel-actions"><button class="tiny" id="fw-add">Add a rule</button></div>`;
+  } else if (draftKind === "bitlocker") {
+    html += `<div class="form-grid">${kindField("Volumes", sel("volumes", c.volumes || "os", [["os", "OS volume only"], ["all", "OS and every fixed data volume"]]))}${kindField("Encryption method", sel("method", c.method || "XtsAes256", [["XtsAes256", "XTS-AES 256"], ["XtsAes128", "XTS-AES 128"], ["Aes256", "AES-CBC 256"], ["Aes128", "AES-CBC 128"]]))}</div>
+      <div class="form-grid">${kindField("TPM", chk("require_tpm", c.require_tpm, "require a ready TPM (refuse to encrypt without one)"))}${kindField("", chk("allow_without_tpm", c.allow_without_tpm, "allow a recovery-password-only OS volume where there is no TPM (sets the FVE policy)"))}${kindField("Escrow", chk("escrow", c.escrow, "require a recovery password to escrow (the posture sensor stores it encrypted)"))}</div>
+      <p class="hint">Encryption in progress counts as protected so a machine busy encrypting is not a failure; a separate report-only setting stays drifted until the volume is fully encrypted, so success is never claimed early.</p>`;
+  } else if (draftKind === "defender") {
+    html += `<div class="form-grid">${kindField("Real-time protection", chk("realtime", c.realtime, "must be on"))}${kindField("Cloud-delivered protection", sel("cloud_level", c.cloud_level || "advanced", [["off", "not required"], ["basic", "basic"], ["advanced", "advanced"]]))}${kindField("Potentially unwanted apps", sel("pua", c.pua || "block", [["off", "not required"], ["audit", "audit"], ["block", "block"]]))}</div>
+      <div class="form-grid">${kindField("Signatures no older than (hours; 0 = no check)", `<input type="number" min="0" max="720" data-k="signature_max_age_hours" value="${Number(c.signature_max_age_hours) || 0}">`)}${kindField("", chk("daily_quick_scan", c.daily_quick_scan, "a quick scan every day"))}${kindField("", chk("network_protection", c.network_protection, "network protection on"))}</div>
+      <div class="form-grid">${kindField("", chk("controlled_folder_access", c.controlled_folder_access, "controlled folder access on"))}${kindField("", chk("check_tamper_protection", c.check_tamper_protection, "report tamper protection (cannot be set from PowerShell)"))}</div>`;
+  } else if (draftKind === "applocker") {
+    const cols = c.collections || [];
+    html += `<div class="form-grid">${kindField("Mode", sel("mode", c.mode || "audit", [["audit", "audit only — log what would be blocked"], ["enforce", "enforce — block"], ["off", "not configured"]]))}${kindField("Rule collections", ["exe", "msi", "script", "dll", "appx"].map(t => `<label class="u-mr-10"><input type="checkbox" data-col="${escapeHtml(t)}" ${cols.includes(t) ? "checked" : ""}> ${escapeHtml(t)}</label>`).join(""))}${kindField("Defaults", chk("default_rules", c.default_rules, "default allow rules: Windows, Program Files, Administrators everything"))}</div>
+      <p class="hint warn">Enforcing without the default rules locks the machine. Start in audit, read the AppLocker event log, then enforce.</p>
+      <h4 class="u-fs-12 u-c-text-muted u-m-12-0-6">Your rules</h4><div id="al-rules">` +
+      (c.rules || []).map((r, i) => `<div class="form-grid u-ai-end u-bt-1-solid-border u-pt-8">
+        ${kindField("Type", `<select data-r="${i}" data-f="type"><option value="path"${r.type === "path" ? " selected" : ""}>path</option><option value="publisher"${r.type === "publisher" ? " selected" : ""}>publisher</option><option value="hash"${r.type === "hash" ? " selected" : ""}>hash</option></select>`)}
+        ${kindField("Action", `<select data-r="${i}" data-f="action"><option value="allow"${r.action === "allow" ? " selected" : ""}>allow</option><option value="deny"${r.action === "deny" ? " selected" : ""}>deny</option></select>`)}
+        ${kindField("Collection", `<select data-r="${i}" data-f="collection">${["exe", "msi", "script", "dll", "appx"].map(t => `<option value="${escapeHtml(t)}"${(r.collection || "exe") === t ? " selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select>`)}
+        ${kindField("Value", `<input data-r="${i}" data-f="value" value="${escapeHtml(r.value || "")}" placeholder="path: %OSDRIVE%\\Users\\*\\Downloads\\*  ·  publisher: O=..., L=..., C=US|Product|Binary  ·  hash: sha256|file.exe|length">`)}
+        ${kindField("Description", `<input data-r="${i}" data-f="description" value="${escapeHtml(r.description || "")}">`)}
+        ${kindField("User or group SID", `<input data-r="${i}" data-f="user_or_group" value="${escapeHtml(r.user_or_group || "")}" placeholder="S-1-1-0 (Everyone)">`)}
+        ${kindField("", `<button class="tiny danger" data-rmrule="${i}">remove</button>`)}
+      </div>`).join("") + `</div><div class="panel-actions"><button class="tiny" id="al-add">Add a rule</button></div>`;
+  }
+  host.innerHTML = html;
+  const setPath = (path, value) => { const parts = path.split("."); let o = draftConfig; for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]]; o[parts[parts.length - 1]] = value; };
+  host.querySelectorAll("[data-k]").forEach(el => el.addEventListener("change", () => {
+    setPath(el.dataset.k, el.type === "checkbox" ? el.checked : (el.type === "number" ? Number(el.value) : el.value));
+    compilePreview();
+  }));
+  host.querySelectorAll("[data-r]").forEach(el => el.addEventListener("change", () => { draftConfig.rules[Number(el.dataset.r)][el.dataset.f] = el.value; compilePreview(); }));
+  host.querySelectorAll("[data-col]").forEach(el => el.addEventListener("change", () => {
+    draftConfig.collections = [...host.querySelectorAll("[data-col]:checked")].map(x => x.dataset.col); compilePreview();
+  }));
+  host.querySelectorAll("[data-rmrule]").forEach(b => b.addEventListener("click", () => { draftConfig.rules.splice(Number(b.dataset.rmrule), 1); renderKindForm(); }));
+  const fwAdd = document.getElementById("fw-add"); if (fwAdd) fwAdd.addEventListener("click", () => { draftConfig.rules.push({ name: "", direction: "in", action: "allow", protocol: "tcp", local_ports: "", remote_addresses: "", enabled: true }); renderKindForm(); });
+  const alAdd = document.getElementById("al-add"); if (alAdd) alAdd.addEventListener("click", () => { draftConfig.rules.push({ type: "path", action: "deny", collection: "exe", value: "", description: "" }); renderKindForm(); });
+  if (!canManage) host.querySelectorAll("input, select, button").forEach(el => { el.disabled = true; });
+  compilePreview();
+}
+async function compilePreview() {
+  const host = document.getElementById("p-settings");
+  const resp = await fetch("/api/enforce/compile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: draftKind, config: draftConfig }) });
+  const text = await resp.text();
+  if (!resp.ok) { host.innerHTML = `<div class="scope-note warn">${escapeHtml(text.trim())}</div>`; draftSettings = []; return; }
+  draftSettings = JSON.parse(text).settings || [];
+  host.innerHTML = draftSettings.map(s => `<div class="setting-card"><div class="setting-card-head"><b>${escapeHtml(s.name)}</b><span class="spacer"></span><span class="sev-pill none">${escapeHtml(s.severity || "medium")}</span></div>
+    <div class="u-fs-12 u-c-text-muted">Checks</div><pre class="u-ws-pre u-fs-meta u-m-4-0-8">${escapeHtml((s.rules || []).join("\n"))}</pre>
+    ${s.remediate_windows ? `<div class="u-fs-12 u-c-text-muted">Fix (PowerShell)</div><pre class="u-ws-pre u-fs-meta u-m-4-0-0">${escapeHtml(s.remediate_windows)}</pre>` : `<div class="u-fs-12 u-c-text-muted">Report only — no remediation</div>`}</div>`).join("");
+}
+
+// --- Coverage ---------------------------------------------------------
+async function loadCoverage() {
+  const resp = await fetch("/api/enforce/coverage");
+  if (!resp.ok) return;
+  const d = await resp.json();
+  const pct = (n, of) => of ? Math.round(100 * n / of) + "%" : "—";
+  const a = d.all || {}, w = d.windows || {};
+  document.getElementById("cov-tiles").innerHTML = [
+    { label: "Reporting posture", value: a.reporting || 0 },
+    { label: "Firewall on", value: pct(a.firewall, a.reporting), cls: a.reporting && a.firewall < a.reporting ? "bad" : "ok" },
+    { label: "OS volume encrypted", value: pct(a.encrypted, a.reporting), cls: a.reporting && a.encrypted < a.reporting ? "bad" : "ok" },
+    { label: "Antimalware real-time (Windows)", value: pct(w.antivirus, w.reporting), cls: w.reporting && w.antivirus < w.reporting ? "bad" : "ok" },
+    { label: "App control enforced (Windows)", value: pct(w.app_control, w.reporting) },
+    { label: "Recovery key escrowed (Windows)", value: pct(w.escrowed, w.reporting) },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+  const rows = d.endpoints || [];
+  document.getElementById("cov-status").textContent = rows.length ? `${rows.length} endpoint(s)` : "";
+  const body = document.getElementById("cov-body");
+  if (!rows.length) { body.innerHTML = '<tr><td class="empty" colspan="8">No endpoint has reported the security posture sensor yet (agent 0.45.1 or newer).</td></tr>'; return; }
+  const yes = (b, label) => b ? `<span class="sev-pill u-bg-ok-bg u-c-ok">${escapeHtml(label)}</span>` : `<span class="sev-pill security">${escapeHtml(label)}</span>`;
+  body.innerHTML = rows.map(e => `<tr>
+    <td><a href="/endpoint?id=${encodeURIComponent(e.agent_id)}#security_posture">${escapeHtml(e.hostname || e.agent_id)}</a></td>
+    <td>${escapeHtml(osLabel(e.os))}</td>
+    <td>${e.firewall_engine === "none" || e.firewall_engine === "unknown" ? `<span class="sev-pill none">${escapeHtml(e.firewall_engine)}</span>` : yes(e.firewall_enabled, e.firewall_enabled ? "on · " + e.firewall_engine : "off · " + e.firewall_engine)}</td>
+    <td>${e.encryption_engine === "none" || e.encryption_engine === "unknown" ? `<span class="sev-pill none">${escapeHtml(e.encryption_engine)}</span>` : yes(e.os_volume_encrypted, (e.os_volume_encrypted ? "encrypted" : "not encrypted") + " · " + e.encryption_engine)}</td>
+    <td>${e.antivirus_engine === "none" || e.antivirus_engine === "unknown" ? `<span class="sev-pill none">${escapeHtml(e.antivirus_engine)}</span>` : yes(e.antivirus_realtime, (e.antivirus_realtime ? "real-time" : "real-time off") + (e.antivirus_signature_age_hours >= 0 ? " · sigs " + e.antivirus_signature_age_hours + "h" : ""))}</td>
+    <td>${e.app_control_engine === "none" || e.app_control_engine === "unknown" ? `<span class="sev-pill none">${escapeHtml(e.app_control_engine)}</span>` : `<span class="sev-pill ${e.app_control_mode === "enforce" ? "u-bg-ok-bg u-c-ok" : "none"}">${escapeHtml(e.app_control_mode)}</span>`}</td>
+    <td>${e.os === "windows" ? (e.escrowed ? '<span class="sev-pill u-bg-ok-bg u-c-ok">escrowed</span>' : (e.os_volume_encrypted ? '<span class="sev-pill security">not escrowed</span>' : "—")) : "—"}</td>
+    <td>${escapeHtml(fmtAgo(e.collected_at))}</td>
+  </tr>`).join("");
+}
+loadKinds();
+</script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logs &amp; Audit — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .hint code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  .act { font-family: var(--mono); font-size: var(--fs-meta); color: var(--accent); }
+  .oc { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .oc.ok { background: var(--ok-bg); color: var(--ok); }
+  .oc.failed { background: var(--off-bg); color: var(--off); }
+  .oc.denied { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select { width: 100%; padding: 8px 10px; border-radius: var(--radius-md);
+    border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .lvl { display: flex; gap: 6px; flex-wrap: wrap; }
+  .lvl button { padding: 7px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+  .lvl button.on { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+  .detail { font-family: var(--mono); font-size: var(--fs-meta); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-audit" hidden>
+      <div id="logs-page-head"></div>
+      <div class="stat-tiles" id="audit-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Audit log</h2><span class="scan-status" id="audit-status"></span></div>
+        <p class="hint">
+          Every significant action in one chronological record — deployments, shell commands, compliance runs,
+          policy and group changes. Each module keeps its own detailed history too; this is the spine that
+          crosses them, which is what you need when reconstructing what happened rather than what one module did.
+          Readable by anyone signed in, deliberately: a record only administrators can see is a weaker control
+          than one everybody knows is kept.
+        </p>
+        <div class="query-row">
+          <input class="search-input u-w-200" id="f-action" placeholder="filter by action, e.g. shell.">
+          <input class="search-input u-w-160" id="f-actor" placeholder="filter by who">
+          <button class="secondary u-w-auto" id="refresh">Refresh</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>When</th><th>Action</th><th>Who</th><th>Target</th><th>Outcome</th><th>Detail</th></tr></thead>
+            <tbody id="audit-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-settings" hidden>
+      <div class="panel">
+        <h2>Log level</h2>
+        <p class="hint">
+          Takes effect immediately across the whole server — no restart, which matters because restarting to turn
+          on debug destroys whatever state you were trying to observe. <code>debug</code> is verbose; leave it on
+          only while diagnosing something.
+        </p>
+        <div class="lvl" id="levels"></div>
+        <p class="hint u-mt-10" id="level-now"></p>
+      </div>
+
+      <div class="panel">
+        <h2>Forward to syslog, Splunk, or a SIEM</h2>
+        <p class="hint">
+          A live tap on the audit stream — every event as it happens. Different from a Connect export, which is a
+          scheduled batch: an alert that arrives an hour later in a CSV isn't an alert. Point it at a Loki
+          receiver (<code>udp://host:514</code>), a Splunk HEC-adjacent syslog input, or any
+          SIEM that accepts RFC&nbsp;5424 or CEF.
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label for="fwd-enabled">Forwarding</label>
+            <select id="fwd-enabled"><option value="false">off</option><option value="true">on</option></select>
+          </div>
+          <div class="field"><label for="fwd-target">Target</label><input id="fwd-target" placeholder="udp://logs.example.com:514"></div>
+          <div class="field">
+            <label for="fwd-format">Format</label>
+            <select id="fwd-format">
+              <option value="rfc5424">Syslog RFC 5424</option>
+              <option value="cef">CEF — ArcSight, QRadar, most SIEMs</option>
+              <option value="json">JSON — Loki, Splunk, Elastic</option>
+            </select>
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button class="primary" id="fwd-save">Save</button>
+          <span class="scan-status" id="fwd-status"></span>
+        </div>
+        <p class="hint u-mt-10">
+          The target is dialled when you save, so an unreachable collector is reported here rather than silently
+          never delivering.
+        </p>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+const LEVELS = ["debug", "info", "warn", "error"];
+let canManage = false;
+
+document.addEventListener("mustra:user", (e) => {
+  canManage = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("settings.manage")));
+  renderPageHead("logs-page-head", "/settings", { title: "Audit Log",
+    sub: "Every significant action mustra has taken, who did it, and where it is shipped." });
+  renderModuleSubnav("/settings", e.detail);
+  load();
+  if (canManage) loadLogging();
+});
+document.getElementById("refresh").addEventListener("click", load);
+["f-action", "f-actor"].forEach(id =>
+  document.getElementById(id).addEventListener("keydown", e => { if (e.key === "Enter") load(); }));
+
+async function load() {
+  const q = new URLSearchParams();
+  const a = document.getElementById("f-action").value.trim();
+  const w = document.getElementById("f-actor").value.trim();
+  if (a) q.set("action", a);
+  if (w) q.set("actor", w);
+  const resp = await fetch("/api/audit?" + q);
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const d = await resp.json();
+  const events = d.events || [];
+
+  const counts = d.action_counts || {};
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  document.getElementById("audit-tiles").innerHTML = [
+    { label: "Events shown", value: events.length },
+    { label: "Distinct actions (7d)", value: top.length },
+    { label: "Busiest action", value: top.length ? top[0][0] : "—" },
+    { label: "Log level", value: d.log_level || "—" },
+    { label: "Forwarding", value: d.forwarding && d.forwarding.enabled ? "on" : "off",
+      cls: d.forwarding && d.forwarding.enabled ? "ok" : "" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}"${sx(`font-size:${String(t.value).length > 8 ? "16px" : ""}`)}>${escapeHtml(String(t.value))}</div></div>`).join("");
+
+  document.getElementById("audit-status").textContent = `${events.length} event(s)`;
+  document.getElementById("audit-body").innerHTML = events.length === 0
+    ? '<tr><td class="empty" colspan="6">no events recorded yet</td></tr>'
+    : events.map(e => `
+      <tr>
+        <td data-sort="${escapeHtml(e.at || "")}">${fmtAgo(e.at)}</td>
+        <td class="act">${escapeHtml(e.action)}</td>
+        <td>${escapeHtml(e.actor || "—")}</td>
+        <td>${e.agent_id
+              ? `<a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname || e.target)}</a>`
+              : escapeHtml(e.target || "—")}</td>
+        <td><span class="oc ${escapeHtml(e.outcome)}">${escapeHtml(e.outcome)}</span></td>
+        <td class="detail u-ws-normal u-maxw-340">${escapeHtml(e.detail || "")}</td>
+      </tr>`).join("");
+  const dt = initDataTable(document.getElementById("audit-body").closest("table"), { storageKey: "audit-log" });
+  if (dt) dt.refresh();
+}
+
+async function loadLogging() {
+  const resp = await fetch("/api/admin/logging");
+  if (!resp.ok) return;
+  const s = await resp.json();
+  document.getElementById("levels").innerHTML = LEVELS.map(l =>
+    `<button data-level="${escapeHtml(l)}" class="${l === s.log_level ? "on" : ""}">${escapeHtml(l)}</button>`).join("");
+  document.getElementById("level-now").textContent = `Currently logging at ${s.log_level}.`;
+  // Only the level: fields left out are unchanged, so an unsaved edit
+  // in the forwarding form is not sent along with it.
+  document.querySelectorAll("[data-level]").forEach(b => b.addEventListener("click", () => save({ log_level: b.dataset.level })));
+  document.getElementById("fwd-enabled").value = String(!!s.forward_enabled);
+  document.getElementById("fwd-target").value = s.forward_target || "";
+  document.getElementById("fwd-format").value = s.forward_format || "rfc5424";
+}
+
+async function save(body) {
+  const status = document.getElementById("fwd-status");
+  status.textContent = "saving…";
+  const resp = await fetch("/api/admin/logging", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = '<span class="u-c-ok">saved</span>';
+  loadLogging();
+  load();
+}
+document.getElementById("fwd-save").addEventListener("click", () => save({
+  forward_enabled: document.getElementById("fwd-enabled").value === "true",
+  forward_target: document.getElementById("fwd-target").value.trim(),
+  forward_format: document.getElementById("fwd-format").value,
+}));
+</script>
+</body>
+</html>

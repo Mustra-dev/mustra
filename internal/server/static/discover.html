@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discover — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .pill.managed { background: var(--ok-bg); color: var(--ok); }
+  /* Text wears the warning text token (contrast-checked per theme); the hue stays in the tint. */
+  .pill.unmanaged { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  .seen { font-size: var(--fs-meta); color: var(--text-muted); }
+  .pill.new { background: color-mix(in srgb, var(--accent, #3b82f6) 22%, transparent); color: var(--accent, #3b82f6); }
+  .pill.quiet { background: var(--surface-2); color: var(--text-muted); }
+  .dev-name { font-weight: 600; }
+  .dev-sub { font-size: var(--fs-meta); color: var(--text-muted); }
+  .row-actions { display: flex; gap: 4px; white-space: nowrap; }
+  .row-actions button { width: auto; padding: 2px 8px; font-size: 11.5px; }
+  .disc-settings { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin: 4px 0 12px; font-size: 12.5px; }
+  .disc-settings input[type=text] { min-width: 220px; }
+  tr.ignored td { opacity: .55; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="discover-page-head"></div>
+      <div class="stat-tiles" id="disc-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Everything on the network</h2><span class="scan-status" id="disc-status"></span></div>
+        <p class="hint">
+          Assembled from endpoints' own ARP and neighbour tables — no sweep, no packets on the wire, nothing an
+          IDS will flag. Anything that talks to anything shows up in someone's table, so this finds devices a
+          scan misses: a printer or camera that ignores ping still appears in the table of whatever it last
+          spoke to. Devices are matched by MAC, since a device that changes address is the same device.
+        </p>
+        <p class="hint">
+          Names come from reverse DNS: point Mustra at the DNS server that hands out DHCP leases (usually your router)
+          below. A device seen for the first time raises an alert, except devices Mustra manages and randomized
+          (private) MACs, which phones rotate. Label a device to remember what it is; ignore it to stop counting it.
+        </p>
+        <div class="disc-settings" id="disc-settings" hidden>
+          <label>DNS servers for names<br><input type="text" id="disc-dns" placeholder="router IP, e.g. 192.168.1.1"></label>
+          <label><input type="checkbox" id="disc-alert"> alert on new devices</label>
+          <button class="secondary u-w-auto" id="disc-save">Save</button><span class="seen" id="disc-save-status"></span>
+        </div>
+        <div class="query-row">
+          <label class="u-fs-12 u-c-text-muted">
+            <input type="checkbox" id="only-unmanaged" checked> only what mustra doesn't manage
+          </label>
+          <label class="u-fs-12 u-c-text-muted"><input type="checkbox" id="only-new"> only new (last 24 h)</label>
+          <label class="u-fs-12 u-c-text-muted"><input type="checkbox" id="show-ignored"> show ignored and gone quiet</label>
+          <button class="secondary u-w-auto" id="refresh">Refresh</button>
+        </div>
+        <div class="table-scroll rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Device</th><th>Address</th><th>MAC</th><th>Vendor</th><th>Seen by</th><th>First seen</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+            <tbody id="disc-body"><tr><td class="empty" colspan="9">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let hosts = [], meta = {}, canLabel = false, canSettings = false;
+
+document.addEventListener("mustra:user", (e) => {
+  const perms = (e.detail && e.detail.permissions) || [], admin = !!(e.detail && e.detail.is_admin);
+  canLabel = admin || perms.includes("groups.manage");
+  canSettings = admin || perms.includes("settings.manage");
+  renderPageHead("discover-page-head", "/discover", { title: "Discover" });
+  load();
+});
+document.getElementById("refresh").addEventListener("click", load);
+["only-unmanaged", "only-new", "show-ignored"].forEach(id => document.getElementById(id).addEventListener("change", render));
+document.getElementById("disc-save").addEventListener("click", async () => {
+  const st = document.getElementById("disc-save-status"); st.textContent = "saving…";
+  const r = await fetch("/api/discover/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dns_servers: document.getElementById("disc-dns").value, alert_new: document.getElementById("disc-alert").checked }) });
+  st.textContent = r.ok ? "saved — names refresh within a few minutes" : "failed: " + await r.text();
+});
+async function updateDevice(mac, body) {
+  const r = await fetch(`/api/discover/devices/${encodeURIComponent(mac)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { alert("failed: " + await r.text()); return; }
+  load();
+}
+document.getElementById("disc-body").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const h = hosts.find(x => x.mac === b.dataset.mac); if (!h) return;
+  if (b.dataset.act === "label") {
+    const v = prompt(`Label for ${h.name || h.ip || h.mac}:`, h.label || ""); if (v === null) return;
+    updateDevice(h.mac, { label: v });
+  } else if (b.dataset.act === "ignore") updateDevice(h.mac, { ignored: !h.ignored });
+});
+
+async function load() {
+  const resp = await fetch("/api/discover");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  meta = await resp.json();
+  hosts = meta.hosts || [];
+  render();
+}
+
+function render() {
+  const onlyUnmanaged = document.getElementById("only-unmanaged").checked;
+  const onlyNew = document.getElementById("only-new").checked;
+  const showIgnored = document.getElementById("show-ignored").checked;
+  const shown = hosts.filter(h => (!onlyUnmanaged || !h.managed) && (!onlyNew || h.new) && (showIgnored || (!h.ignored && !h.absent)));
+
+  document.getElementById("disc-tiles").innerHTML = [
+    { label: "Devices seen", value: meta.total || 0 },
+    { label: "Not managed by mustra", value: meta.unmanaged || 0, cls: (meta.unmanaged || 0) > 0 ? "bad" : "ok" },
+    { label: "New in the last day", value: meta.new || 0, cls: (meta.new || 0) > 0 ? "bad" : "ok" },
+    { label: "Endpoints contributing", value: meta.reporting_agents || 0 },
+  ].map(t => `<div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div>
+    </div>`).join("");
+
+  document.getElementById("disc-status").textContent = `${shown.length} shown of ${hosts.length}`;
+  const settingsRow = document.getElementById("disc-settings");
+  settingsRow.hidden = !canSettings;
+  if (canSettings && document.activeElement !== document.getElementById("disc-dns")) {
+    document.getElementById("disc-dns").value = meta.dns_servers || "";
+    document.getElementById("disc-alert").checked = meta.alert_new !== false;
+  }
+
+  const body = document.getElementById("disc-body");
+  body.innerHTML = shown.length === 0
+    ? `<tr><td class="empty" colspan="9">${hosts.length === 0
+        ? "no neighbour data yet — endpoints report it on their sensor interval"
+        : "nothing matches these filters"}</td></tr>`
+    : shown.map(h => {
+      const title = h.label || h.name || (h.managed ? h.hostname : "") || "—";
+      const sub = h.label && h.name ? h.name : "";
+      const status = h.managed
+        ? `<a href="/endpoint/${escapeHtml(h.agent_id)}"><span class="pill managed">${escapeHtml(h.hostname || "managed")}</span></a>`
+        : h.absent ? '<span class="pill quiet">gone quiet</span>' : '<span class="pill unmanaged">unmanaged</span>';
+      return `
+      <tr class="${h.ignored ? "ignored" : ""}">
+        <td><div class="dev-name">${escapeHtml(title)}</div>${sub ? `<div class="dev-sub">${escapeHtml(sub)}</div>` : ""}</td>
+        <td class="mono" data-sort="${escapeHtml(h.ip)}">${escapeHtml(h.ip)}</td>
+        <td class="mono">${escapeHtml(h.mac)}</td>
+        <td>${escapeHtml(h.vendor || "—")}</td>
+        <td class="seen" data-sort="${escapeHtml(h.seen_count)}" title="${escapeHtml((h.seen_by || []).join(", "))}">
+          ${escapeHtml(h.seen_count)} · ${escapeHtml((h.seen_by || []).slice(0, 2).join(", "))}${(h.seen_by || []).length > 2 ? ` +${escapeHtml(h.seen_by.length - 2)}` : ""}</td>
+        <td data-sort="${escapeHtml(h.first_seen || "")}">${h.first_seen ? fmtAgo(h.first_seen) : "—"}</td>
+        <td data-sort="${escapeHtml(h.last_seen || "")}">${fmtAgo(h.last_seen)}</td>
+        <td>${status}${h.new ? ' <span class="pill new">new</span>' : ""}${h.ignored ? ' <span class="pill quiet">ignored</span>' : ""}</td>
+        <td>${canLabel && h.first_seen ? `<div class="row-actions">
+          <button class="secondary" data-act="label" data-mac="${escapeHtml(h.mac)}">Label</button>
+          <button class="secondary" data-act="ignore" data-mac="${escapeHtml(h.mac)}">${h.ignored ? "Unignore" : "Ignore"}</button></div>` : ""}</td>
+      </tr>`;
+    }).join("");
+
+  const dt = initDataTable(body.closest("table"), { storageKey: "discover-hosts-v2" });
+  if (dt) dt.refresh();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy Agents — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .install-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .install-grid { grid-template-columns: 1fr; } }
+  .install-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; background: var(--surface-2); }
+  .install-card h3 { margin: 0 0 10px; font-size: 13px; }
+  pre.cmd {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 10px 12px; font-family: var(--mono); font-size: 12px; overflow-x: auto;
+    white-space: pre-wrap; word-break: break-all; margin: 0 0 8px;
+  }
+  button.copy { font-size: 12px; padding: 5px 10px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; margin-bottom: 14px; }
+  .form-grid .field { margin: 0; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px;
+  }
+  .form-grid textarea { min-height: 60px; font-family: var(--mono); font-size: var(--fs-meta); }
+  .row-actions { display: flex; gap: 8px; }
+  button.danger { background: var(--off-bg); color: var(--off); border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+  button.danger:hover { filter: brightness(1.1); }
+  .scan-status { font-size: 12px; color: var(--text-muted); }
+  /* A /24 can turn up dozens of hosts: the list runs the length of the page
+     rather than scrolling inside a box, and its rows stay compact so the
+     credential picker and the push button sit level. */
+  #scan .table-scroll { max-height: none; }
+  #scan-body td .select { min-height: 0; height: 28px; padding: 2px 8px; font-size: 12.5px; }
+  #scan-body td button.push-btn { width: auto; min-width: 84px; min-height: 0; height: 28px; padding: 0 12px; line-height: 26px; font-size: 12.5px; }
+  .hostkey-confirm { white-space: normal; font-family: var(--font); font-size: 13px; display: grid; gap: 6px; }
+  .hostkey-confirm p { margin: 0; color: var(--text-muted); }
+  .hostkey-confirm code { font-family: var(--mono); overflow-wrap: anywhere; }
+  .hostkey-confirm .hostkey-fp { color: var(--text); font-weight: 600; }
+  .hostkey-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .push-output { font-family: var(--mono); font-size: var(--fs-meta); white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; margin-top: 6px; max-height: 200px; overflow-y: auto; }
+  .install-note { font-size: var(--fs-meta); color: var(--text-muted); margin: 8px 0 0; line-height: 1.45; }
+  .admin-rights { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .admin-rights h3 { font-size: 13px; margin: 0 0 8px; }
+  .admin-rights p, .admin-rights li { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+  .admin-rights ul { margin: 8px 0 0; padding-left: 18px; }
+  .admin-rights li { margin-bottom: 10px; }
+  .admin-rights strong { color: var(--text); }
+  .admin-rights-actions { margin-top: 8px; }
+  .grant-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin: 10px 0 0; }
+  .grant-path { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 11px 13px; font-size: 12.5px; line-height: 1.55; }
+  .grant-path-h { font-weight: 600; color: var(--text); margin-bottom: 5px; }
+  .grant-path code { font-family: var(--mono); font-size: var(--fs-meta); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .grant-note { font-size: 12px; color: var(--text-muted); margin-top: 9px; }
+  .button-link { display: inline-block; text-decoration: none; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 12px; }
+  .button-link:hover { border-color: var(--accent); }
+  .sev-pill { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .sev-pill.none { background: var(--surface-2); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <h1 class="sr-only">Client Management</h1>
+
+    <div class="module-section" id="section-overview" hidden>
+      <div id="agents-quick-links"></div>
+
+      <div class="stat-tiles" id="fleet-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Agent version rollout</h2><span class="scan-status" id="rollout-status"></span></div>
+        <div class="readiness-bar" id="rollout-bar"></div>
+        <div class="readiness-legend" id="rollout-legend"></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Agents by version</div>
+          <div class="chart-sub">What's actually deployed, newest release first</div>
+          <div class="hbars" id="chart-versions"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Agents by platform</div>
+          <div class="chart-sub">The distribution the agent has to keep working on</div>
+          <div class="hbars" id="chart-platforms"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Agents by architecture</div>
+          <div class="chart-sub">Which binaries the build actually has to ship</div>
+          <div id="chart-arch"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Agents by site</div>
+          <div class="chart-sub">Where the fleet lives</div>
+          <div class="hbars" id="chart-sites"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Endpoints behind the current version</h2>
+          <div class="u-d-flex u-gap-8 u-ai-center">
+            <button id="update-all-btn">Update all online</button>
+            <span class="scan-status" id="outdated-status"></span>
+          </div>
+        </div>
+        <details class="hint u-fs-12 u-c-text-muted u-m-n8-0-8">
+          <summary class="u-cur-pointer">How updates work</summary>
+          The endpoint downloads the new build and checks it against this deployment's update signing key, which it
+          pinned when it enrolled; it refuses anything unsigned, altered or older. If the new build does not start
+          and reach the console, the endpoint puts the previous one back. The stored identity survives, so it stays
+          the same machine with the same history. The endpoint drops off for a moment while the agent restarts, and
+          the version here updates when it comes back. An endpoint that is offline, or on an agent too old to have
+          been asked this way, has to be reached some other way.
+        </details>
+        <div class="table-scroll table-scroll-y rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Hostname</th><th>Version</th><th>OS</th><th>Platform</th><th>Site</th><th>IP</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="outdated-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Moved from Administration > About, which also drew a second copy of
+           the version chart above. -->
+      <div class="panel">
+        <div class="panel-header"><h2>Agent version history</h2><span class="scan-status" id="agent-history-note"></span></div>
+        <p class="hint">Every version transition across the fleet, newest first — what a rollout looks like while it's happening.</p>
+        <div class="table-scroll table-scroll-y u-maxh-300">
+          <table>
+            <thead><tr><th>When</th><th>Device</th><th>Version</th></tr></thead>
+            <tbody id="agent-history-body"><tr><td class="empty" colspan="3">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-install" hidden>
+    <div class="panel" id="install">
+      <h2>Manual install</h2>
+      <p class="u-fs-12 u-c-text-muted u-mt-n4">
+        A new endpoint enrolls with an <strong>enrollment token</strong>: it presents the token once, receives a
+        credential of its own, and the token is spent. The installer carries no shared password, and refuses to
+        install a new endpoint without a token. A token is shown once; create one per rollout, with as many uses as
+        machines you are about to install.
+      </p>
+      <div class="form-grid">
+        <div class="field"><label for="enroll-label">Label</label><input id="enroll-label" placeholder="what this token is for"></div>
+        <div class="field"><label for="enroll-site">Site</label><input id="enroll-site" placeholder="default"></div>
+        <div class="field"><label for="enroll-uses">Uses</label><input id="enroll-uses" type="number" min="1" max="1000" value="1"></div>
+        <div class="field"><label for="enroll-hours">Expires after (hours)</label><input id="enroll-hours" type="number" min="1" max="720" value="24"></div>
+        <div class="field"><button class="primary" id="enroll-create">Create enrollment token</button></div>
+      </div>
+      <div class="form-error" id="enroll-error" hidden></div>
+      <div id="enroll-result" hidden>
+        <p class="install-note">This token is shown once. It is in the commands below; anyone holding them can enroll
+          <span id="enroll-result-uses"></span> endpoint(s) until <span id="enroll-result-expires"></span>.</p>
+        <div class="install-grid">
+          <div class="install-card">
+            <h3>Linux and macOS</h3>
+            <pre class="cmd" id="cmd-unix"></pre>
+            <button class="secondary copy" data-target="cmd-unix">Copy</button>
+            <p class="install-note">Linux: a root systemd unit, or an OpenRC service. macOS: a root LaunchDaemon, and <strong>Mustra Self Service</strong> in /Applications.</p>
+          </div>
+          <div class="install-card">
+            <h3>Alpine Linux <span class="u-fwt-400 u-c-text-muted">(as root)</span></h3>
+            <pre class="cmd" id="cmd-alpine"></pre>
+            <button class="secondary copy" data-target="cmd-alpine">Copy</button>
+            <p class="install-note">Adds <code>bash</code> and <code>curl</code>, which a minimal Alpine lacks, then installs the agent as an OpenRC service.</p>
+          </div>
+          <div class="install-card">
+            <h3>Windows <span class="u-fwt-400 u-c-text-muted">(elevated PowerShell)</span></h3>
+            <pre class="cmd" id="cmd-windows"></pre>
+            <button class="secondary copy" data-target="cmd-windows">Copy</button>
+            <p class="install-note">Installs the agent as a LocalSystem service, adds <strong>Mustra Self Service</strong> to the Start Menu and Desktop, and registers an uninstaller.</p>
+          </div>
+        </div>
+      </div>
+      <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Enrollment tokens</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Label</th><th>Site</th><th>Uses</th><th>Expires</th><th>Created by</th><th>State</th><th>Action</th></tr></thead>
+          <tbody id="enroll-tokens-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+        </table>
+      </div>
+      <!-- Shown only when there is something in it: endpoints from before
+           per-agent credentials, which this server no longer accepts. -->
+      <div id="reenroll-wrap" hidden>
+      <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Endpoints that need re-enrollment</h3>
+      <p class="u-fs-12 u-c-text-muted u-mt-n4">
+        These enrolled with the old shared credential, which this server no longer accepts, so they cannot connect.
+        Reinstall each one with an enrollment token.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Hostname</th><th>Agent ID</th><th>Last seen on the shared credential</th></tr></thead>
+          <tbody id="reenroll-body"></tbody>
+        </table>
+      </div>
+      </div>
+
+      <div class="admin-rights">
+        <h3>Administrative rights</h3>
+        <p>
+          The agent needs full rights on an endpoint — it installs and removes software, reads every process and
+          service, and manages system services — so it runs as a root systemd unit or OpenRC service, a root LaunchDaemon, or a
+          LocalSystem Windows service. All three installers refuse to run unprivileged rather than half-installing.
+        </p>
+        <p>
+          Two platforms need something beyond that, and each endpoint measures and reports its own gaps under the
+          <strong>Privileges</strong> tab:
+        </p>
+        <ul>
+          <li>
+            <strong>macOS</strong> gates parts of the filesystem behind TCC, which root does not bypass. Full Disk
+            Access closes the gap, and there are exactly two ways to grant it.
+            <div class="grant-paths">
+              <div class="grant-path">
+                <div class="grant-path-h">By hand — right for a handful of Macs</div>
+                System Settings → Privacy &amp; Security → Full Disk Access → <strong>+</strong> → press
+                <strong>Cmd+Shift+G</strong>, enter <code>/opt/mustra-agent</code>, choose <code>mustra-agent</code>.
+                Takes about thirty seconds and needs no infrastructure.
+              </div>
+              <div class="grant-path">
+                <div class="grant-path-h">By MDM — right once there are enough Macs to matter</div>
+                Push the profile below through the MDM the Mac is enrolled in. Apple honours a TCC payload
+                <em>only</em> from an enrolled MDM — installing this file by double-clicking it will not work, by
+                design. Manual enrolment counts, as long as the user approves it.
+                <div class="admin-rights-actions">
+                  <a class="secondary button-link" href="/install/full-disk-access.mobileconfig" download>Download PPPC profile</a>
+                </div>
+              </div>
+            </div>
+            <div class="grant-note">
+              Each endpoint reports which of these applies under its own <strong>Privileges</strong> tab — an
+              unenrolled Mac is told to grant it by hand rather than pointed at a profile it can't use.
+            </div>
+          </li>
+          <li>
+            <strong>Windows</strong> hands a LocalSystem token privileges that arrive <em>disabled</em> —
+            SeDebugPrivilege, SeBackupPrivilege and the rest do nothing until a process enables them. The agent
+            enables them at startup and reports any the token doesn't hold.
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    </div>
+
+    <div class="module-section" id="section-vault" hidden>
+    <div class="panel" id="vault">
+      <div class="panel-header"><h2>Credential vault</h2></div>
+      <div id="vault-disabled-notice" class="form-error" hidden>
+        The credential vault isn't configured on the server (MUSTRA_CREDENTIAL_ENCRYPTION_KEY is unset) — scan-and-push deploy is unavailable, but manual install above still works.
+      </div>
+      <div id="vault-section">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Username</th><th>Type</th><th>Created</th><th>By</th><th>Action</th></tr></thead>
+            <tbody id="creds-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="push-output" id="pubkey-box" hidden></div>
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Add credential</h3>
+        <div class="form-grid">
+          <div class="field"><label for="cred-name">Name</label><input id="cred-name" placeholder="root key for the lab"></div>
+          <div class="field"><label for="cred-username">Username</label><input id="cred-username" placeholder="root"></div>
+          <div class="field"><label for="cred-type">Type</label>
+            <select id="cred-type">
+              <option value="password">Password</option>
+              <option value="private_key">Private key (PEM)</option>
+            </select>
+          </div>
+          <div class="field u-gc-full">
+            <label for="cred-secret">Secret</label>
+            <textarea id="cred-secret" placeholder="password, or paste PEM private key"></textarea>
+            <div class="u-mt-6 u-fs-12 u-c-text-muted">
+              or upload a key file: <input type="file" id="cred-secret-file" aria-label="Key file" class="u-fs-12">
+            </div>
+          </div>
+          <div class="field" id="cred-passphrase-field" hidden>
+            <label for="cred-passphrase">Key passphrase</label>
+            <input type="password" id="cred-passphrase" placeholder="leave blank if the key has none">
+          </div>
+          <div class="field"><button class="primary" id="cred-add">Add credential</button></div>
+        </div>
+      </div>
+    </div>
+
+    </div>
+
+    <div class="module-section" id="section-scan" hidden>
+    <div class="panel" id="scan">
+      <h2>Network scan &amp; push</h2>
+      <div class="query-row">
+        <input class="search-input u-w-180" id="scan-cidr" aria-label="Network range to scan (CIDR)" placeholder="10.0.0.0/24">
+        <button class="primary" id="scan-btn">Scan for SSH hosts</button>
+        <button class="secondary u-w-auto" id="autoscan-btn">Auto scan</button>
+        <select class="select" id="scan-site" aria-label="Site for discovered hosts"><option value="default">site: default</option></select>
+        <span class="scan-status" id="scan-status"></span>
+        <button class="tiny" id="scan-select-missing" type="button" hidden>Select hosts without an agent</button>
+      </div>
+      <p class="install-note u-m-n6-0-12">New devices on the network are announced by <a href="/discover">Discover</a> as they appear; this scan finds the ones with SSH open to push to.</p>
+      <div class="query-row" id="scan-bulk-row" hidden>
+        <span class="u-fs-12 u-c-text-muted"><span id="scan-selected-count">0</span> selected</span>
+        <select class="select" id="scan-bulk-cred" aria-label="Credential for selected hosts"></select>
+        <button class="secondary u-w-auto" id="scan-bulk-apply-cred">Apply credential to selected</button>
+        <button class="primary u-w-auto" id="scan-deploy-selected">Deploy selected</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th><input type="checkbox" id="scan-select-all" aria-label="Select all discovered hosts"></th><th class="dt-sortable" data-scan-sort="ip">IP <span class="dt-sort-arrow"></span></th><th class="dt-sortable" data-scan-sort="hostname">Hostname <span class="dt-sort-arrow"></span></th><th class="dt-sortable" data-scan-sort="agent">Agent <span class="dt-sort-arrow"></span></th><th>Credential</th><th>Action</th></tr></thead>
+          <tbody id="scan-body"><tr><td class="empty" colspan="6">no scan run yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    </div>
+
+    <div class="module-section" id="section-deployments" hidden>
+    <div id="deployments"></div>
+    </div>
+
+    <div class="module-section" id="section-status" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Client status</h2><div class="u-d-flex u-gap-8 u-ai-center"><span class="scan-status" id="cs-status"></span><button class="tiny" id="cs-export-csv">Export CSV</button><button class="tiny" id="cs-export-json">Export JSON</button></div></div>
+        <p class="hint">Every client's registration and connectivity: identity, addresses, version, when it registered, when it last spoke, which profile governs it and whether it runs that profile's settings. Select clients to act on them.</p>
+        <div class="query-row" id="cs-bulk" hidden>
+          <span class="u-fs-12 u-c-text-muted"><span id="cs-selected">0</span> selected</span>
+          <button class="tiny" id="cs-update">Update agent</button>
+          <button class="tiny" id="cs-push">Push profile now</button>
+          <span class="scan-status" id="cs-action-status"></span>
+        </div>
+        <div class="table-scroll table-scroll-y">
+          <table>
+            <thead><tr><th><input type="checkbox" id="cs-all" aria-label="Select all endpoints"></th><th>Hostname</th><th>Agent ID</th><th>IPs</th><th>Platform</th><th>Version</th><th>Registered</th><th>Last heartbeat</th><th>Last facts</th><th>Transport</th><th>Profile</th><th>Ring</th><th>Settings</th></tr></thead>
+            <tbody id="cs-body"><tr><td class="empty" colspan="13">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-health" hidden>
+      <div class="stat-tiles" id="ch-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Client health</h2><div class="u-d-flex u-gap-8 u-ai-center"><select id="ch-group"><option value="">every group</option></select><button class="tiny" id="ch-refresh">Refresh</button></div></div>
+        <p class="hint">Named checks on the agent itself: offline, behind the served version, facts stale, a core sensor missing or stale, patch scan stale. <b>Drift</b> is a setting the client is not running with despite its profile. Upgrade rings come from profiles: ring 1 first, ring 0 is the deferral ring a roll never reaches on its own.</p>
+        <div class="chart-grid">
+          <div class="chart-card"><div class="chart-title">Agents by version</div><div class="chart-sub">Served version first</div><div class="hbars" id="ch-versions"></div></div>
+          <div class="chart-card"><div class="chart-title">Check failures</div><div class="chart-sub">How many clients fail each check</div><div class="hbars" id="ch-checks"></div></div>
+          <div class="chart-card"><div class="chart-title">Upgrade rings</div><div class="chart-sub">Behind the served version, per ring</div><div id="ch-rings"></div></div>
+        </div>
+        <div class="table-scroll table-scroll-y">
+          <table>
+            <thead><tr><th>Hostname</th><th>Version</th><th>Profile</th><th>Ring</th><th>Checks</th><th>Drift</th></tr></thead>
+            <tbody id="ch-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-profiles" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Client configuration profiles</h2><div class="u-d-flex u-gap-8 u-ai-center"><span class="scan-status" id="cp-status"></span><button class="tiny" id="cp-apply">Apply all now</button></div></div>
+        <p class="hint">Settings pushed to the agents in a group: sensor interval, log level, and a random delay that spreads reports across the interval. Where several profiles cover an endpoint the highest priority wins. Profiles are re-applied every five minutes, so an agent that restarts with old flags converges. Agents older than 0.47.0 do not take profiles and show as drifted. A setting left at 0 or blank is left alone on the endpoint.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Priority</th><th>Covers</th><th>Settings</th><th>Ring</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="cp-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="cp-editor-title">New profile</h2>
+        <div class="form-grid">
+          <div class="field"><label for="cp-name">Name</label><input id="cp-name" placeholder="Servers"></div>
+          <div class="field"><label for="cp-priority">Priority (higher wins)</label><input id="cp-priority" type="number" value="0"></div>
+          <div class="field"><label for="cp-groups">Groups (none = every endpoint)</label><select id="cp-groups" multiple size="4"></select></div>
+          <div class="field"><label for="cp-desc">Description</label><input id="cp-desc" placeholder="optional"></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="cp-interval">Sensor interval (seconds; 0 = leave alone)</label><input id="cp-interval" type="number" min="0" max="86400" value="0"></div>
+          <div class="field"><label for="cp-loglevel">Log level</label><select id="cp-loglevel"><option value="">leave alone</option><option value="debug">debug</option><option value="info">info</option><option value="warn">warn</option><option value="error">error</option></select></div>
+          <div class="field"><label for="cp-delay">Random delay (seconds; 0 = none)</label><input id="cp-delay" type="number" min="0" max="3600" value="0"></div>
+          <div class="field"><label for="cp-ring">Upgrade ring</label><select id="cp-ring"><option value="1">1 — first</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="0">0 — deferral (never rolled automatically)</option></select></div>
+        </div>
+        <div class="checks"><label><input type="checkbox" id="cp-enabled" checked> Enabled</label></div>
+        <div class="panel-actions">
+          <button class="primary" id="cp-save">Save profile</button>
+          <button id="cp-cancel">Cancel</button>
+          <span class="scan-status" id="cp-save-status"></span>
+        </div>
+      </div>
+    </div>
+    <div class="module-section" id="section-lifecycle" hidden>
+      <div class="stat-tiles" id="lc-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Asset lifecycle</h2><span class="scan-status" id="lc-status"></span></div>
+        <p class="hint">
+          Make, model, serial number and firmware date come from each endpoint (the Hardware sensor; containers report
+          none, virtual machines are marked virtual). Purchase date, warranty end, owner, state, location and cost are
+          asset attributes you keep — edit them on an endpoint's Attributes tab, or create all of them at once below. Age
+          counts from the purchase date, else from the firmware date. A warranty ending within 30 days notifies once.
+        </p>
+        <div class="row-actions u-mb-10 u-d-flex u-gap-10 u-ai-center u-fw-wrap">
+          <button class="tiny go" id="lc-preset" hidden>Add lifecycle fields</button>
+          <label class="u-fs-12 u-c-text-muted"><input type="checkbox" id="lc-physical" checked> physical machines only</label>
+          <a href="/api/lifecycle.csv">Export CSV</a>
+          <span class="hint u-m-0" id="lc-msg"></span>
+        </div>
+        <div class="table-scroll rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Endpoint</th><th>Make and model</th><th>Serial</th><th>Type</th><th>Age</th><th>Warranty</th><th>Owner</th><th>State</th><th>Location</th></tr></thead>
+            <tbody id="lc-body"><tr><td class="empty" colspan="9">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-assets" hidden>
+      <div class="stat-tiles" id="as-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Retention</h2><span class="scan-status" id="as-ret-status"></span></div>
+        <p class="hint">
+          An endpoint that stops answering is <b>retired</b>, not deleted: the row and everything recorded about it stay,
+          <b>managed</b> goes false, and Last Seen says when it was last true. What a decommissioned machine was running is
+          exactly the question somebody asks months later. An endpoint that registers or heartbeats again comes back on its
+          own, with its history. Target retired ones in a computer group with <code>managed equals false</code>.
+        </p>
+        <div class="form-grid u-maxw-520">
+          <div class="field"><label for="as-purge">Delete retired endpoints after (days; 0 = never)</label><input id="as-purge" type="number" min="0" value="0"></div>
+          <div class="field u-as-end"><button class="tiny go" id="as-purge-save">Save</button></div>
+        </div>
+        <div class="hint" id="as-purge-msg"></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>OS</th><th>Last seen</th><th>Retired</th><th>Why</th><th>Action</th></tr></thead>
+            <tbody id="as-retired-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Attributes</h2><span class="scan-status" id="as-attr-status"></span></div>
+        <p class="hint">
+          What you know about an endpoint that no sensor can report — owner, cost centre, location, whether it may be
+          rebooted in the day. Each one becomes a targeting key: an attribute named <code>owner</code> is
+          <code>attr.owner</code> in a computer-group rule, and a column named <code>attr_owner</code> in exports and
+          reports, so a report can be grouped by it. A name cannot be changed after it is created, because every group
+          targeting it would break silently.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Label</th><th>Kind</th><th>Options</th><th>Set on</th><th>Action</th></tr></thead>
+            <tbody id="as-attr-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="as-attr-title">New attribute</h2>
+        <div class="form-grid">
+          <div class="field"><label for="a-name">Name (targeting key)</label><input id="a-name" placeholder="owner"></div>
+          <div class="field"><label for="a-label">Label</label><input id="a-label" placeholder="Owner"></div>
+          <div class="field"><label for="a-kind">Kind</label><select id="a-kind">
+            <option value="text">text</option><option value="number">number</option><option value="date">date</option>
+            <option value="boolean">boolean</option><option value="select">select</option></select></div>
+          <div class="field"><label for="a-options">Options (select only, one per line)</label><textarea id="a-options" rows="3"></textarea></div>
+          <div class="field u-gc-full"><label for="a-desc">Description</label><input id="a-desc" placeholder="optional"></div>
+        </div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="a-save">Save attribute</button><button class="tiny" id="a-cancel">Cancel</button></div>
+        <div class="hint u-mt-8" id="a-error"></div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script src="/static/deployments.js"></script>
+<script>
+// Enrollment tokens and re-enrollment state (see internal/server/enroll_tokens.go).
+// The one-liners come from the server, built from the configured public URL,
+// never from this page's own location.
+function fmtWhen(iso) { return iso ? new Date(iso).toLocaleString() : "—"; }
+
+async function loadEnrollTokens() {
+  const body = document.getElementById("enroll-tokens-body");
+  const resp = await fetch("/api/enrollment-tokens");
+  if (!resp.ok) { body.innerHTML = `<tr><td class="empty" colspan="7">${escapeHtml(resp.status === 403 ? "needs deploy.manage" : "could not load tokens")}</td></tr>`; return; }
+  const { tokens } = await resp.json();
+  if (!tokens.length) { body.innerHTML = `<tr><td class="empty" colspan="7">no tokens yet</td></tr>`; return; }
+  body.innerHTML = tokens.map(t => {
+    const state = t.revoked_at ? "revoked" : (t.usable ? "active" : (t.uses >= t.max_uses ? "used up" : "expired"));
+    return `<tr><td>${escapeHtml(t.label || t.id)}</td><td>${escapeHtml(t.site || "—")}</td>
+      <td>${escapeHtml(String(t.uses))} / ${escapeHtml(String(t.max_uses))}</td><td>${escapeHtml(fmtWhen(t.expires_at))}</td>
+      <td>${escapeHtml(t.created_by || "")}</td><td>${escapeHtml(state)}</td>
+      <td>${t.usable ? `<button class="secondary" data-revoke-token="${escapeHtml(t.id)}">Revoke</button>` : ""}</td></tr>`;
+  }).join("");
+  body.querySelectorAll("[data-revoke-token]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Revoke this enrollment token? Endpoints that already enrolled with it are not affected.")) return;
+    btn.disabled = true;
+    await fetch("/api/enrollment-tokens/" + encodeURIComponent(btn.dataset.revokeToken), { method: "DELETE" });
+    loadEnrollTokens();
+  }));
+}
+
+async function loadReenroll() {
+  const body = document.getElementById("reenroll-body");
+  const resp = await fetch("/api/agent-identities");
+  if (!resp.ok) return;
+  const { agents } = await resp.json();
+  const legacy = agents.filter(a => !a.enrolled);
+  document.getElementById("reenroll-wrap").hidden = !legacy.length;
+  body.innerHTML = legacy.length ? legacy.map(a => `<tr><td>${escapeHtml(a.hostname)}${a.revoked_at ? ` <em>(credential revoked ${escapeHtml(fmtWhen(a.revoked_at))}; re-enroll with a token)</em>` : ""}</td><td><code>${escapeHtml(a.agent_id)}</code></td>
+      <td>${escapeHtml(fmtWhen(a.legacy_seen_at))}</td></tr>`).join("")
+    : `<tr><td class="empty" colspan="3">every endpoint has its own credential</td></tr>`;
+}
+
+document.getElementById("enroll-create").addEventListener("click", async () => {
+  const err = document.getElementById("enroll-error");
+  err.hidden = true;
+  const payload = {
+    label: document.getElementById("enroll-label").value.trim(),
+    site: document.getElementById("enroll-site").value.trim(),
+    max_uses: parseInt(document.getElementById("enroll-uses").value, 10) || 1,
+    expires_hours: parseFloat(document.getElementById("enroll-hours").value) || 24,
+  };
+  const resp = await fetch("/api/enrollment-tokens", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!resp.ok) { err.textContent = await resp.text(); err.hidden = false; return; }
+  const data = await resp.json();
+  if (!data.commands) {
+    err.textContent = "Token created, but no install command could be built: " + (data.commands_error || "the public URL is not set");
+    err.hidden = false;
+  } else {
+    document.getElementById("cmd-unix").textContent = data.commands.unix;
+    document.getElementById("cmd-windows").textContent = data.commands.windows;
+    document.getElementById("cmd-alpine").textContent = data.commands.alpine || data.commands.unix;
+    document.getElementById("enroll-result-uses").textContent = String(data.record.max_uses);
+    document.getElementById("enroll-result-expires").textContent = fmtWhen(data.record.expires_at);
+    document.getElementById("enroll-result").hidden = false;
+  }
+  loadEnrollTokens();
+});
+loadEnrollTokens();
+loadReenroll();
+document.querySelectorAll("button.copy").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const text = document.getElementById(btn.dataset.target).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent; btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+  });
+});
+
+let credentials = [];
+
+async function loadCredentials() {
+  const resp = await fetch("/api/deploy/credentials");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (resp.status === 503) {
+    document.getElementById("vault-disabled-notice").style.display = "block";
+    document.getElementById("vault-section").style.display = "none";
+    return;
+  }
+  const data = await resp.json();
+  credentials = data.credentials || [];
+  renderCredentials();
+  renderScanCredentialOptions();
+}
+
+function renderCredentials() {
+  const body = document.getElementById("creds-body");
+  if (credentials.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no credentials stored</td></tr>';
+    return;
+  }
+  body.innerHTML = credentials.map(c => `
+    <tr>
+      <td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.username)}</td><td>${escapeHtml(c.auth_type)}</td>
+      <td>${fmtAgo(c.created_at)}</td><td>${escapeHtml(c.created_by || "—")}</td>
+      <td class="row-actions">
+        ${c.auth_type === "private_key" ? `<button class="secondary u-w-auto u-p-6-10 u-fs-12" data-pubkey="${escapeHtml(c.id)}">Public key</button>` : ""}
+        <button class="danger" data-id="${escapeHtml(c.id)}">Delete</button>
+      </td>
+    </tr>
+  `).join("");
+  body.querySelectorAll("[data-pubkey]").forEach(btn => btn.addEventListener("click", async () => {
+    const resp = await fetch(`/api/deploy/credentials/${btn.dataset.pubkey}/public-key`);
+    const box = document.getElementById("pubkey-box");
+    if (!resp.ok) { box.style.display = "block"; box.textContent = "couldn\'t derive a public key: " + await resp.text(); return; }
+    const { public_key } = await resp.json();
+    box.style.display = "block";
+    box.innerHTML = `<div class="u-mb-6 u-c-text-muted">Add this line to <code>~/.ssh/authorized_keys</code> on any host that rejects this key:</div><code class="u-ow-anywhere">${escapeHtml(public_key)}</code>`;
+  }));
+  body.querySelectorAll("button.danger").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this credential? Any host you deployed with it stays as-is; you just won't be able to push with it again.")) return;
+      await fetch(`/api/deploy/credentials/${btn.dataset.id}`, { method: "DELETE" });
+      loadCredentials();
+    });
+  });
+  const dt = initDataTable(body.closest("table"), { storageKey: "deploy-credentials" });
+  if (dt) dt.refresh();
+}
+
+// Uploading a key file just reads its text into the same secret field the
+// textarea uses — no separate upload endpoint needed, since a private key
+// is plain text and the vault API already accepts it as a JSON string.
+document.getElementById("cred-secret-file").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById("cred-secret").value = reader.result;
+    document.getElementById("cred-type").value = "private_key";
+    syncPassphraseField();
+  };
+  reader.readAsText(file);
+});
+
+function syncPassphraseField() {
+  document.getElementById("cred-passphrase-field").hidden =
+    document.getElementById("cred-type").value !== "private_key";
+}
+document.getElementById("cred-type").addEventListener("change", syncPassphraseField);
+syncPassphraseField();
+
+document.getElementById("cred-add").addEventListener("click", async () => {
+  const name = document.getElementById("cred-name").value.trim();
+  const username = document.getElementById("cred-username").value.trim();
+  const auth_type = document.getElementById("cred-type").value;
+  const secret = document.getElementById("cred-secret").value;
+  const passphrase = document.getElementById("cred-passphrase").value;
+  if (!name || !username || !secret) { alert("name, username, and secret are all required"); return; }
+  const resp = await fetch("/api/deploy/credentials", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, username, auth_type, secret, passphrase }),
+  });
+  if (!resp.ok) { alert("failed: " + await resp.text()); return; }
+  document.getElementById("cred-name").value = "";
+  document.getElementById("cred-username").value = "";
+  document.getElementById("cred-secret").value = "";
+  document.getElementById("cred-secret-file").value = "";
+  document.getElementById("cred-passphrase").value = "";
+  loadCredentials();
+});
+
+let scanResults = [];
+
+async function runScan(url, body, btn) {
+  const status = document.getElementById("scan-status");
+  const otherBtn = btn === document.getElementById("scan-btn") ? document.getElementById("autoscan-btn") : document.getElementById("scan-btn");
+  btn.disabled = true;
+  otherBtn.disabled = true;
+  status.textContent = "scanning…";
+  try {
+    const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    if (data.cidr) document.getElementById("scan-cidr").value = data.cidr;
+    scanResults = data.results || [];
+    sortScanResults();
+    status.textContent = `found ${scanResults.length} host(s) with SSH open` + (data.cidr ? ` in ${data.cidr}` : "");
+    renderScanResults();
+  } catch (e) {
+    status.textContent = "scan failed: " + e.message;
+  } finally {
+    btn.disabled = false;
+    otherBtn.disabled = false;
+  }
+}
+
+document.getElementById("scan-btn").addEventListener("click", () => {
+  const cidr = document.getElementById("scan-cidr").value.trim();
+  if (!cidr) { alert("enter a CIDR, e.g. 10.0.0.0/24"); return; }
+  runScan("/api/deploy/scan", { cidr }, document.getElementById("scan-btn"));
+});
+
+document.getElementById("autoscan-btn").addEventListener("click", () => {
+  runScan("/api/deploy/autoscan", {}, document.getElementById("autoscan-btn"));
+});
+
+// Scan results sort by IP (numerically, so .9 comes before .10), hostname
+// or agent state. The table can't use initDataTable: every host row has an
+// output row under it that a generic row sort would separate from it.
+let scanSort = { key: "ip", dir: 1 };
+let pushesInFlight = 0;
+
+function ipSortKey(ip) {
+  const parts = String(ip || "").split(".").map(n => parseInt(n, 10));
+  return parts.length === 4 && parts.every(n => n >= 0) ? parts.reduce((acc, n) => acc * 256 + n, 0) : Infinity;
+}
+
+function scanSortValue(h) {
+  switch (scanSort.key) {
+    case "hostname": return (h.hostname || "").toLowerCase();
+    // Not installed first when ascending: those are the rows you act on.
+    case "agent": return h.agent_installed ? "1 " + (h.agent_version || "") : "0";
+    default: return ipSortKey(h.ip);
+  }
+}
+
+function sortScanResults() {
+  const blankLast = h => scanSort.key === "hostname" && !h.hostname;
+  scanResults.sort((a, b) => {
+    if (blankLast(a) !== blankLast(b)) return blankLast(a) ? 1 : -1;
+    const x = scanSortValue(a), y = scanSortValue(b);
+    const c = typeof x === "number" ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true });
+    return (c || ipSortKey(a.ip) - ipSortKey(b.ip)) * scanSort.dir;
+  });
+  document.querySelectorAll("th[data-scan-sort]").forEach(th => {
+    th.querySelector(".dt-sort-arrow").textContent = th.dataset.scanSort === scanSort.key ? (scanSort.dir > 0 ? "▲" : "▼") : "";
+  });
+}
+
+document.querySelectorAll("th[data-scan-sort]").forEach(th => th.addEventListener("click", () => {
+  // A push holds a reference to its row's output box; re-rendering under it
+  // would drop the result on the floor.
+  if (pushesInFlight > 0) return;
+  const key = th.dataset.scanSort;
+  scanSort = { key, dir: scanSort.key === key ? -scanSort.dir : 1 };
+  // What the operator has already set per row is kept by IP across the
+  // re-render: the credential picked, the tick, and any push output.
+  const kept = new Map(scanResults.map((h, i) => [h.ip, {
+    cred: (document.getElementById(`scan-cred-${i}`) || {}).value,
+    checked: !!(document.querySelector(`.scan-row-check[data-idx="${i}"]`) || {}).checked,
+    output: (document.getElementById(`scan-output-row-${i}`) || { style: {} }).style.display === "table-row"
+      ? document.getElementById(`scan-output-${i}`).textContent : null,
+  }]));
+  sortScanResults();
+  renderScanResults();
+  scanResults.forEach((h, i) => {
+    const k = kept.get(h.ip);
+    if (!k) return;
+    const sel = document.getElementById(`scan-cred-${i}`);
+    if (sel && k.cred) sel.value = k.cred;
+    const cb = document.querySelector(`.scan-row-check[data-idx="${i}"]`);
+    if (cb) cb.checked = k.checked;
+    if (k.output != null) {
+      document.getElementById(`scan-output-row-${i}`).style.display = "table-row";
+      document.getElementById(`scan-output-${i}`).textContent = k.output;
+    }
+  });
+  syncBulkRow();
+}));
+
+// No credential is preselected: a push runs the installer as root with
+// whichever account is chosen, so the operator picks one on purpose rather
+// than inheriting the first in the vault.
+function renderScanCredentialOptions() {
+  return `<option value="" selected>Select one…</option>` + credentials.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("");
+}
+
+function renderScanResults() {
+  const body = document.getElementById("scan-body");
+  if (scanResults.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no hosts with SSH open found in that range</td></tr>';
+    syncBulkRow();
+    return;
+  }
+  body.innerHTML = scanResults.map((h, i) => `
+    <tr>
+      <td><input type="checkbox" class="scan-row-check" data-idx="${i}" aria-label="Select host"></td>
+      <td>${escapeHtml(h.ip)}</td><td>${escapeHtml(h.hostname || "—")}</td>
+      <td>${h.agent_installed
+          ? `<span class="sev-pill u-bg-ok-bg u-c-ok">installed · v${escapeHtml(h.agent_version || "?")}</span>`
+          : `<span class="sev-pill none">not installed</span>`}</td>
+      <td><select class="select" id="scan-cred-${i}" aria-label="Credential for this host">${renderScanCredentialOptions()}</select></td>
+      <td><button class="${h.agent_installed ? "secondary" : "primary"} push-btn" data-ip="${escapeHtml(h.ip)}" data-idx="${i}">${h.agent_installed ? "Redeploy" : "Deploy"}</button></td>
+    </tr>
+    <tr id="scan-output-row-${i}" hidden><td colspan="6"><div class="push-output" id="scan-output-${i}"></div></td></tr>
+  `).join("");
+  body.querySelectorAll(".push-btn").forEach(btn => {
+    btn.addEventListener("click", () => pushToHost(btn.dataset.ip, btn.dataset.idx, btn));
+  });
+  body.querySelectorAll(".scan-row-check").forEach(cb => cb.addEventListener("change", syncBulkRow));
+  document.getElementById("scan-select-all").checked = false;
+  document.getElementById("scan-bulk-cred").innerHTML = renderScanCredentialOptions();
+  // The credential last applied on this network is offered again in the
+  // bulk picker. Only there: rows still take it by a deliberate Apply.
+  const remembered = rememberedScanCredential();
+  if (remembered && credentials.some(c => c.id === remembered)) document.getElementById("scan-bulk-cred").value = remembered;
+  document.getElementById("scan-select-missing").hidden = !scanResults.some(h => !h.agent_installed);
+  syncBulkRow();
+}
+
+// The network a credential is remembered for: the range scanned.
+function scanNetworkKey() {
+  return "mustra-scan-cred:" + (document.getElementById("scan-cidr").value.trim() || "auto");
+}
+function rememberedScanCredential() {
+  try { return localStorage.getItem(scanNetworkKey()) || ""; } catch (e) { return ""; }
+}
+
+document.getElementById("scan-select-missing").addEventListener("click", () => {
+  document.querySelectorAll(".scan-row-check").forEach(cb => {
+    cb.checked = !scanResults[parseInt(cb.dataset.idx, 10)].agent_installed;
+  });
+  syncBulkRow();
+});
+
+function selectedScanIndexes() {
+  return [...document.querySelectorAll(".scan-row-check:checked")].map(cb => parseInt(cb.dataset.idx, 10));
+}
+
+function syncBulkRow() {
+  const selected = selectedScanIndexes();
+  document.getElementById("scan-bulk-row").hidden = selected.length === 0;
+  document.getElementById("scan-selected-count").textContent = String(selected.length);
+}
+
+document.getElementById("scan-select-all").addEventListener("change", (e) => {
+  document.querySelectorAll(".scan-row-check").forEach(cb => { cb.checked = e.target.checked; });
+  syncBulkRow();
+});
+
+document.getElementById("scan-bulk-apply-cred").addEventListener("click", () => {
+  const credentialId = document.getElementById("scan-bulk-cred").value;
+  if (!credentialId) { alert(credentials.length ? "select a credential first" : "add a credential first"); return; }
+  try { localStorage.setItem(scanNetworkKey(), credentialId); } catch (e) {}
+  selectedScanIndexes().forEach(idx => {
+    const sel = document.getElementById(`scan-cred-${idx}`);
+    if (sel) sel.value = credentialId;
+  });
+});
+
+document.getElementById("scan-deploy-selected").addEventListener("click", async () => {
+  const indexes = selectedScanIndexes();
+  if (indexes.length === 0) return;
+  const missing = indexes.filter(idx => !document.getElementById(`scan-cred-${idx}`)?.value)
+    .map(idx => scanResults[idx].ip);
+  if (missing.length) { alert(`select a credential for: ${missing.join(", ")}`); return; }
+  if (!confirm(`Deploy the agent to ${indexes.length} selected host(s)? Each uses its own row's credential selection.`)) return;
+  const btn = document.getElementById("scan-deploy-selected");
+  btn.disabled = true;
+  try {
+    await Promise.all(indexes.map(idx => {
+      const pushBtn = document.querySelector(`.push-btn[data-idx="${idx}"]`);
+      return pushToHost(scanResults[idx].ip, idx, pushBtn);
+    }));
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function pushToHost(ip, idx, btn, hostKeyFingerprint) {
+  const host = scanResults[idx] || {};
+  const credSelect = document.getElementById(`scan-cred-${idx}`);
+  const credential_id = credSelect ? credSelect.value : "";
+  if (!credential_id) {
+    alert(credentials.length ? `select a credential for ${ip} first` : `add a credential first (host ${ip})`);
+    return;
+  }
+  const site = document.getElementById("scan-site").value;
+  const outputRow = document.getElementById(`scan-output-row-${idx}`);
+  const output = document.getElementById(`scan-output-${idx}`);
+  if (btn) btn.disabled = true;
+  pushesInFlight++;
+  outputRow.style.display = "table-row";
+  output.textContent = "deploying…";
+  try {
+    const body = { target: ip, credential_id, site, hostname: host.hostname || "" };
+    if (hostKeyFingerprint) body.host_key_fingerprint = hostKeyFingerprint;
+    const resp = await fetch("/api/deploy/push", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.status === 409 && data.host_key_unknown) {
+      showHostKeyConfirm(output, ip, idx, btn, data);
+      return;
+    }
+    output.textContent = (data.ok ? "✓ success\n" : "✗ failed: " + (data.error || resp.statusText || "") + "\n") + (data.output || "");
+    loadAgentDeployments();
+  } catch (e) {
+    output.textContent = "request failed: " + e.message;
+  } finally {
+    pushesInFlight--;
+    if (btn) btn.disabled = false;
+  }
+}
+
+// A push sends a vault credential to the target and runs the installer as
+// root there, so the server will not offer it to a host whose SSH key
+// nobody has confirmed. It answers 409 with the key it saw; the operator
+// checks it on the host and confirms, and the server then requires the
+// host to present exactly that key (and stores it for next time).
+function showHostKeyConfirm(output, ip, idx, btn, data) {
+  const fp = String(data.host_key_fingerprint || "");
+  const keyType = String(data.host_key_type || "");
+  output.textContent = "";
+  const box = document.createElement("div");
+  box.className = "hostkey-confirm";
+  const title = document.createElement("strong");
+  title.textContent = `Confirm the SSH host key of ${ip}`;
+  const what = document.createElement("p");
+  what.textContent = "This host's key has not been confirmed before. Check it on the host itself (console or an existing trusted session), not over this network path:";
+  const cmd = document.createElement("code");
+  cmd.textContent = `ssh-keygen -lf /etc/ssh/ssh_host_${keyType.replace(/^ssh-/, "")}_key.pub`;
+  const seen = document.createElement("p");
+  seen.append("The host presented ");
+  const typeEl = document.createElement("span");
+  typeEl.textContent = keyType + " ";
+  const fpEl = document.createElement("code");
+  fpEl.className = "hostkey-fp";
+  fpEl.textContent = fp;
+  seen.append(typeEl, fpEl);
+  const actions = document.createElement("div");
+  actions.className = "hostkey-actions";
+  const trust = document.createElement("button");
+  trust.className = "tiny";
+  trust.type = "button";
+  trust.textContent = "Fingerprint matches: trust and deploy";
+  const cancel = document.createElement("button");
+  cancel.className = "tiny";
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  trust.addEventListener("click", () => pushToHost(ip, idx, btn, fp));
+  cancel.addEventListener("click", () => { output.textContent = "Not deployed: host key not confirmed."; });
+  actions.append(trust, cancel);
+  box.append(title, what, cmd, seen, actions);
+  output.append(box);
+}
+
+// --- Deployments ---
+
+function fmtDuration(startISO, endISO) {
+  if (!endISO) return "—";
+  const secs = Math.max(0, Math.round((new Date(endISO) - new Date(startISO)) / 1000));
+  if (secs < 60) return secs + "s";
+  return Math.floor(secs / 60) + "m " + (secs % 60) + "s";
+}
+
+// Every agent push this console has attempted, including ones started
+// from a tab long since closed, on the same dashboard as patch and software
+// deployments. A push is one endpoint, so each is a deployment of one, and
+// its install transcript is that endpoint's output.
+//
+// A push has no deadline of its own: it lives as long as the request that
+// started it, so a server restart mid-push leaves the record "running" for
+// good. Past an hour it is shown as stalled rather than as live.
+const PUSH_STALLED_AFTER_MS = 60 * 60 * 1000;
+
+function agentPushDeployment(d) {
+  const stalled = d.status === "running" && Date.now() - new Date(d.started_at) > PUSH_STALLED_AFTER_MS;
+  const status = stalled ? "stalled" : d.status;
+  const facts = [["Site", d.site || "—"], ["SSH user", d.credential || "—"],
+                 ["Took", fmtDuration(d.started_at, d.finished_at)]];
+  if (stalled) facts.push(["Note", "Still marked running after an hour. The server most likely restarted mid-push; check the endpoint, then push again."]);
+  return {
+    deployment: {
+      id: d.id, title: d.hostname || d.target, target: d.target, kind: "SSH push",
+      started_at: d.started_at, by: d.started_by, total: 1,
+      reported: d.status === "running" ? 0 : 1, status, failing: d.status === "failed", facts,
+    },
+    device: {
+      id: d.id, name: d.hostname || d.target,
+      // The drawer groups by status; a stalled push has no outcome yet.
+      status: stalled ? "stalled" : d.status,
+      detail: [d.error, d.output].filter(Boolean).join("\n\n"),
+      finished_at: d.finished_at,
+    },
+  };
+}
+
+async function fetchAgentPushes() {
+  const resp = await fetch("/api/deploy/deployments");
+  if (!resp.ok) throw new Error(await resp.text());
+  return ((await resp.json()).deployments || []).map(agentPushDeployment);
+}
+
+const agentDeployments = mountDeploymentDashboard(document.getElementById("deployments"), {
+  id: "agent",
+  title: "Agent push",
+  create: { label: "Push Agents", href: "#scan" },
+  emptyText: "no agent has been pushed from this console yet",
+  load: async () => (await fetchAgentPushes()).map(p => p.deployment),
+  loadDetail: async id => {
+    const p = (await fetchAgentPushes()).find(x => x.deployment.id === id);
+    if (!p) throw new Error("no agent push with id " + id);
+    return { deployment: p.deployment, devices: [p.device] };
+  },
+});
+
+async function loadAgentDeployments() {
+  await agentDeployments.reload();
+}
+
+document.addEventListener("mustra:user", (e) => {
+  renderQuickLinks("agents-quick-links", "/agents", e.detail);
+  initModuleSections([
+    { hash: "overview", label: "Overview" },
+    { hash: "install", label: "Manual Install" },
+    { hash: "vault", label: "Credential Vault" },
+    { hash: "scan", label: "Network Scan & Push" },
+    { hash: "deployments", label: "Deployments" },
+    { hash: "status", label: "Client Status" },
+    { hash: "health", label: "Client Health" },
+    { hash: "profiles", label: "Profiles" },
+    { hash: "assets", label: "Assets" },
+    { hash: "lifecycle", label: "Lifecycle" },
+    // Lives under Deploy; listed here as well, as part of managing clients.
+    { hash: "items", label: "Self Service", href: "/catalog" },
+  ]);
+  lcCanEdit = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("groups.manage")));
+  loadClientStatus(); loadClientHealth(); loadProfiles(); loadLifecycle();
+});
+
+// --- Lifecycle ---
+let lcRows = [], lcCanEdit = false;
+async function loadLifecycle() {
+  const r = await fetch("/api/lifecycle"); if (!r.ok) return;
+  const d = await r.json();
+  lcRows = d.endpoints || [];
+  document.getElementById("lc-preset").hidden = !(lcCanEdit && d.preset_missing > 0);
+  renderLifecycle();
+}
+function renderLifecycle() {
+  const physicalOnly = document.getElementById("lc-physical").checked;
+  const rows = lcRows.filter(x => !physicalOnly || x.physical);
+  const phys = lcRows.filter(x => x.physical);
+  const soon = lcRows.filter(x => x.warranty_days != null && x.warranty_days <= 30 && x.warranty_days >= 0).length;
+  const out = lcRows.filter(x => x.warranty_days != null && x.warranty_days < 0 && x.physical).length;
+  const ages = phys.filter(x => x.age_years != null).map(x => x.age_years);
+  document.getElementById("lc-tiles").innerHTML = [
+    { label: "Physical machines", value: phys.length },
+    { label: "Average age (years)", value: ages.length ? (ages.reduce((a, b) => a + b, 0) / ages.length).toFixed(1) : "—" },
+    { label: "Warranty ends within 30 days", value: soon, cls: soon ? "bad" : "ok" },
+    { label: "Out of warranty", value: out, cls: out ? "warn" : "" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  document.getElementById("lc-status").textContent = `${rows.length} shown`;
+  const warranty = x => x.warranty_days == null ? '<span class="u-c-text-muted">—</span>'
+    : x.warranty_days < 0 ? `<span class="u-c-viz-danger">ended ${escapeHtml(x.warranty_end)}</span>`
+    : `<span${sx(`color:${x.warranty_days <= 30 ? "var(--warn)" : "inherit"}`)}>${escapeHtml(x.warranty_days)} days (${escapeHtml(x.warranty_end)})</span>`;
+  const body = document.getElementById("lc-body");
+  body.innerHTML = rows.map(x => `<tr>
+      <td><a href="/endpoint/${escapeHtml(x.agent_id)}">${escapeHtml(x.hostname)}</a></td>
+      <td>${escapeHtml([x.manufacturer, x.model].filter(Boolean).join(" ") || "—")}</td>
+      <td class="mono">${escapeHtml(x.serial || "—")}</td>
+      <td>${escapeHtml(x.chassis || "—")}</td>
+      <td data-sort="${escapeHtml(x.age_years != null ? x.age_years : -1)}" title="${escapeHtml(x.age_from === "firmware" ? "from the firmware date " + x.bios_date + "; set a purchase date for the real age" : x.purchase_date || "")}">${x.age_years != null ? escapeHtml(x.age_years) + " y" + (x.age_from === "firmware" ? " ≈" : "") : "—"}</td>
+      <td data-sort="${escapeHtml(x.warranty_days != null ? x.warranty_days : 99999)}">${/* safe-html: built with escapeHtml */ warranty(x)}</td>
+      <td>${escapeHtml(x.owner || "—")}</td><td>${escapeHtml(x.state || "—")}</td><td>${escapeHtml(x.location || "—")}</td>
+    </tr>`).join("") || '<tr><td class="empty" colspan="9">nothing to show</td></tr>';
+  const dt = initDataTable(body.closest("table"), { storageKey: "lifecycle" });
+  if (dt) dt.refresh();
+}
+document.getElementById("lc-physical").addEventListener("change", renderLifecycle);
+document.getElementById("lc-preset").addEventListener("click", async () => {
+  const r = await fetch("/api/asset-attributes/lifecycle-preset", { method: "POST" });
+  document.getElementById("lc-msg").textContent = r.ok ? "added: " + ((await r.json()).created || []).join(", ") + " — fill them in on each endpoint's Attributes tab" : "failed: " + await r.text();
+  loadLifecycle();
+});
+
+// --- Overview ---
+//
+// The fleet's own health as a deployment surface: what version each agent
+// is on, what it runs on, and who's behind. "Current" is the highest
+// version any agent reports rather than a number hardcoded here — the
+// console can't know what the newest build is, but the fleet collectively
+// does, and the moment one host upgrades it becomes the bar everyone else
+// is measured against.
+
+function versionKey(v) {
+  return String(v || "").split(".").map(n => parseInt(n, 10) || 0);
+}
+
+function compareVersions(a, b) {
+  const x = versionKey(a), y = versionKey(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+  }
+  return 0;
+}
+
+function tally(rows, pick) {
+  const counts = new Map();
+  for (const r of rows) {
+    const k = pick(r) || "unknown";
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  return [...counts.entries()].map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+let allAgents = [], servingVersion = "";
+
+async function loadOverview() {
+  const resp = await fetch("/api/agents");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  allAgents = data.agents || [];
+  servingVersion = data.serving_version || "";
+  renderOverview(allAgents);
+  loadAgentVersionHistory();
+  // The Assets section reads the same list rather than fetching it again.
+  loadAssets();
+}
+
+async function loadAgentVersionHistory() {
+  const resp = await fetch("/api/agent-versions");
+  if (!resp.ok) return;
+  const changes = (await resp.json()).changes || [];
+  const body = document.getElementById("agent-history-body");
+  document.getElementById("agent-history-note").textContent =
+    changes.length === 0 ? "" : `${changes.length} transition(s) recorded`;
+  body.innerHTML = changes.length === 0
+    ? '<tr><td class="empty" colspan="3">no version transitions recorded yet</td></tr>'
+    : changes.map(c => `
+        <tr>
+          <td data-sort="${escapeHtml(c.first_seen)}">${escapeHtml(fmtAgo(c.first_seen))}</td>
+          <td><a href="/endpoint/${encodeURIComponent(c.agent_id)}">${escapeHtml(c.hostname || c.agent_id)}</a></td>
+          <td><code class="mono">${escapeHtml(c.version)}</code></td>
+        </tr>`).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "agent-version-history" });
+  if (dt) dt.refresh();
+}
+
+let overviewTiles = [];
+
+function endpointListHTML(list) {
+  if (!list.length) return '<div class="empty">none</div>';
+  return `<div class="table-scroll table-scroll-y rows-10"><table class="table-compact">
+    <thead><tr><th>Hostname</th><th>Version</th><th>OS</th><th>Site</th><th>IP</th><th>State</th></tr></thead>
+    <tbody>${list.map(a => `<tr>
+      <td><a href="/endpoint/${encodeURIComponent(a.agent_id)}">${escapeHtml(a.hostname)}</a></td>
+      <td>${escapeHtml(a.agent_version || "unknown")}</td>
+      <td>${escapeHtml(osDisplay(a))}</td>
+      <td>${escapeHtml(a.site || "—")}</td>
+      <td>${escapeHtml((a.ips || [])[0] || "—")}</td>
+      <td>${a.online ? `<span class="sev-pill u-bg-ok-bg u-c-ok">online</span>` : `<span class="sev-pill none">offline</span>`}</td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+document.addEventListener("click", e => {
+  const tile = e.target.closest("#fleet-tiles [data-tile]");
+  if (!tile) return;
+  const t = overviewTiles[+tile.dataset.tile];
+  if (!t) return;
+  const also = t.also && t.also.length
+    ? `<h4 class="u-m-16-0-8 u-fs-13">Offline (${escapeHtml(String(t.also.length))})</h4>${endpointListHTML(t.also)}` : "";
+  openModal(`${t.label}: ${t.list.length}`,
+    `<p class="modal-note u-m-0-0-10">${escapeHtml(t.title || t.label)}</p>${endpointListHTML(t.list)}${also}`,
+    wrap => { wrap.querySelector(".modal").style.width = "min(960px, 94vw)"; });
+});
+
+function renderOverview(agents) {
+  const versions = [...new Set(agents.map(a => a.agent_version).filter(Boolean))]
+    .sort(compareVersions).reverse();
+  // Current is what the server hands out. The fleet's own newest version
+  // only stands in for a server too old to say: before any endpoint has
+  // updated, the newest in the fleet is the old release, and everything
+  // looked current.
+  const current = [servingVersion, versions[0] || ""].filter(v => v && v !== "dev").sort(compareVersions).reverse()[0] || versions[0] || "";
+  const outdated = agents.filter(a => compareVersions(a.agent_version, current) < 0);
+  const online = agents.filter(a => a.online);
+
+  // Every tile opens the endpoints it counts.
+  const byVersion = list => list.slice().sort((a, b) => compareVersions(a.agent_version, b.agent_version) || a.hostname.localeCompare(b.hostname));
+  overviewTiles = [
+    { label: "Agents reporting", value: agents.length, list: byVersion(agents) },
+    { label: "Online now", value: online.length, cls: online.length === agents.length ? "ok" : "", list: byVersion(online),
+      title: `${online.length} online, ${agents.length - online.length} offline`, also: agents.filter(a => !a.online) },
+    { label: "Current version", value: current || "—", list: agents.filter(a => a.agent_version === current).sort((a, b) => a.hostname.localeCompare(b.hostname)),
+      title: `On ${current || "the current version"}` },
+    { label: "Behind current", value: outdated.length, cls: outdated.length > 0 ? "bad" : "ok", list: byVersion(outdated),
+      title: `Behind ${current || "the current version"}` },
+    { label: "Distinct versions", value: versions.length, list: byVersion(agents).reverse(),
+      title: `${versions.length} version(s): ` + versions.map(v => `${v} (${agents.filter(a => a.agent_version === v).length})`).join(", ") },
+  ];
+  document.getElementById("fleet-tiles").innerHTML = overviewTiles.map((t, i) => `
+    <button type="button" class="stat-tile stat-tile-link" data-tile="${i}" title="Show these endpoints">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div>
+    </button>
+  `).join("");
+
+  document.getElementById("rollout-status").textContent =
+    current ? `current release is ${current}` : "";
+  stackedStatusBar(
+    document.getElementById("rollout-bar"),
+    document.getElementById("rollout-legend"),
+    [
+      { label: `On ${current || "current"}`, value: agents.length - outdated.length, color: "var(--viz-good)" },
+      { label: "Behind", value: outdated.length, color: "var(--viz-warning)" },
+    ]
+  );
+
+  hBarChart(document.getElementById("chart-versions"),
+    versions.map(v => ({
+      label: v + (v === current ? " (current)" : ""),
+      value: agents.filter(a => a.agent_version === v).length,
+    })), { unit: "agents", empty: "no agents have reported a version yet", collapseSingle: false });
+
+  hBarChart(document.getElementById("chart-platforms"),
+    tally(agents, a => osDisplay(a)), { unit: "agents", collapseSingle: false });
+
+  columnChart(document.getElementById("chart-arch"),
+    tally(agents, a => `${osLabel(a.os)} ${archLabel(a.arch)}`), { unit: "agents" });
+
+  hBarChart(document.getElementById("chart-sites"),
+    tally(agents, a => a.site), { unit: "agents", collapseSingle: false });
+
+  const body = document.getElementById("outdated-body");
+  document.getElementById("outdated-status").textContent =
+    outdated.length ? `${outdated.length} of ${agents.length}` : "";
+  body.innerHTML = outdated.length === 0
+    ? `<tr><td class="empty" colspan="8">every agent is on ${escapeHtml(current || "the same version")}</td></tr>`
+    : outdated.sort((a, b) => compareVersions(a.agent_version, b.agent_version)).map(a => `
+      <tr>
+        <td><a href="/endpoint/${escapeHtml(a.agent_id)}">${escapeHtml(a.hostname)}</a></td>
+        <td>${escapeHtml(a.agent_version || "unknown")}</td>
+        <td>${escapeHtml(osLabel(a.os))}</td>
+        <td>${escapeHtml(osDisplay(a))}</td>
+        <td>${escapeHtml(a.site || "—")}</td>
+        <td data-sort="${escapeHtml((a.ips || [])[0] || "")}">${escapeHtml((a.ips || [])[0] || "—")}</td>
+        <td>${a.online ? `<span class="sev-pill u-bg-ok-bg u-c-ok">online</span>`
+                       : `<span class="sev-pill none">offline</span>`}</td>
+        <td>${a.online
+          ? `<button class="update-one" data-id="${escapeHtml(a.agent_id)}" data-host="${escapeHtml(a.hostname)}">Update</button>`
+          : ""}</td>
+      </tr>`).join("");
+  body.querySelectorAll(".update-one").forEach(b =>
+    b.addEventListener("click", () => updateAgents(b.dataset.id, b.dataset.host, b)));
+  const dt = initDataTable(body.closest("table"), { storageKey: "agents-outdated" });
+  if (dt) dt.refresh();
+}
+// Asking endpoints to update themselves. The endpoint does the work: the
+// command carries no installer, it tells the agent to ask the server the
+// same question its own Self Service button asks.
+async function updateAgents(agentID, hostname, btn) {
+  const status = document.getElementById("outdated-status");
+  const label = agentID ? hostname : "every online endpoint behind the current version";
+  if (!confirm(`Update ${label}?\n\nThe agent restarts, so the endpoint drops off for a moment.`)) return;
+  if (btn) { btn.disabled = true; btn.textContent = "asking…"; }
+  status.textContent = "asking endpoints to update…";
+  try {
+    const r = await fetch(agentID ? `/api/agents/${agentID}/update` : "/api/agents/update-outdated",
+      { method: "POST" });
+    if (!r.ok) { status.textContent = (await r.text()) || "that did not work"; if (btn) { btn.disabled = false; btn.textContent = "Update"; } return; }
+    const d = await r.json();
+    const refused = (d.results || []).filter(x => !x.started);
+    status.textContent = `${d.started} of ${d.asked} started` +
+      (refused.length ? ` — ${refused.map(x => `${x.hostname}: ${x.detail || "refused"}`).join("; ")}` : "");
+    if (btn) btn.textContent = refused.length ? "Update" : "updating…";
+    if (btn && refused.length) btn.disabled = false;
+    // The version only changes once the agent restarts and heartbeats, so
+    // a refresh straight away would show the old number and read as failure.
+    setTimeout(loadOverview, 25000);
+  } catch (e) {
+    status.textContent = String(e);
+    if (btn) { btn.disabled = false; btn.textContent = "Update"; }
+  }
+}
+document.getElementById("update-all-btn").addEventListener("click", e => updateAgents("", "", e.target));
+
+
+loadCredentials();
+loadAgentDeployments();
+loadOverview();
+
+// --- Client Status ---------------------------------------------------------
+let clientRows = [];
+async function loadClientStatus() {
+  const resp = await fetch("/api/clients/status");
+  if (!resp.ok) return;
+  const d = await resp.json();
+  clientRows = d.clients || [];
+  document.getElementById("cs-status").textContent = `${clientRows.length} clients · ${clientRows.filter(c => c.online).length} online · serving ${d.serving_version}`;
+  const body = document.getElementById("cs-body");
+  const st = c => c.settings ? `${c.settings.sensor_interval_seconds || "?"}s · ${c.settings.log_level || "?"}${c.settings.random_delay_seconds ? " · delay " + c.settings.random_delay_seconds + "s" : ""}` : "—";
+  body.innerHTML = clientRows.map(c => `<tr class="${c.online ? "" : "muted"}">
+    <td><input type="checkbox" class="cs-pick" value="${escapeHtml(c.agent_id)}" aria-label="Select ${escapeHtml(c.hostname || c.agent_id)}"></td>
+    <td><a href="/endpoint/${escapeHtml(c.agent_id)}">${escapeHtml(c.hostname)}</a> ${c.online ? '<span class="sev-pill u-bg-ok-bg u-c-ok">online</span>' : '<span class="sev-pill none">offline</span>'}</td>
+    <td class="u-ff-mono u-fs-meta">${escapeHtml(c.agent_id)}</td>
+    <td>${escapeHtml((c.ips || []).join(", "))}</td>
+    <td>${escapeHtml(osDisplay(c))}</td>
+    <td>${escapeHtml(c.version)} ${c.current ? "" : '<span class="sev-pill medium">behind</span>'}</td>
+    <td>${fmtAgo(c.first_seen)}</td><td>${c.last_heartbeat ? fmtAgo(c.last_heartbeat) : "never"}</td><td>${c.last_facts ? fmtAgo(c.last_facts) : "never"}</td>
+    <td>${escapeHtml(c.transport)}</td>
+    <td>${escapeHtml(c.profile || "—")}</td><td>${escapeHtml(c.upgrade_ring === 0 ? "deferral" : c.upgrade_ring)}</td>
+    <td>${escapeHtml(st(c))}${(c.drift || []).length ? ` <span class="sev-pill security" title="${escapeHtml(c.drift.join("; "))}">drift</span>` : ""}</td>
+  </tr>`).join("");
+  const sync = () => { const n = body.querySelectorAll(".cs-pick:checked").length; document.getElementById("cs-bulk").hidden = !n; document.getElementById("cs-selected").textContent = n; };
+  body.querySelectorAll(".cs-pick").forEach(c => c.addEventListener("change", sync));
+  document.getElementById("cs-all").onchange = e => { body.querySelectorAll(".cs-pick").forEach(c => c.checked = e.target.checked); sync(); };
+  const dt = initDataTable(body.closest("table"), { storageKey: "client-status" });
+  if (dt) dt.refresh();
+}
+document.getElementById("cs-export-csv").addEventListener("click", () => { window.location.href = "/api/clients/status?format=csv"; });
+document.getElementById("cs-export-json").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(clientRows, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "mustra-clients.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+document.getElementById("cs-update").addEventListener("click", async () => {
+  const ids = [...document.querySelectorAll(".cs-pick:checked")].map(c => c.value);
+  if (!ids.length || !confirm(`Ask ${ids.length} agent(s) to update themselves to the served version?`)) return;
+  const out = document.getElementById("cs-action-status"); out.textContent = "updating…"; let started = 0;
+  for (const id of ids) { const r = await fetch(`/api/agents/${encodeURIComponent(id)}/update`, { method: "POST" }); if (r.ok) started++; }
+  out.textContent = `${started} of ${ids.length} started`; setTimeout(loadClientStatus, 3000);
+});
+document.getElementById("cs-push").addEventListener("click", async () => {
+  const out = document.getElementById("cs-action-status"); out.textContent = "pushing…";
+  const r = await fetch("/api/clients/profiles/apply", { method: "POST" }); const d = r.ok ? await r.json() : {};
+  out.textContent = r.ok ? `pushed to ${d.pushed}, ${Object.keys(d.failed || {}).length} failed` : "failed"; setTimeout(loadClientStatus, 3000);
+});
+
+// --- Client Health ---------------------------------------------------------
+async function loadClientHealth() {
+  const g = document.getElementById("ch-group").value;
+  const resp = await fetch("/api/clients/health" + (g ? "?group=" + encodeURIComponent(g) : ""));
+  if (!resp.ok) return;
+  const d = await resp.json();
+  const failing = (d.clients || []).filter(c => c.checks.length).length;
+  document.getElementById("ch-tiles").innerHTML = [
+    { label: "Clients", value: d.total || 0 },
+    { label: "Behind " + d.serving_version, value: d.behind || 0, cls: d.behind ? "off" : "ok" },
+    { label: "Failing a health check", value: failing, cls: failing ? "off" : "ok" },
+    { label: "Settings drift", value: d.drifted || 0, cls: d.drifted ? "off" : "ok" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  const vrows = Object.entries(d.versions || {}).sort((a, b) => compareVersions(b[0], a[0])).map(([v, n]) => ({ label: v || "unknown", value: n, hint: `${n} agent(s) on ${v}` }));
+  hBarChart(document.getElementById("ch-versions"), vrows, { unit: "agents", empty: "no agents" });
+  const crows = Object.entries(d.checks || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ label: k, value: n, hint: `${n} client(s) fail "${k}"` }));
+  hBarChart(document.getElementById("ch-checks"), crows, { unit: "clients", empty: "every check passes" });
+  const rings = Object.entries(d.rings || {}).sort((a, b) => (a[0] === "0" ? 1 : b[0] === "0" ? -1 : Number(a[0]) - Number(b[0])));
+  document.getElementById("ch-rings").innerHTML = rings.length ? rings.map(([r, c]) => `<div class="detail-row u-d-flex u-jc-between u-ai-center u-p-6-0 u-bb-1-solid-border">
+      <span><b>${escapeHtml(r === "0" ? "Deferral ring" : "Ring " + r)}</b> <span class="u-c-text-muted">${escapeHtml(c.total)} client(s), ${escapeHtml(c.behind || 0)} behind</span></span>
+      ${(c.behind || 0) && r !== "0" ? `<button class="tiny" data-ring="${escapeHtml(r)}">Upgrade ring ${escapeHtml(r)}</button>` : (r === "0" && c.behind ? `<button class="tiny danger" data-ring="0">Upgrade deferral ring</button>` : "")}
+    </div>`).join("") : '<div class="empty">no clients</div>';
+  document.getElementById("ch-rings").querySelectorAll("[data-ring]").forEach(b => b.addEventListener("click", async () => {
+    const ring = Number(b.dataset.ring);
+    if (!confirm(ring === 0 ? "Upgrade the DEFERRAL ring? These clients were deliberately held back." : `Upgrade every client in ring ${ring} that is behind ${d.serving_version}?`)) return;
+    b.disabled = true;
+    const r = await fetch("/api/clients/upgrade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ring, include_deferred: ring === 0 }) });
+    const x = r.ok ? await r.json() : {}; alert(r.ok ? `${x.started} of ${x.targets} started updating to ${x.serving_version}` : await r.text());
+    setTimeout(loadClientHealth, 3000);
+  }));
+  const body = document.getElementById("ch-body");
+  body.innerHTML = (d.clients || []).map(c => `<tr>
+    <td><a href="/endpoint/${escapeHtml(c.agent_id)}">${escapeHtml(c.hostname)}</a></td><td>${escapeHtml(c.version)}</td><td>${escapeHtml(c.profile || "—")}</td><td>${escapeHtml(c.upgrade_ring === 0 ? "deferral" : c.upgrade_ring)}</td>
+    <td>${c.checks.length ? c.checks.map(k => `<span class="sev-pill ${k.severity === "high" ? "security" : k.severity === "medium" ? "medium" : "none"}" title="${escapeHtml(k.detail)}">${escapeHtml(k.check)}</span>`).join(" ") : '<span class="sev-pill u-bg-ok-bg u-c-ok">healthy</span>'}</td>
+    <td>${c.drift.length ? escapeHtml(c.drift.join("; ")) : "—"}</td></tr>`).join("") || '<tr><td class="empty" colspan="6">no clients</td></tr>';
+  const dt = initDataTable(body.closest("table"), { storageKey: "client-health" });
+  if (dt) dt.refresh();
+}
+document.getElementById("ch-refresh").addEventListener("click", loadClientHealth);
+document.getElementById("ch-group").addEventListener("change", loadClientHealth);
+
+// --- Profiles --------------------------------------------------------------
+let profilesList = [], editingProfile = null, profileGroups = [];
+async function loadProfiles() {
+  const [pr, gr] = await Promise.all([fetch("/api/clients/profiles"), fetch("/api/groups")]);
+  if (!pr.ok) return;
+  profilesList = (await pr.json()).profiles || [];
+  if (gr.ok) profileGroups = (await gr.json()).groups || [];
+  const sel = document.getElementById("cp-groups"), prev = [...sel.selectedOptions].map(o => o.value);
+  sel.innerHTML = profileGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} — ${escapeHtml(g.member_count)} device(s)</option>`).join("");
+  [...sel.options].forEach(o => o.selected = prev.includes(o.value));
+  const gsel = document.getElementById("ch-group"), gprev = gsel.value;
+  gsel.innerHTML = '<option value="">every group</option>' + profileGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join(""); gsel.value = gprev;
+  const gname = id => (profileGroups.find(g => g.id === id) || {}).name || id;
+  document.getElementById("cp-status").textContent = profilesList.length ? `${profilesList.filter(p => p.enabled).length} enabled` : "";
+  const body = document.getElementById("cp-body");
+  if (!profilesList.length) { body.innerHTML = '<tr><td class="empty" colspan="7">No profiles. Every agent runs the settings it started with.</td></tr>'; return; }
+  const st = s => [s.sensor_interval_seconds ? `interval ${s.sensor_interval_seconds}s` : null, s.log_level ? `log ${s.log_level}` : null, s.random_delay_seconds ? `delay ≤${s.random_delay_seconds}s` : null].filter(Boolean).join(" · ") || "nothing set";
+  body.innerHTML = profilesList.map(p => `<tr class="${p.enabled ? "" : "muted"}">
+    <td><b>${escapeHtml(p.name)}</b>${p.description ? `<div class="hint u-m-2-0-0">${escapeHtml(p.description)}</div>` : ""}</td>
+    <td>${escapeHtml(p.priority)}</td>
+    <td>${(p.group_ids || []).length ? p.group_ids.map(id => escapeHtml(gname(id))).join(", ") + ` <span class="hint">(${escapeHtml(p.members)} endpoint${p.members === 1 ? "" : "s"})</span>` : "every endpoint"}</td>
+    <td>${escapeHtml(st(p.settings || {}))}</td><td>${escapeHtml(p.upgrade_ring === 0 ? "deferral" : p.upgrade_ring)}</td><td>${p.enabled ? "enabled" : "disabled"}</td>
+    <td class="row-actions"><button class="tiny" data-cp-edit="${escapeHtml(p.id)}">edit</button> <button class="tiny" data-cp-toggle="${escapeHtml(p.id)}">${p.enabled ? "disable" : "enable"}</button> <button class="tiny danger" data-cp-del="${escapeHtml(p.id)}">delete</button></td>
+  </tr>`).join("");
+  body.querySelectorAll("[data-cp-edit]").forEach(b => b.addEventListener("click", () => editProfile(profilesList.find(p => p.id === b.dataset.cpEdit))));
+  body.querySelectorAll("[data-cp-toggle]").forEach(b => b.addEventListener("click", async () => {
+    const p = profilesList.find(x => x.id === b.dataset.cpToggle);
+    await fetch(`/api/clients/profiles/${encodeURIComponent(p.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, enabled: !p.enabled }) });
+    loadProfiles();
+  }));
+  body.querySelectorAll("[data-cp-del]").forEach(b => b.addEventListener("click", async () => {
+    const p = profilesList.find(x => x.id === b.dataset.cpDel);
+    if (!confirm(`Delete the profile "${p.name}"? Agents keep the settings they have until another profile covers them.`)) return;
+    await fetch(`/api/clients/profiles/${encodeURIComponent(p.id)}`, { method: "DELETE" }); loadProfiles();
+  }));
+}
+function editProfile(p) {
+  editingProfile = p ? p.id : null;
+  const s = (p && p.settings) || {};
+  document.getElementById("cp-editor-title").textContent = p ? "Editing: " + p.name : "New profile";
+  document.getElementById("cp-name").value = p ? p.name : ""; document.getElementById("cp-priority").value = p ? p.priority : 0;
+  document.getElementById("cp-desc").value = p ? p.description : "";
+  [...document.getElementById("cp-groups").options].forEach(o => o.selected = !!(p && (p.group_ids || []).includes(o.value)));
+  document.getElementById("cp-interval").value = s.sensor_interval_seconds || 0; document.getElementById("cp-loglevel").value = s.log_level || "";
+  document.getElementById("cp-delay").value = s.random_delay_seconds || 0; document.getElementById("cp-ring").value = p ? String(p.upgrade_ring) : "1";
+  document.getElementById("cp-enabled").checked = !p || p.enabled; document.getElementById("cp-save-status").textContent = "";
+  if (p) document.getElementById("cp-editor-title").scrollIntoView({ block: "nearest" });
+}
+document.getElementById("cp-cancel").addEventListener("click", () => editProfile(null));
+document.getElementById("cp-save").addEventListener("click", async () => {
+  const status = document.getElementById("cp-save-status");
+  const body = { id: editingProfile || "", name: document.getElementById("cp-name").value.trim(), description: document.getElementById("cp-desc").value.trim(),
+    priority: Number(document.getElementById("cp-priority").value) || 0, group_ids: [...document.getElementById("cp-groups").selectedOptions].map(o => o.value),
+    settings: { sensor_interval_seconds: Number(document.getElementById("cp-interval").value) || 0, log_level: document.getElementById("cp-loglevel").value, random_delay_seconds: Number(document.getElementById("cp-delay").value) || 0 },
+    upgrade_ring: Number(document.getElementById("cp-ring").value), enabled: document.getElementById("cp-enabled").checked };
+  status.textContent = "saving…";
+  const resp = await fetch(editingProfile ? `/api/clients/profiles/${encodeURIComponent(editingProfile)}` : "/api/clients/profiles", { method: editingProfile ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const text = await resp.text();
+  if (!resp.ok) { status.textContent = text.trim(); return; }
+  const d = JSON.parse(text);
+  status.textContent = `saved · pushed to ${d.pushed} agent(s)${Object.keys(d.failed || {}).length ? ", " + Object.keys(d.failed).length + " refused" : ""}`;
+  editProfile(null); loadProfiles(); setTimeout(() => { loadClientStatus(); loadClientHealth(); }, 3000);
+});
+document.getElementById("cp-apply").addEventListener("click", async () => {
+  const r = await fetch("/api/clients/profiles/apply", { method: "POST" }); const d = r.ok ? await r.json() : {};
+  document.getElementById("cp-status").textContent = r.ok ? `pushed to ${d.pushed}, ${Object.keys(d.failed || {}).length} refused` : "failed";
+  setTimeout(() => { loadClientStatus(); loadClientHealth(); }, 3000);
+});
+
+
+// ---- assets: retention and attributes ------------------------------------
+let assetAttrs = [], editingAttr = null;
+async function loadAssets() {
+  const r = await fetch("/api/asset-attributes");
+  if (!r.ok) { document.getElementById("as-attr-body").innerHTML = '<tr><td class="empty" colspan="6">could not load</td></tr>'; return; }
+  const d = await r.json();
+  assetAttrs = d.attributes || [];
+  const setCount = d.set_count || {};
+  document.getElementById("as-purge").value = d.purge_after_days || 0;
+  const agents = allAgents || [];
+  const retired = agents.filter(a => a.managed === false);
+  document.getElementById("as-tiles").innerHTML = [
+    { label: "Managed endpoints", value: agents.length - retired.length },
+    { label: "Retired, kept", value: d.retired ?? retired.length, cls: (d.retired ?? retired.length) ? "off" : "ok" },
+    { label: "Attributes defined", value: assetAttrs.length },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+  document.getElementById("as-ret-status").textContent = retired.length ? `${retired.length} retired` : "nothing retired";
+  document.getElementById("as-retired-body").innerHTML = retired.length ? retired.map(a => `<tr>
+    <td><a href="/endpoint?id=${encodeURIComponent(a.agent_id)}">${escapeHtml(a.hostname || a.agent_id)}</a></td>
+    <td>${escapeHtml(osLabel(a.os))}</td><td>${escapeHtml(fmtAgo(a.last_heartbeat || a.first_seen))}</td>
+    <td>${a.retired_at ? escapeHtml(fmtAgo(a.retired_at)) : "—"}</td><td>${escapeHtml(a.retired_reason || "—")}</td>
+    <td><button class="tiny" data-restore="${escapeHtml(a.agent_id)}">Restore</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="6">nothing retired — every endpoint has been heard from</td></tr>';
+  document.querySelectorAll("[data-restore]").forEach(b => b.addEventListener("click", async () => {
+    const res = await fetch(`/api/agents/${encodeURIComponent(b.dataset.restore)}/managed`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ managed: true }) });
+    if (!res.ok) { alert(await res.text()); return; }
+    loadOverview();
+  }));
+  document.getElementById("as-attr-status").textContent = assetAttrs.length ? `${assetAttrs.length} attribute(s)` : "";
+  document.getElementById("as-attr-body").innerHTML = assetAttrs.length ? assetAttrs.map(a => `<tr>
+    <td><code>attr.${escapeHtml(a.name)}</code></td><td>${escapeHtml(a.label)}</td><td>${escapeHtml(a.kind)}</td>
+    <td>${(a.options || []).map(escapeHtml).join(", ") || "—"}</td><td>${escapeHtml(setCount[a.name] || 0)} endpoint(s)</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-aedit="${escapeHtml(a.id)}">Edit</button> <button class="tiny danger" data-adel="${escapeHtml(a.id)}">Delete</button></td></tr>`).join("")
+    : '<tr><td class="empty" colspan="6">No attributes yet.</td></tr>';
+  document.querySelectorAll("[data-aedit]").forEach(b => b.addEventListener("click", () => editAttr(assetAttrs.find(a => a.id === b.dataset.aedit))));
+  document.querySelectorAll("[data-adel]").forEach(b => b.addEventListener("click", async () => {
+    const a = assetAttrs.find(x => x.id === b.dataset.adel);
+    if (!confirm(`Delete "${a.label}"? Its value on every endpoint goes with it, and any computer group targeting attr.${a.name} stops matching.`)) return;
+    await fetch(`/api/asset-attributes/${encodeURIComponent(a.id)}`, { method: "DELETE" });
+    loadAssets();
+  }));
+}
+function editAttr(a) {
+  editingAttr = a ? a.id : null;
+  document.getElementById("as-attr-title").textContent = a ? `Edit ${a.label}` : "New attribute";
+  document.getElementById("a-name").value = a ? a.name : "";
+  document.getElementById("a-name").disabled = !!a;
+  document.getElementById("a-label").value = a ? a.label : "";
+  document.getElementById("a-kind").value = a ? a.kind : "text";
+  document.getElementById("a-options").value = a ? (a.options || []).join("\n") : "";
+  document.getElementById("a-desc").value = a ? a.description : "";
+  document.getElementById("a-error").textContent = "";
+}
+document.getElementById("a-cancel").addEventListener("click", () => editAttr(null));
+document.getElementById("a-save").addEventListener("click", async () => {
+  const body = { name: document.getElementById("a-name").value, label: document.getElementById("a-label").value,
+    kind: document.getElementById("a-kind").value, description: document.getElementById("a-desc").value,
+    options: document.getElementById("a-options").value.split("\n").map(x => x.trim()).filter(Boolean) };
+  const r = await fetch(editingAttr ? `/api/asset-attributes/${encodeURIComponent(editingAttr)}` : "/api/asset-attributes",
+    { method: editingAttr ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { document.getElementById("a-error").textContent = await r.text(); return; }
+  editAttr(null); loadAssets();
+});
+document.getElementById("as-purge-save").addEventListener("click", async () => {
+  const days = parseInt(document.getElementById("as-purge").value, 10) || 0;
+  const r = await fetch("/api/assets/purge-after", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days }) });
+  const msg = document.getElementById("as-purge-msg");
+  if (!r.ok) { msg.textContent = await r.text(); return; }
+  msg.textContent = days ? `Retired endpoints will be deleted after ${days} days.` : "Retired endpoints are kept indefinitely.";
+});
+</script>
+</body>
+</html>

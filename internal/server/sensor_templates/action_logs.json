@@ -1,0 +1,49 @@
+{
+  "notes": "Reads at most 16 MB from an explicitly provided deployment log directory and returns the last 50 matching rows. Requires bundled Python. This standalone example does not locate the agent data directory automatically, provide durable server history, or replace the built-in per-run log viewer. Results are not action success criteria.",
+  "commands": {
+    "linux": "# Explicit, bounded example. Production Action run logs also enforce run ownership.\nimport json, os, pathlib, zipfile\nroot = pathlib.Path(os.environ['MUSTRA_PARAM_log_directory'])\njob = os.environ['MUSTRA_PARAM_job_id']\nif not job:\n    raise ValueError('An endpoint run ID is required')\nrows = []\nscanned = 0\nfor path in sorted(root.iterdir()):\n    if path.suffix not in ('.log', '.zip'):\n        continue\n    archive = zipfile.ZipFile(path) if path.suffix == '.zip' else None\n    streams = [archive.open(n) for n in archive.namelist()] if archive else [path.open('rb')]\n    try:\n        for stream in streams:\n            with stream:\n                for line in stream:\n                    scanned += len(line)\n                    if scanned > 16 * 1024 * 1024:\n                        raise ValueError('Example scan exceeds 16 MB; use the built-in log sensor')\n                    event = json.loads(line)\n                    if event.get('job_id') == job:\n                        rows.append({'value': str(event.get('stage', '')) + ': ' + str(event.get('message', ''))[:400]})\n                        rows = rows[-50:]\n    finally:\n        if archive:\n            archive.close()\nprint(json.dumps(rows))\n",
+    "darwin": "# Explicit, bounded example. Production Action run logs also enforce run ownership.\nimport json, os, pathlib, zipfile\nroot = pathlib.Path(os.environ['MUSTRA_PARAM_log_directory'])\njob = os.environ['MUSTRA_PARAM_job_id']\nif not job:\n    raise ValueError('An endpoint run ID is required')\nrows = []\nscanned = 0\nfor path in sorted(root.iterdir()):\n    if path.suffix not in ('.log', '.zip'):\n        continue\n    archive = zipfile.ZipFile(path) if path.suffix == '.zip' else None\n    streams = [archive.open(n) for n in archive.namelist()] if archive else [path.open('rb')]\n    try:\n        for stream in streams:\n            with stream:\n                for line in stream:\n                    scanned += len(line)\n                    if scanned > 16 * 1024 * 1024:\n                        raise ValueError('Example scan exceeds 16 MB; use the built-in log sensor')\n                    event = json.loads(line)\n                    if event.get('job_id') == job:\n                        rows.append({'value': str(event.get('stage', '')) + ': ' + str(event.get('message', ''))[:400]})\n                        rows = rows[-50:]\n    finally:\n        if archive:\n            archive.close()\nprint(json.dumps(rows))\n",
+    "windows": "# Explicit, bounded example. Production Action run logs also enforce run ownership.\nimport json, os, pathlib, zipfile\nroot = pathlib.Path(os.environ['MUSTRA_PARAM_log_directory'])\njob = os.environ['MUSTRA_PARAM_job_id']\nif not job:\n    raise ValueError('An endpoint run ID is required')\nrows = []\nscanned = 0\nfor path in sorted(root.iterdir()):\n    if path.suffix not in ('.log', '.zip'):\n        continue\n    archive = zipfile.ZipFile(path) if path.suffix == '.zip' else None\n    streams = [archive.open(n) for n in archive.namelist()] if archive else [path.open('rb')]\n    try:\n        for stream in streams:\n            with stream:\n                for line in stream:\n                    scanned += len(line)\n                    if scanned > 16 * 1024 * 1024:\n                        raise ValueError('Example scan exceeds 16 MB; use the built-in log sensor')\n                    event = json.loads(line)\n                    if event.get('job_id') == job:\n                        rows.append({'value': str(event.get('stage', '')) + ': ' + str(event.get('message', ''))[:400]})\n                        rows = rows[-50:]\n    finally:\n        if archive:\n            archive.close()\nprint(json.dumps(rows))\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 15,
+  "enabled": false,
+  "parameters": [
+    {
+      "name": "log_directory",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "job_id",
+      "type": "text",
+      "required": true
+    }
+  ],
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": {
+      "language": "python",
+      "output": {
+        "format": "json"
+      }
+    },
+    "darwin": {
+      "language": "python",
+      "output": {
+        "format": "json"
+      }
+    },
+    "windows": {
+      "language": "python",
+      "output": {
+        "format": "json"
+      }
+    }
+  }
+}

@@ -1,0 +1,100 @@
+# Backing services for local development: NATS, Postgres, and isolated script tools, published
+# (nats.dev.conf has no auth callout, so agent identity is not enforced here;
+# the server run from source therefore needs, besides the dev database's
+# mustra:mustra, MUSTRA_ALLOW_PLACEHOLDER_SECRETS=true, MUSTRA_COOKIE_SECURE=false
+# for plain http, and MUSTRA_PUBLIC_URL=http://127.0.0.1:8080 with
+# MUSTRA_ALLOW_INSECURE_PUBLIC_URL=true -- `make dev-server` sets them)
+# on localhost, no TLS and no NATS credentials. The server and agent run
+# from source on the host so a change is `go run` away, not a full image
+# rebuild that also cross-compiles six agent binaries.
+#
+#   docker compose -f compose.dev.yml up -d      (or: make dev-up)
+#   make dev-server                              (in one terminal)
+#   sudo make dev-agent                          (in another)
+#
+# Its volumes and project name are separate from the production stack in
+# docker-compose.yml, so both can exist on one machine without sharing data.
+name: mustra-dev
+
+services:
+  script-tools:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.script-tools
+    networks: [script-tools]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=1024m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+    pids_limit: 192
+    cpus: 2
+    init: true
+
+  # Internal networks cannot publish host ports. This relay exposes only the
+  # three tool operations to localhost, without giving engines an external route.
+  script-tools-proxy:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.script-tools
+    command: [node, relay.js]
+    ports: ["127.0.0.1:8091:8091"]
+    networks: [default, script-tools]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 32
+    init: true
+    depends_on:
+      script-tools:
+        condition: service_healthy
+
+  nats:
+    image: nats:2.15-alpine
+    command: ["-c", "/etc/nats/nats.conf"]
+    volumes:
+      - dev-nats-data:/data
+      - ./nats/nats.dev.conf:/etc/nats/nats.conf:ro
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222" # monitoring, handy for /varz and /connz
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:18-alpine
+    # Postgres 18 moved its default PGDATA to /var/lib/postgresql/<major>/docker
+    # and its VOLUME to /var/lib/postgresql. Setting PGDATA back to the 16-era
+    # path keeps the existing postgres-data volume as the cluster directory.
+    # Without it the entrypoint finds nothing at the new path, runs initdb, and
+    # the stack comes up healthy on an empty database while the real one sits
+    # untouched in the volume -- a silent data loss, not an error.
+    #
+    # A major upgrade is not in-place: 18 refuses to start on a 16 cluster.
+    # Dump with the old image and restore into the new one (deploy/README.md).
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_USER: mustra
+      POSTGRES_PASSWORD: mustra
+      POSTGRES_DB: mustra
+    volumes:
+      - dev-postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U mustra -d mustra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dev-nats-data:
+  dev-postgres-data:
+
+networks:
+  script-tools:
+    internal: true

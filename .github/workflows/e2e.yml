@@ -1,0 +1,194 @@
+# End-to-end: what a first-time operator does, and what an attacker tries,
+# against the real deployment path. deploy/init.sh --start builds and
+# starts the compose stack exactly as the README says; the e2e-tagged Go
+# tests (test/e2e) then claim it with the setup token, enroll systemd
+# endpoint containers through the console's install one-liner, replay the
+# security review's attack checks, update/uninstall/reinstall an agent,
+# deploy software and patches, and crawl every console page in a browser.
+#
+# This is also the deployment build. CI packages Dockerfile.image from
+# binaries the runner already compiled, so Dockerfile.server -- the one
+# every compose install builds -- is covered here alone, and two breakages
+# reached main through it before it was: an agent import missing from the
+# stage's COPY list, and a tmpfs option list that YAML parsed as four mount
+# paths. run.sh checks that both compose files resolve and that the image
+# carries every agent binary. If this workflow ever gains path filters or
+# becomes optional, those checks have to keep running on every push and
+# pull request.
+#
+# The image build is from source, as an operator's is, but not cold: the
+# Go cache CI's build-binaries saved from main is copied into the cache
+# mounts Dockerfile.server declares, and the script-tools layers come from
+# the cache CI exports. Both are restore-only: this workflow writes no
+# Actions cache entries.
+#
+# Same supply-chain rules as ci.yml: actions pinned to full commit SHAs
+# with the tag in a comment, no token permissions by default, checkouts
+# that do not keep the token.
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Superseded runs are cancelled on main too: nothing consumes main's results.
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  e2e:
+    name: blank-slate install and security checks
+    # One job per machine: the stack publishes 8080 and 4222.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      # A project name of its own, so nothing here depends on the checkout
+      # directory being called deploy/.
+      COMPOSE_PROJECT_NAME: mustra-e2e
+      # The update test needs a console that serves a comparable version.
+      MUSTRA_VERSION: 1.0.0-e2e
+      MUSTRA_E2E_ARTIFACTS: ${{ github.workspace }}/test/e2e/artifacts
+    steps:
+      # The seeded Go cache now lives twice (on the runner and in the
+      # builder's cache mounts) and every image twice (builder, then loaded
+      # into Docker), which ran a hosted runner out of disk while loading the
+      # script-tools image. The runner ships toolchains this job never uses;
+      # deleting them in the background overlaps the checkout and cache
+      # restore instead of adding to the job time, and the step before the
+      # first image build waits for it to finish.
+      - name: Free disk space
+        if: runner.environment == 'github-hosted'
+        run: |
+          df -h / | tail -1
+          sudo nohup rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL >/dev/null 2>&1 &
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        id: go
+        with:
+          go-version-file: go.mod
+          # The Go cache below replaces setup-go's, which would save.
+          cache: false
+      - name: Locate Go caches
+        id: paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      # The key and paths of .github/actions/build-binaries, which saves this
+      # from main after `make agents servers`: the same CGO_ENABLED=0,
+      # -trimpath builds Dockerfile.server runs, so its packages hit.
+      # A self-hosted runner seeds from the caches already on its disk.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: runner.environment == 'github-hosted'
+        id: gocache
+        with:
+          path: |
+            ${{ steps.paths.outputs.build }}
+            ${{ steps.paths.outputs.modules }}
+          key: binaries-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            binaries-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            binaries-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-
+      # A builder of its own, so the cache mounts seeded below are the ones
+      # `docker compose up --build` uses (BUILDX_BUILDER on the run step) and
+      # the gha cache backend is available. default-load keeps a plain
+      # `docker build` -- the harness's endpoint image -- loading its result.
+      - name: Wait for the freed disk space
+        if: runner.environment == 'github-hosted'
+        run: |
+          start=$(date +%s)
+          while pgrep -f 'rm -rf /usr/local/lib/android' >/dev/null; do sleep 2; done
+          echo "waited $(( $(date +%s) - start ))s"; df -h / | tail -1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        id: buildx
+        with:
+          driver-opts: default-load=true
+      # Dockerfile.server's builds mount /go/pkg/mod and /root/.cache/go-build
+      # as BuildKit cache mounts, which start empty on a hosted runner. A
+      # cache mount without an id is keyed by its target, so this build's
+      # mounts are the same ones; it copies the restored caches into them and
+      # outputs nothing else.
+      - name: Seed the image build's Go cache
+        if: steps.gocache.outputs.cache-matched-key != '' || runner.environment != 'github-hosted'
+        env:
+          BUILDER: ${{ steps.buildx.outputs.name }}
+          GOCACHE_DIR: ${{ steps.paths.outputs.build }}
+          GOMODCACHE_DIR: ${{ steps.paths.outputs.modules }}
+          MATCHED_KEY: ${{ steps.gocache.outputs.cache-matched-key || 'the runner''s own caches' }}
+        run: |
+          seed="$RUNNER_TEMP/seed-go-cache"
+          # A new self-hosted runner has no caches yet: seed it empty.
+          mkdir -p "$seed" "$GOCACHE_DIR" "$GOMODCACHE_DIR"
+          cat > "$seed/Dockerfile" <<'EOF'
+          FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+          RUN --mount=type=cache,target=/go/pkg/mod \
+              --mount=type=cache,target=/root/.cache/go-build \
+              --mount=type=bind,from=gomodcache,target=/seed/mod \
+              --mount=type=bind,from=gocache,target=/seed/build \
+              cp -a /seed/mod/. /go/pkg/mod/ && cp -a /seed/build/. /root/.cache/go-build/
+          EOF
+          start=$(date +%s)
+          docker buildx build --builder "$BUILDER" --no-cache --output type=cacheonly \
+            --build-context gomodcache="$GOMODCACHE_DIR" --build-context gocache="$GOCACHE_DIR" \
+            "$seed"
+          echo "seeded from $MATCHED_KEY in $(( $(date +%s) - start ))s"
+      # Pull the script-tools layers CI exported (ci.yml, scope
+      # script-tools-image) into the builder, so compose's build of that
+      # image is a local cache hit. Done here rather than through a compose
+      # cache_from, which would need the Actions runtime token exposed to
+      # run.sh and everything it starts. A miss only means building it now.
+      - name: Warm the script-tools image cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: deploy/Dockerfile.script-tools
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=script-tools-image
+      # The project's one Node version: the major of
+      # deploy/Dockerfile.script-tools. Dependabot bumps that image, not
+      # this line.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Install the browser for the console crawl
+        # Bounded: under Node 26 Playwright 1.56's install hung until the
+        # job's own limit, an hour per run (fixed by #83). A healthy install
+        # takes well under a minute.
+        timeout-minutes: 10
+        run: |
+          npm ci --prefix test/e2e/ui
+          npx --prefix test/e2e/ui playwright install --with-deps chromium
+      # Bootstraps a fresh stack, runs the harness and tears the stack down
+      # again (logs land in the artifacts directory first).
+      - name: Run the end-to-end pass
+        timeout-minutes: 45
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+        run: test/e2e/run.sh
+      - name: Upload logs and screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-artifacts
+          path: test/e2e/artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
+      # run.sh tears down on its own exit; this covers a cancelled or
+      # timed-out step, which kills it before its trap can run.
+      - name: Tear down
+        if: always()
+        run: |
+          (cd deploy && docker compose down -v --remove-orphans) || true
+          docker ps -aq --filter "name=^${COMPOSE_PROJECT_NAME}-ep" | xargs -r docker rm -f

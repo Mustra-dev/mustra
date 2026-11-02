@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comply — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .hint code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .st { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .st.pass { background: var(--ok-bg); color: var(--ok); }
+  .st.fail { background: var(--off-bg); color: var(--off); }
+  .st.unknown { background: var(--surface-2); color: var(--text-muted); }
+  .st.excepted { background: var(--surface-2); color: var(--text-muted); font-style: italic; }
+  .exc-form { display: grid; gap: 10px; max-width: 760px; }
+  .exc-form label { font-size: 12px; color: var(--text-muted); display: grid; gap: 4px; }
+  .exc-form .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .exc-form input.search-input, .exc-form textarea { width: 100%; box-sizing: border-box; }
+  .sev { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; }
+  .sev.critical, .sev.high { background: var(--off-bg); color: var(--off); }
+  .sev.medium { background: color-mix(in srgb, var(--viz-warning) 20%, transparent); color: var(--warn); }
+  .sev.low { background: var(--surface-2); color: var(--text-muted); }
+  .num { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .import-box { border: 1px dashed var(--border); border-radius: var(--radius); padding: 14px; margin-top: 14px; }
+  .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score.good { color: var(--ok); } .score.mid { color: var(--warn); } .score.bad { color: var(--viz-danger, #e5484d); }
+  .spark { vertical-align: middle; }
+  .sc-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 10px; font-size: 12.5px; }
+  .st.untested { background: transparent; color: var(--text-muted); box-shadow: inset 0 0 0 1px var(--border); }
+  /* Controls: families in catalogue order, each a header with its spread
+     of states and the controls as expandable rows. */
+  .ctl-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: 12.5px; }
+  .ctl-tools select.select { min-width: 220px; }
+  .ctl-finding { margin: 2px 0 14px; font-size: 14px; line-height: 1.5; color: var(--text); text-wrap: pretty; }
+  .ctl-finding b { font-weight: 600; }
+  .ctl-unmapped { margin: 0 0 14px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-2); font-size: 12.5px; line-height: 1.5; color: var(--text-muted); }
+  .ctl-fam + .ctl-fam { margin-top: 22px; }
+  .ctl-fam-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; }
+  .ctl-fam-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .ctl-fam-id { font-family: var(--mono); font-size: 12.5px; color: var(--text-muted); margin-right: 6px; font-weight: 500; }
+  .ctl-fam-sum { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .ctl-fam-sum .is-fail { color: var(--off); font-weight: 600; }
+  .ctl-spread { display: flex; height: 4px; border-radius: 999px; overflow: hidden; background: var(--surface-2); margin-bottom: 4px; }
+  .ctl-spread > span { display: block; height: 100%; }
+  .ctl-spread .fail { background: var(--off); }
+  .ctl-spread .unknown { background: var(--text-muted); opacity: .45; }
+  .ctl-spread .pass { background: var(--ok); }
+  .ctl-row { border-bottom: 1px solid var(--border); }
+  .ctl-row > summary { display: grid; grid-template-columns: 96px 92px 1fr 128px 16px; align-items: center; gap: 12px;
+    min-height: 40px; padding: 4px 6px; cursor: pointer; list-style: none; border-radius: var(--radius-sm); }
+  .ctl-row > summary::-webkit-details-marker { display: none; }
+  .ctl-row > summary:hover { background: var(--surface-2); }
+  .ctl-row > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .ctl-id { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .ctl-checks { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ctl-eps { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .ctl-eps { color: var(--text-muted); }
+  .ctl-eps.is-fail { color: var(--off); font-weight: 600; }
+  .ctl-eps .of { color: var(--text-muted); font-weight: 400; }
+  .ctl-more { justify-self: start; }
+  .ctl-rest:not([hidden]) { display: grid; gap: 10px; }
+  .ctl-chev { width: 10px; height: 10px; color: var(--text-muted); transition: transform .15s ease; }
+  .ctl-row[open] .ctl-chev { transform: rotate(90deg); }
+  .ctl-body { padding: 4px 6px 14px 114px; display: grid; gap: 10px; }
+  .ctl-check { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; font-size: 13px; }
+  .ctl-check-title { line-height: 1.4; }
+  .ctl-check-meta { grid-column: 1; font-size: 12px; color: var(--text-muted); }
+  .ctl-check-counts { grid-row: 1 / span 2; grid-column: 2; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); white-space: nowrap; }
+  .ctl-check-counts .f { color: var(--off); font-weight: 600; }
+  .ctl-hosts { grid-column: 1 / -1; font-size: 12.5px; }
+  .ctl-hosts a { white-space: nowrap; }
+  @media (max-width: 720px) {
+    .ctl-row > summary { grid-template-columns: 80px 1fr auto 12px; }
+    .ctl-checks { display: none; }
+    .ctl-body { padding-left: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .ctl-chev { transition: none; } }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-scores" hidden>
+      <div id="scores-page-head"></div>
+      <div class="stat-tiles" id="score-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Hardening score per endpoint</h2><span class="scan-status" id="scores-status"></span></div>
+        <p class="hint">
+          Each endpoint is checked against the benchmark written for its operating system and version (the CIS policies
+          under Policies; the nearest version when there is no exact one, marked ≈). The score is the share of evaluated
+          checks that pass, weighted by severity (critical 4, high 3, medium 2, low 1); checks that could not be evaluated
+          and checks under an <a href="#exceptions">exception</a> are left out. The line is the last 30 days. Download a report as CSV for one endpoint or the whole fleet.
+        </p>
+        <div class="sc-actions" id="sc-actions">
+          <button class="primary u-w-auto" id="sc-scan">Scan now</button>
+          <label id="sc-auto-wrap"><input type="checkbox" id="sc-auto"> scan every endpoint daily</label>
+          <a href="/api/compliance/report.csv" id="sc-fleet-csv">Fleet report (CSV)</a>
+          <span class="muted" id="sc-status"></span>
+        </div>
+        <div class="table-scroll rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Endpoint</th><th>Benchmark</th><th>Score</th><th>Trend</th><th>Passed</th><th>Failed</th><th>Unknown</th><th>Excepted</th><th>Scanned</th><th>Report</th></tr></thead>
+            <tbody id="scores-body"><tr><td class="empty" colspan="10">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-findings" hidden>
+      <div id="comply-page-head"></div>
+      <div class="stat-tiles" id="comply-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Checks, worst first</h2><span class="scan-status" id="checks-status"></span></div>
+        <p class="hint">
+          A check that couldn't be evaluated is <strong>unknown</strong>, never a pass — a silent pass is a false
+          assurance, which is the one failure mode compliance tooling can't have.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Check</th><th>Severity</th><th>Failing</th><th>Passing</th><th>Unknown</th><th>Excepted</th><th></th></tr></thead>
+            <tbody id="checks-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Failures by endpoint</h2><span class="scan-status" id="results-status"></span></div>
+        <div class="query-row">
+          <label class="u-fs-12 u-c-text-muted">
+            <input type="checkbox" id="only-fail" checked> failures only
+          </label>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>Check</th><th>Severity</th><th>State</th><th>Detail</th></tr></thead>
+            <tbody id="results-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-controls" hidden>
+      <div id="controls-page-head"></div>
+      <div class="stat-tiles" id="ctl-tiles"></div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2 id="ctl-title">Controls</h2>
+          <div class="ctl-tools">
+            <label for="ctl-fw" class="u-c-text-muted">Framework</label>
+            <select id="ctl-fw" class="select"></select>
+            <label class="u-c-text-muted"><input type="checkbox" id="ctl-open-only"> only controls that need attention</label>
+            <a id="ctl-csv" href="/api/compliance/controls.csv">Export CSV</a>
+          </div>
+        </div>
+        <p class="ctl-finding" id="ctl-finding" role="status"></p>
+        <p class="hint">
+          Each control lists the benchmark checks that give evidence for it, as the benchmark itself maps them; mustra adds
+          no mapping of its own to imported benchmarks, so a control with no mapped check is not shown rather than shown as met.
+          A control <strong>fails</strong> when any of its checks fails on any endpoint, and a check that could not be
+          evaluated keeps its control <strong>unknown</strong>, never passing. Exceptions count for neither. This is evidence
+          for an assessment, not an assessment: most controls also need policy and process no endpoint scan can show.
+        </p>
+        <div id="ctl-unmapped"></div>
+        <div id="ctl-families"><p class="empty">loading…</p></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-exceptions" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Exceptions</h2><span class="scan-status" id="exc-status"></span></div>
+        <p class="hint">
+          A check you have decided not to apply — because it conflicts with how this site works, or needs a reinstall —
+          stops counting against the hardening score. It still runs and its real result is kept; it shows as
+          <span class="st excepted">excepted</span>. An exception matches the check by its title, so it covers every
+          benchmark version that has it, and applies to every endpoint or to one group. Give the reason: an exception
+          nobody can explain later is just a hidden failure.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Check</th><th>Applies to</th><th>Reason</th><th>Expires</th><th>Added</th><th></th></tr></thead>
+            <tbody id="exc-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="import-box" id="exc-new" hidden>
+          <h3 class="u-m-0-0-8 u-fs-13">Add an exception</h3>
+          <div class="exc-form">
+            <label>Check title <input class="search-input" id="exc-title" placeholder="Ensure sshd PermitRootLogin is disabled."></label>
+            <div class="row">
+              <label>Applies to <select id="exc-group"><option value="">every endpoint</option></select></label>
+              <label>Expires (optional) <input type="date" id="exc-expires"></label>
+            </div>
+            <label>Reason <textarea id="exc-reason" rows="2" placeholder="Fleet tooling logs in as root with a key; root password login is off."></textarea></label>
+            <div class="query-row"><button class="primary u-w-auto" id="exc-save">Add exception</button><span class="scan-status" id="exc-save-status"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-policies" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Policies</h2><span class="scan-status" id="pol-status"></span></div>
+        <p class="hint">
+          mustra ships a short baseline and reads <strong>Wazuh SCA policy files</strong>, which is where the real
+          CIS content lives — hundreds of checks per platform, professionally maintained. Import one and it runs
+          here; you don't need to run Wazuh, and no second agent goes on your endpoints.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Platform</th><th>Checks</th><th>Source</th><th>Added</th><th>Action</th></tr></thead>
+            <tbody id="pol-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="import-box">
+          <h3 class="u-m-0-0-6 u-fs-13">Import a Wazuh SCA policy</h3>
+          <p class="hint u-m-0-0-10">
+            Get one from <code>github.com/wazuh/wazuh/tree/main/ruleset/sca</code> — e.g.
+            <code>cis_debian12.yml</code> — and drop the file here. It's read, not redistributed, which keeps
+            their GPLv2 content out of this AGPL-3.0 project.
+          </p>
+          <div class="query-row">
+            <input class="search-input u-w-220" id="imp-name" aria-label="Policy name" placeholder="CIS Debian 12">
+            <input type="file" id="imp-file" aria-label="Policy file (YAML)" accept=".yml,.yaml" class="u-fs-12">
+            <button class="primary u-w-auto" id="imp-go">Import</button>
+            <span class="scan-status" id="imp-status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let results = [], meta = {}, canRun = false, canSettings = false;
+
+document.addEventListener("mustra:user", (e) => {
+  canRun = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("patches.manage")));
+  canSettings = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("settings.manage")));
+  renderPageHead("comply-page-head", "/compliance", { title: "Comply" });
+  renderPageHead("scores-page-head", "/compliance", { title: "Comply" });
+  renderPageHead("controls-page-head", "/compliance", { title: "Comply" });
+  initModuleSections([
+    { hash: "scores", label: "Hardening Scores" },
+    { hash: "findings", label: "Findings" },
+    { hash: "controls", label: "Controls" },
+    { hash: "policies", label: "Policies" },
+    { hash: "exceptions", label: "Exceptions" },
+  ]);
+  loadExceptions();
+  loadScores();
+  loadResults();
+  loadPolicies();
+  loadControls();
+});
+
+// A tiny inline trend line: 30 days of scores, 0–100.
+function sparkline(points) {
+  if (!points || points.length < 2) return '<span class="muted">—</span>';
+  const w = 90, h = 22, n = points.length;
+  const xy = points.map((v, i) => `${(i / (n - 1) * w).toFixed(1)},${(h - (v / 100) * h).toFixed(1)}`).join(" ");
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="currentColor" stroke-width="1.5" points="${xy}"/></svg>`;
+}
+const scoreClass = v => v >= 80 ? "good" : v >= 60 ? "mid" : "bad";
+
+async function loadScores() {
+  const r = await fetch("/api/compliance/scores"); if (!r.ok) return;
+  const d = await r.json();
+  const list = d.endpoints || [];
+  const noBench = list.filter(e => !e.benchmark).length;
+  document.getElementById("score-tiles").innerHTML = [
+    { label: "Fleet hardening score", value: d.fleet_score != null ? d.fleet_score + "%" : "—", cls: d.fleet_score != null ? scoreClass(d.fleet_score) === "good" ? "ok" : "bad" : "" },
+    { label: "Endpoints scored", value: `${d.scored || 0} of ${list.length}` },
+    { label: "Below 60%", value: list.filter(e => e.score != null && e.score < 60).length, cls: "bad" },
+    { label: "No benchmark for their OS", value: noBench },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  document.getElementById("scores-status").textContent = d.auto_scan === "daily" ? "scanned daily" : "scanned on demand";
+  document.getElementById("sc-scan").hidden = !canRun;
+  document.getElementById("sc-auto-wrap").hidden = !canSettings;
+  document.getElementById("sc-auto").checked = d.auto_scan === "daily";
+  const body = document.getElementById("scores-body");
+  body.innerHTML = list.map(e => `<tr>
+      <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname)}</a></td>
+      <td>${e.benchmark ? `${e.exact ? "" : '<span title="nearest version: no benchmark for this exact version">≈ </span>'}${escapeHtml(e.benchmark)}` : '<span class="muted">none for this OS</span>'}</td>
+      <td data-sort="${escapeHtml(e.score != null ? e.score : -1)}">${e.score != null ? `<span class="score ${escapeHtml(scoreClass(e.score))}">${escapeHtml(e.score)}%</span>` : '<span class="muted">not scanned</span>'}</td>
+      <td class="score ${escapeHtml(e.score != null ? scoreClass(e.score) : "")}">${/* safe-html: numbers only */ sparkline(e.trend)}</td>
+      <td>${escapeHtml(e.pass)}</td><td>${escapeHtml(e.fail)}</td><td>${escapeHtml(e.unknown)}</td><td>${escapeHtml(e.excepted || 0)}</td>
+      <td data-sort="${escapeHtml(e.checked_at || "")}">${e.score != null ? fmtAgo(e.checked_at) : "—"}</td>
+      <td>${e.score != null ? `<a href="/api/compliance/report.csv?agent_id=${encodeURIComponent(e.agent_id)}&policy_id=${encodeURIComponent(e.policy_id)}">CSV</a>` : ""}</td>
+    </tr>`).join("") || '<tr><td class="empty" colspan="10">no endpoints</td></tr>';
+  const dt = initDataTable(body.closest("table"), { storageKey: "hardening-scores" });
+  if (dt) dt.refresh();
+}
+document.getElementById("sc-scan").addEventListener("click", async () => {
+  const st = document.getElementById("sc-status"); st.textContent = "starting…";
+  const r = await fetch("/api/compliance/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  if (!r.ok) { st.textContent = "failed: " + await r.text(); return; }
+  const b = (await r.json()).benchmarks || {};
+  st.textContent = "scanning: " + Object.entries(b).map(([k, v]) => `${k} on ${v}`).join(", ") + " — results arrive over the next few minutes";
+  setTimeout(loadScores, 60000);
+});
+document.getElementById("sc-auto").addEventListener("change", async (ev) => {
+  const r = await fetch("/api/compliance/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ auto_scan: ev.target.checked ? "daily" : "" }) });
+  if (!r.ok) { alert("failed: " + await r.text()); ev.target.checked = !ev.target.checked; }
+  loadScores();
+});
+document.getElementById("only-fail").addEventListener("change", renderResults);
+
+let groupNames = {};
+async function loadExceptions() {
+  const [er, gr] = await Promise.all([fetch("/api/compliance/exceptions"), fetch("/api/groups")]);
+  if (!er.ok) return;
+  const list = (await er.json()).exceptions || [];
+  if (gr.ok) {
+    const groups = (await gr.json()).groups || [];
+    groupNames = Object.fromEntries(groups.map(g => [g.id, g.name]));
+    const sel = document.getElementById("exc-group");
+    sel.innerHTML = '<option value="">every endpoint</option>' + groups.map(g =>
+      `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("");
+  }
+  document.getElementById("exc-new").hidden = !canRun;
+  document.getElementById("exc-status").textContent = list.length ? `${list.length} exception(s)` : "";
+  const now = new Date();
+  document.getElementById("exc-body").innerHTML = list.map(e => {
+    const expired = e.expires_at && new Date(e.expires_at) <= now;
+    const scope = e.group_id ? (groupNames[e.group_id] ? `group ${groupNames[e.group_id]}` : "deleted group (applies to nobody)") : "every endpoint";
+    return `<tr>
+      <td>${escapeHtml(e.title)}</td>
+      <td>${escapeHtml(scope)}</td>
+      <td class="u-ws-normal u-maxw-360">${escapeHtml(e.reason)}</td>
+      <td>${e.expires_at ? (expired ? '<span class="st fail">expired</span>' : escapeHtml(new Date(new Date(e.expires_at) - 1).toLocaleDateString())) : '<span class="muted">never</span>'}</td>
+      <td data-sort="${escapeHtml(e.created_at)}">${fmtAgo(e.created_at)} <span class="muted">by ${escapeHtml(e.created_by)}</span></td>
+      <td>${canRun ? `<button class="tiny danger" data-unexcept="${escapeHtml(e.id)}">remove</button>` : ""}</td>
+    </tr>`;
+  }).join("") || '<tr><td class="empty" colspan="6">no exceptions — every check counts</td></tr>';
+  document.querySelectorAll("[data-unexcept]").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest("tr"), id = b.dataset.unexcept;
+    undoable({ text: "Exception removed. The check counts against the score again.", hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => {
+        const r = await fetch(`/api/compliance/exceptions/${encodeURIComponent(id)}`, { method: "DELETE", keepalive: true });
+        if (!r.ok) { row.classList.remove("is-undoable"); alert("Removing the exception failed: " + await r.text()); return; }
+        refreshAfterExceptions();
+      } });
+  }));
+}
+function refreshAfterExceptions() { loadExceptions(); loadResults(); setTimeout(loadScores, 1500); }
+function startException(title) {
+  location.hash = "exceptions";
+  document.getElementById("exc-title").value = title;
+  document.getElementById("exc-reason").focus();
+}
+document.getElementById("exc-save").addEventListener("click", async () => {
+  const st = document.getElementById("exc-save-status");
+  const body = { title: document.getElementById("exc-title").value.trim(), group_id: document.getElementById("exc-group").value,
+    reason: document.getElementById("exc-reason").value.trim(), expires: document.getElementById("exc-expires").value };
+  const r = await fetch("/api/compliance/exceptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { st.innerHTML = `<span class="u-c-off">${escapeHtml(await r.text())}</span>`; return; }
+  st.innerHTML = '<span class="u-c-ok">added</span>';
+  ["exc-title", "exc-reason", "exc-expires"].forEach(id => document.getElementById(id).value = "");
+  refreshAfterExceptions();
+});
+
+async function loadResults() {
+  const resp = await fetch("/api/compliance/results");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  meta = await resp.json();
+  results = meta.results || [];
+  renderTiles();
+  renderChecks();
+  renderResults();
+  renderControls(); // names the failing endpoints, from these results
+}
+
+function renderTiles() {
+  const s = meta.states || {};
+  const total = (s.pass || 0) + (s.fail || 0) + (s.unknown || 0);
+  const score = total ? Math.round((s.pass || 0) / total * 100) : 0;
+  document.getElementById("comply-tiles").innerHTML = [
+    { label: "Compliance", value: total ? score + "%" : "—", cls: score >= 90 ? "ok" : score >= 70 ? "" : "bad" },
+    { label: "Failing", value: s.fail || 0, cls: (s.fail || 0) ? "bad" : "ok" },
+    { label: "Passing", value: s.pass || 0, cls: "ok" },
+    { label: "Unknown", value: s.unknown || 0 },
+    { label: "Excepted", value: s.excepted || 0 },
+    { label: "Endpoints checked", value: meta.endpoints_reporting || 0 },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(String(t.value))}</div></div>`).join("");
+}
+
+function renderChecks() {
+  const checks = (meta.checks || []).sort((a, b) => (b.fail || 0) - (a.fail || 0));
+  document.getElementById("checks-status").textContent = checks.length ? `${checks.length} check(s)` : "";
+  document.getElementById("checks-body").innerHTML = checks.length === 0
+    ? '<tr><td class="empty" colspan="7">nothing has been evaluated yet — run a policy from the Policies tab</td></tr>'
+    : checks.map(c => `
+      <tr>
+        <td>${escapeHtml(c.title || c.check_id)}<div class="mono u-c-text-muted">${escapeHtml(c.check_id)}</div></td>
+        <td>${c.severity ? `<span class="sev ${escapeHtml(c.severity)}">${escapeHtml(c.severity)}</span>` : "—"}</td>
+        <td class="num" data-sort="${escapeHtml(c.fail || 0)}"${sx(`color:${(c.fail||0) ? "var(--off)" : "inherit"}`)}>${escapeHtml(c.fail || 0)}</td>
+        <td class="num" data-sort="${escapeHtml(c.pass || 0)}">${escapeHtml(c.pass || 0)}</td>
+        <td class="num" data-sort="${escapeHtml(c.unknown || 0)}">${escapeHtml(c.unknown || 0)}</td>
+        <td class="num" data-sort="${escapeHtml(c.excepted || 0)}">${escapeHtml(c.excepted || 0)}</td>
+        <td>${canRun && (c.fail || 0) ? `<button class="tiny" data-except="${escapeHtml(c.title || c.check_id)}">add exception</button>` : ""}</td>
+      </tr>`).join("");
+  document.querySelectorAll("[data-except]").forEach(b => b.addEventListener("click", () => startException(b.dataset.except)));
+  const dt = initDataTable(document.getElementById("checks-body").closest("table"), { storageKey: "comply-checks" });
+  if (dt) dt.refresh();
+}
+
+function renderResults() {
+  const onlyFail = document.getElementById("only-fail").checked;
+  const shown = onlyFail ? results.filter(r => r.state === "fail") : results;
+  document.getElementById("results-status").textContent = `${shown.length} shown of ${results.length}`;
+  document.getElementById("results-body").innerHTML = shown.length === 0
+    ? `<tr><td class="empty" colspan="5">${results.length === 0 ? "no results yet" : "nothing failing"}</td></tr>`
+    : shown.slice(0, 500).map(r => `
+      <tr>
+        <td><a href="/endpoint/${escapeHtml(r.agent_id)}">${escapeHtml(r.hostname || r.agent_id)}</a></td>
+        <td>${escapeHtml(r.title || r.check_id)}</td>
+        <td>${r.severity ? `<span class="sev ${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span>` : "—"}</td>
+        <td><span class="st ${escapeHtml(r.state)}">${escapeHtml(r.state)}</span></td>
+        <td class="mono u-ws-normal u-maxw-340 u-c-text-muted">${escapeHtml(r.detail || "")}</td>
+      </tr>`).join("");
+  const dt = initDataTable(document.getElementById("results-body").closest("table"), { storageKey: "comply-results" });
+  if (dt) dt.refresh();
+}
+
+async function loadPolicies() {
+  const resp = await fetch("/api/compliance/policies");
+  if (!resp.ok) return;
+  const policies = (await resp.json()).policies || [];
+  document.getElementById("pol-status").textContent = policies.length ? `${policies.length} policy(ies)` : "";
+  document.getElementById("pol-body").innerHTML = policies.map(p => `
+    <tr>
+      <td><strong>${escapeHtml(p.name)}</strong></td>
+      <td>${escapeHtml(osLabel(p.os))}</td>
+      <td class="num" data-sort="${escapeHtml(p.check_count)}">${escapeHtml(p.check_count)}</td>
+      <td>${escapeHtml(p.source)}</td>
+      <td data-sort="${escapeHtml(p.created_at || "")}">${fmtAgo(p.created_at)}</td>
+      <td class="row-actions">
+        ${canRun ? `<button class="tiny" data-run="${escapeHtml(p.id)}">run on fleet</button>` : ""}
+        ${canRun && p.source !== "builtin" ? `<button class="tiny danger" data-del="${escapeHtml(p.id)}">delete</button>` : ""}
+      </td>
+    </tr>`).join("");
+
+  document.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "running…";
+    const resp = await fetch(`/api/compliance/policies/${b.dataset.run}/run`, { method: "POST" });
+    const txt = resp.ok
+      ? `started: ${(await resp.json()).checks} checks on ${(await resp.clone().json()).endpoints || "?"} endpoints`
+      : await resp.text();
+    alert(txt);
+    b.disabled = false; b.textContent = "run on fleet";
+    setTimeout(loadResults, 5000);
+  }));
+  document.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Delete this policy? Its results are removed with it.")) return;
+    await fetch(`/api/compliance/policies/${b.dataset.del}`, { method: "DELETE" });
+    loadPolicies();
+  }));
+}
+
+document.getElementById("imp-go").addEventListener("click", async () => {
+  const file = document.getElementById("imp-file").files[0];
+  const status = document.getElementById("imp-status");
+  if (!file) { status.textContent = "choose a .yml file first"; return; }
+  const name = document.getElementById("imp-name").value.trim() || file.name.replace(/\.(yml|yaml)$/, "");
+  status.textContent = "importing…";
+  const resp = await fetch(`/api/compliance/import?name=${encodeURIComponent(name)}`, {
+    method: "POST", body: await file.text(),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`; return; }
+  const r = await resp.json();
+  status.innerHTML = `<span class="u-c-ok">imported ${escapeHtml(r.checks)} checks</span>`;
+  loadPolicies();
+});
+
+// --- Controls: the results turned around by framework control ----------
+let controls = null;
+const CTL_STATE = { fail: "failing", unknown: "can't tell", pass: "passing", untested: "not scanned" };
+async function loadControls() {
+  const sel = document.getElementById("ctl-fw");
+  const fw = sel.value || new URLSearchParams(location.search).get("framework") || "nist_800_53";
+  const r = await fetch("/api/compliance/controls?framework=" + encodeURIComponent(fw));
+  if (!r.ok) { document.getElementById("ctl-families").innerHTML = `<p class="empty">${escapeHtml((await r.text()).trim())}</p>`; return; }
+  controls = await r.json();
+  sel.innerHTML = (controls.frameworks.length ? controls.frameworks : [{ id: controls.framework, label: controls.label, controls: 0 }])
+    .map(f => `<option value="${escapeHtml(f.id)}"${f.id === controls.framework ? " selected" : ""}>${escapeHtml(f.label)} · ${escapeHtml(f.controls)}</option>`).join("");
+  document.getElementById("ctl-csv").href = "/api/compliance/controls.csv?framework=" + encodeURIComponent(controls.framework);
+  renderControls();
+}
+document.getElementById("ctl-fw").addEventListener("change", loadControls);
+document.getElementById("ctl-open-only").addEventListener("change", renderControls);
+
+function renderControls() {
+  if (!controls) return;
+  const all = controls.families.flatMap(f => f.controls);
+  const n = s => all.filter(c => c.state === s).length;
+  document.getElementById("ctl-title").textContent = controls.label;
+  document.getElementById("ctl-tiles").innerHTML = [
+    { label: "Controls failing", value: n("fail"), cls: n("fail") ? "off" : "" },
+    { label: "Can't tell yet", value: n("unknown") },
+    { label: "Passing", value: n("pass"), cls: n("pass") ? "ok" : "" },
+    { label: "Mapped, not scanned", value: n("untested") },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls)}">${escapeHtml(t.value)}</div></div>`).join("");
+
+  // The one finding: how many fail, and the widest failure.
+  const worst = all.filter(c => c.state === "fail").sort((a, b) => b.endpoints_failing - a.endpoints_failing)[0];
+  const finding = document.getElementById("ctl-finding");
+  if (!all.length) finding.textContent = "";
+  else if (worst) finding.innerHTML = `<b>${escapeHtml(n("fail"))} of ${escapeHtml(all.length)}</b> mapped controls have failing evidence. ` +
+    `The widest is <b>${escapeHtml(worst.id)}</b>, failing on ${escapeHtml(worst.endpoints_failing)} of ${escapeHtml(worst.endpoints_assessed)} endpoint${worst.endpoints_assessed === 1 ? "" : "s"} scanned.`;
+  else if (n("pass")) finding.innerHTML = `No mapped control has a failing check. ${n("unknown") ? `<b>${escapeHtml(n("unknown"))}</b> still have checks that could not be evaluated.` : ""}`;
+  else finding.textContent = "Nothing mapped has been scanned yet: run a benchmark from Hardening Scores.";
+
+  const unm = controls.unmapped_policies || [];
+  document.getElementById("ctl-unmapped").innerHTML = unm.length
+    ? `<p class="ctl-unmapped">${escapeHtml(unm.slice(0, 3).join(", "))}${unm.length > 3 ? ` and ${escapeHtml(unm.length - 3)} more` : ""}
+       ${unm.length === 1 ? "was" : "were"} imported before mustra read benchmark mappings, so ${unm.length === 1 ? "its checks are" : "their checks are"} not counted here.
+       Import the same CIS file again under <a href="#policies">Policies</a> to add them; results are kept.</p>` : "";
+
+  const openOnly = document.getElementById("ctl-open-only").checked;
+  const chevron = '<svg class="ctl-chev" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const fams = controls.families.map(f => ({ ...f, shown: f.controls.filter(c => !openOnly || c.state === "fail" || c.state === "unknown") }))
+    .filter(f => f.shown.length);
+  const box = document.getElementById("ctl-families");
+  if (!all.length) { box.innerHTML = `<p class="empty">No benchmark loaded here maps its checks to ${escapeHtml(controls.label)}.</p>`; return; }
+  if (!fams.length) { box.innerHTML = '<p class="empty">Every mapped control passes, or has not been scanned.</p>'; return; }
+  box.innerHTML = fams.map(f => {
+    const total = f.controls.length;
+    const pct = v => (v / total * 100).toFixed(2);
+    return `<section class="ctl-fam" aria-labelledby="fam-${escapeHtml(f.id)}">
+      <div class="ctl-fam-head">
+        <h3 id="fam-${escapeHtml(f.id)}"><span class="ctl-fam-id">${escapeHtml(f.id)}</span> ${escapeHtml(f.name || "")}</h3>
+        <span class="ctl-fam-sum">${f.fail ? `<span class="is-fail">${escapeHtml(f.fail)} failing</span> · ` : ""}${f.unknown ? `${escapeHtml(f.unknown)} can't tell · ` : ""}${escapeHtml(f.pass)} passing${f.untested ? ` · ${escapeHtml(f.untested)} not scanned` : ""}</span>
+      </div>
+      <div class="ctl-spread" role="img" aria-label="${escapeHtml(`${f.fail} failing, ${f.unknown} can't tell, ${f.pass} passing of ${total}`)}">
+        <span class="fail"${sx(`width:${pct(f.fail)}%`)}></span><span class="unknown"${sx(`width:${pct(f.unknown)}%`)}></span><span class="pass"${sx(`width:${pct(f.pass)}%`)}></span>
+      </div>
+      ${f.shown.map(c => `<details class="ctl-row">
+        <summary>
+          <span class="ctl-id">${escapeHtml(c.id)}</span>
+          <span><span class="st ${escapeHtml(c.state)}">${escapeHtml(CTL_STATE[c.state] || c.state)}</span></span>
+          <span class="ctl-checks">${escapeHtml(c.checks.length)} check${c.checks.length === 1 ? "" : "s"}: ${escapeHtml(c.checks.map(k => k.title.replace(/\.$/, "")).join("; "))}</span>
+          <span class="ctl-eps${c.endpoints_failing ? " is-fail" : ""}">${c.endpoints_assessed ? `${escapeHtml(c.endpoints_failing)} <span class="of">of ${escapeHtml(c.endpoints_assessed)} failing</span>` : '<span class="of">—</span>'}</span>
+          ${/* safe-html: fixed SVG */ chevron}
+        </summary>
+        <div class="ctl-body">${controlChecksHTML(c.checks)}</div>
+      </details>`).join("")}
+    </section>`;
+  }).join("");
+}
+
+// A control's checks: every one with a problem, then a few that pass and
+// the rest behind a button, so a 26-check control does not open as a wall.
+function controlChecksHTML(checks) {
+  const trouble = checks.filter(k => k.fail || k.unknown), fine = checks.filter(k => !k.fail && !k.unknown);
+  const lead = trouble.length ? 0 : 3;
+  const shown = [...trouble, ...fine.slice(0, lead)], rest = fine.slice(lead);
+  return shown.map(controlCheckHTML).join("") + (rest.length
+    ? `<button type="button" class="tiny ctl-more" data-more>${escapeHtml(rest.length)} more check${rest.length === 1 ? "" : "s"} with nothing failing</button>
+       <div class="ctl-rest" hidden>${rest.map(controlCheckHTML).join("")}</div>` : "");
+}
+document.getElementById("ctl-families").addEventListener("click", e => {
+  const b = e.target.closest("[data-more]");
+  if (!b) return;
+  const rest = b.nextElementSibling;
+  rest.hidden = false; b.remove();
+  rest.querySelector("a, .ctl-check-title")?.scrollIntoView({ block: "nearest" });
+});
+
+// One check under a control: its title and benchmark, its counts, and the
+// endpoints it fails on, from the results the page already holds.
+function controlCheckHTML(k) {
+  const failing = (results || []).filter(r => r.policy_id === k.policy_id && r.check_id === k.check_id && r.state === "fail");
+  const hosts = failing.slice(0, 12).map(r => `<a href="/endpoint/${escapeHtml(r.agent_id)}">${escapeHtml(r.hostname || r.agent_id)}</a>`).join(", ");
+  return `<div class="ctl-check">
+    <span class="ctl-check-title">${escapeHtml(k.title)}</span>
+    <span class="ctl-check-counts">${!(k.fail || k.pass || k.unknown || k.excepted) ? "not scanned" : [
+      k.fail ? `<span class="f">${escapeHtml(k.fail)} failing</span>` : "", k.pass ? `${escapeHtml(k.pass)} passing` : "",
+      k.unknown ? `${escapeHtml(k.unknown)} can't tell` : "", k.excepted ? `${escapeHtml(k.excepted)} excepted` : ""].filter(Boolean).join(" · ")}</span>
+    <span class="ctl-check-meta">${escapeHtml(k.policy_name)} · check ${escapeHtml(k.check_id)}${k.severity ? ` · ${escapeHtml(k.severity)}` : ""}</span>
+    ${failing.length ? `<span class="ctl-hosts">Fails on ${/* safe-html: built from escaped values above */ hosts}${failing.length > 12 ? ` and ${escapeHtml(failing.length - 12)} more` : ""}</span>` : ""}
+  </div>`;
+}
+</script>
+</body>
+</html>

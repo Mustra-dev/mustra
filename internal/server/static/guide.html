@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 10px; }
+  .filters .field { margin: 0; }
+  .g-item { display: grid; grid-template-columns: 4px 1fr auto; gap: 12px; padding: 12px 8px; border-bottom: 1px solid var(--border); }
+  .g-item:last-child { border-bottom: 0; }
+  .g-item .stripe { border-radius: 2px; background: var(--text-muted); }
+  .g-item.critical .stripe, .g-item.high .stripe { background: var(--off); }
+  .g-item.medium .stripe { background: var(--viz-warning); }
+  .g-item.closed { opacity: .65; }
+  .g-item .kind { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+  .g-item .title { font-size: 13px; font-weight: 600; margin: 2px 0 3px; }
+  .g-item .detail { font-size: 12px; color: var(--text-muted); line-height: 1.5; max-width: 80ch; }
+  .g-item .meta { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 4px; }
+  .g-item .side { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .g-item .side a { color: var(--accent); text-decoration: none; font-size: 12px; white-space: nowrap; }
+  .sev { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .sev.critical, .sev.high { background: var(--off-bg); color: var(--off); }
+  .sev.medium { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .sev.low { background: var(--surface-2); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="guide-page-head"></div>
+      <div class="stat-tiles" id="guide-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Notifications</h2><span class="scan-status" id="guide-status"></span></div>
+        <p class="hint"><strong>Guidance</strong> links to the fix. An <strong>observation</strong> is something to look at. Items refresh every two minutes; one that you dismiss stays dismissed while its condition persists and comes back if the condition goes away and returns.</p>
+        <div class="filters">
+          <div class="field"><label for="gf-show">Show</label><select id="gf-show"><option value="open">open</option><option value="all">everything from the last 30 days</option></select></div>
+          <div class="field"><label for="gf-kind">Kind</label><select id="gf-kind"><option value="">all</option><option value="guidance">guidance</option><option value="observation">observation</option></select></div>
+          <div class="field"><label for="gf-source">Source</label><select id="gf-source"><option value="">all</option></select></div>
+          <div class="field"><button class="tiny" id="gf-refresh">Re-evaluate now</button></div>
+        </div>
+        <div id="guide-list"></div>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let items = [];
+document.addEventListener("mustra:user", () => {
+  renderPageHead("guide-page-head", "/guide", { title: "Guide" });
+  load();
+});
+async function load(refresh = false) {
+  const all = document.getElementById("gf-show").value === "all";
+  const resp = await fetch(`/api/guide${refresh ? "/refresh" : ""}?all=${all ? 1 : 0}`, { method: refresh ? "POST" : "GET" });
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) { document.getElementById("guide-list").innerHTML = `<div class="empty">${escapeHtml(await resp.text())}</div>`; return; }
+  const data = await resp.json();
+  items = data.items || [];
+  const c = data.counts || {};
+  document.getElementById("guide-tiles").innerHTML = [
+    { label: "Open", value: c.open || 0, cls: c.open ? "" : "ok" },
+    { label: "Critical", value: c.critical || 0, cls: c.critical ? "bad" : "ok" },
+    { label: "High", value: c.high || 0, cls: c.high ? "bad" : "" },
+    { label: "Guidance open", value: items.filter(n => n.kind === "guidance" && !n.resolved_at && !n.dismissed_at).length },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  const sources = [...new Set(items.map(n => n.source))].sort();
+  const sel = document.getElementById("gf-source"), prev = sel.value;
+  sel.innerHTML = '<option value="">all</option>' + sources.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  sel.value = prev;
+  render();
+}
+function render() {
+  const kind = document.getElementById("gf-kind").value, source = document.getElementById("gf-source").value;
+  const shown = items.filter(n => (!kind || n.kind === kind) && (!source || n.source === source));
+  document.getElementById("guide-status").textContent = shown.length ? `${shown.length}` : "";
+  const el = document.getElementById("guide-list");
+  el.innerHTML = shown.length === 0 ? '<div class="empty">Nothing here. Stalled jobs, expiring certificates, agents behind, missing Full Disk Access, sensitive-data findings, critical Impact findings, a failing directory sync and critical vulnerabilities all show up as they happen.</div>'
+    : shown.map(n => {
+      const closed = n.resolved_at || n.dismissed_at;
+      const state = n.resolved_at ? `resolved ${escapeHtml(fmtAgo(n.resolved_at))}` : (n.dismissed_at ? `dismissed ${escapeHtml(fmtAgo(n.dismissed_at))}${n.dismissed_by ? " by " + escapeHtml(n.dismissed_by) : ""}` : `first seen ${escapeHtml(fmtAgo(n.first_seen))} · still true ${escapeHtml(fmtAgo(n.last_seen))}`);
+      return `<div class="g-item ${escapeHtml(n.severity)}${closed ? " closed" : ""}"><span class="stripe"></span>
+        <div><div class="kind">${escapeHtml(n.kind)} · ${escapeHtml(n.source)} <span class="sev ${escapeHtml(n.severity)}">${escapeHtml(n.severity)}</span></div>
+          <div class="title">${escapeHtml(n.title)}</div><div class="detail">${escapeHtml(n.detail || "")}</div><div class="meta">${state}</div></div>
+        <div class="side">${n.link ? `<a href="${escapeHtml(safeUrl(n.link))}">Open →</a>` : ""}${!n.resolved_at ? (n.dismissed_at ? `<button class="tiny" data-undismiss="${escapeHtml(n.id)}">bring back</button>` : `<button class="tiny" data-dismiss="${escapeHtml(n.id)}">dismiss</button>`) : ""}</div></div>`;
+    }).join("");
+  el.querySelectorAll("[data-dismiss]").forEach(b => b.addEventListener("click", async () => { await fetch(`/api/guide/${encodeURIComponent(b.dataset.dismiss)}/dismiss`, { method: "POST" }); load(); refreshGuide(); }));
+  el.querySelectorAll("[data-undismiss]").forEach(b => b.addEventListener("click", async () => { await fetch(`/api/guide/${encodeURIComponent(b.dataset.undismiss)}/undismiss`, { method: "POST" }); load(); refreshGuide(); }));
+}
+["gf-show"].forEach(id => document.getElementById(id).addEventListener("change", () => load()));
+["gf-kind", "gf-source"].forEach(id => document.getElementById(id).addEventListener("change", render));
+document.getElementById("gf-refresh").addEventListener("click", () => load(true));
+setInterval(() => { if (!document.hidden) load(); }, 60000);
+</script>
+</body>
+</html>

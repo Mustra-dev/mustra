@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self Service — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .kind-pill { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); font-weight: 700; }
+  .pkg-chip { font-family: var(--mono); font-size: var(--fs-meta); color: var(--accent); background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 6px; margin-right: 4px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 12px; font-size: 12.5px; }
+  .checks label { display: flex; align-items: center; gap: 6px; }
+  /* Appearance: the editor beside a live frame of the endpoint window. */
+  .ss-appear { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .ss-appear { grid-template-columns: 1fr; } }
+  .ss-appear .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 18px 0 10px; }
+  .ss-appear .panel h3:first-of-type { margin-top: 0; }
+  .ss-appear .field input, .ss-appear .field select, .ss-appear .field textarea { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .ss-appear .field textarea { resize: vertical; min-height: 64px; }
+  .ss-appear textarea.code { font-family: var(--mono); font-size: 12px; min-height: 120px; }
+  .ss-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .ss-colour { display: flex; gap: 6px; align-items: center; }
+  .ss-colour input[type=color] { width: 38px; height: 34px; padding: 2px; flex: none; cursor: pointer; }
+  .ss-colour input[type=text] { font-family: var(--mono); }
+  .ss-img { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ss-img .thumb { width: 52px; height: 40px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2) center/contain no-repeat; flex: none; }
+  .ss-tabs { display: flex; flex-direction: column; gap: 6px; }
+  .ss-tab { display: grid; grid-template-columns: auto 90px 1fr auto auto; gap: 8px; align-items: center; font-size: 12.5px; }
+  .ss-tab input[type=text] { padding: 6px 8px; }
+  .ss-palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-bottom: 4px; }
+  .ss-palettes .palette-card { padding: 4px; gap: 4px; }
+  .ss-palettes .pc-swatch { height: 40px; padding: 6px 0 0 7px; }
+  .ss-palettes .pc-card { padding: 6px 7px; gap: 4px; }
+  .ss-palettes .pc-dot { width: 10px; height: 10px; right: 7px; bottom: 6px; }
+  .ss-issues { margin: -4px 0 12px; padding-left: 18px; color: var(--warn); font-size: var(--fs-meta); }
+  .ss-issues:empty { display: none; }
+  .ss-img .thumb.drop { outline: 2px dashed var(--accent); outline-offset: 2px; }
+  .ss-share { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ss-preview { position: sticky; top: 12px; }
+  .ss-preview iframe { width: 100%; height: 620px; border: 1px solid var(--border); border-radius: var(--radius); background: #000; display: block; }
+  .ss-preview-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .ss-preview-bar .grow { flex: 1; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-items" hidden>
+      <div id="catalog-page-head"></div>
+      <div id="catalog-quick-links"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Offered packages</h2><span class="scan-status" id="items-status"></span></div>
+        <p class="hint">
+          The software packages Self Service offers on endpoints. A package reaches the computer groups in its
+          scope — leave the scope empty and every machine sees it — on the platforms listed: those where the
+          version Self Service installs has an install that needs no parameters. A machine's architecture,
+          distribution, OS version and the package's requirements can still rule it out. To offer a package, or
+          change how it is offered, open it under
+          Deploy → <a href="/software#catalog">Software Catalog</a> and use its Catalog settings.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Category</th><th>Platforms</th><th>Scope</th><th>Requests</th><th>Pending</th><th>State</th><th>Action</th></tr></thead>
+            <tbody id="items-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-requests" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Requests</h2><span class="scan-status" id="requests-status"></span></div>
+        <p class="hint">
+          Someone asked for a package their machine isn't scoped for. Approving grants that one machine that one
+          package — it doesn't move the machine into a group.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Package</th><th>Device</th><th>Asked by</th><th>Reason</th><th>When</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="requests-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-appearance" hidden>
+      <div class="ss-appear">
+        <div class="panel">
+          <div class="panel-header"><h2>Self Service appearance</h2><span class="scan-status" id="ss-status"></span></div>
+          <p class="hint">How the Self Service window looks on every endpoint. Endpoints pick up a change the next time
+            the window is opened, and keep it for when they're offline. Leave a field empty for the default.</p>
+
+          <h3>Identity</h3>
+          <div class="field"><label for="ss-org">Organization name</label><input id="ss-org" maxlength="120" placeholder="Self Service"></div>
+          <div class="field"><label for="ss-title">Window title</label><input id="ss-title" maxlength="80" placeholder="Self Service"></div>
+          <div class="field"><label for="ss-welcome">Welcome message</label><textarea id="ss-welcome" maxlength="1000" placeholder="Install approved software and see what has happened on this computer."></textarea></div>
+          <div class="field"><label>Logo</label>
+            <div class="ss-img"><div class="thumb" id="ss-logo-thumb"></div>
+              <input type="file" id="ss-logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+              <button class="tiny" type="button" id="ss-logo-pick">Upload…</button>
+              <button class="tiny" type="button" id="ss-logo-clear">Remove</button></div></div>
+
+          <h3>Help link</h3>
+          <div class="ss-two">
+            <div class="field"><label for="ss-help-h">Heading</label><input id="ss-help-h" maxlength="60" placeholder="Questions?"></div>
+            <div class="field"><label for="ss-help-t">Link text</label><input id="ss-help-t" maxlength="120" placeholder="(the URL)"></div>
+          </div>
+          <div class="field"><label for="ss-help-u">URL — https:// or mailto:, empty hides the section</label><input id="ss-help-u" maxlength="500" placeholder="https://helpdesk.example.com/"></div>
+
+          <h3>Look</h3>
+          <div class="field"><label id="ss-palettes-label">Palette — one click fills the theme and colors below</label>
+            <div class="ss-palettes" id="ss-palettes" role="group" aria-labelledby="ss-palettes-label"></div></div>
+          <div class="ss-two">
+            <div class="field"><label for="ss-theme">Theme</label><select id="ss-theme">
+              <option value="">Dark (default)</option><option value="light">Light</option><option value="system">Follow the computer</option></select></div>
+            <div class="field"><label for="ss-font">Font</label><select id="ss-font">
+              <option value="">System (default)</option><option value="segoe">Segoe UI</option><option value="serif">Serif</option>
+              <option value="rounded">Rounded</option><option value="mono">Monospace</option></select></div>
+          </div>
+          <div class="ss-two" id="ss-colours"></div>
+          <ul class="ss-issues" id="ss-issues" aria-live="polite"></ul>
+          <div class="field"><label for="ss-radius">Corner radius — <span id="ss-radius-v">default</span></label><input type="range" id="ss-radius" min="0" max="24" step="1"></div>
+          <div class="ss-two">
+            <div class="field"><label for="ss-pattern">Background</label><select id="ss-pattern">
+              <option value="">Glow (default)</option><option value="waves">Waves</option><option value="contours">Contours</option><option value="dots">Dots</option>
+              <option value="grid">Grid</option><option value="image">Image</option><option value="none">Plain</option></select></div>
+            <div class="field"><label for="ss-pop">Intensity — <span id="ss-pop-v">default</span></label><input type="range" id="ss-pop" min="0" max="100" step="1"></div>
+          </div>
+          <div class="field" id="ss-bg-field" hidden><label>Background image</label>
+            <div class="ss-img"><div class="thumb" id="ss-bg-thumb"></div>
+              <input type="file" id="ss-bg-file" accept="image/png,image/jpeg,image/webp" hidden>
+              <button class="tiny" type="button" id="ss-bg-pick">Upload…</button>
+              <button class="tiny" type="button" id="ss-bg-clear">Remove</button></div>
+            <div class="ss-two u-mt-10">
+              <div class="field"><label for="ss-bg-fit">Fit</label><select id="ss-bg-fit">
+                <option value="">Fill the window (default)</option><option value="contain">Show the whole image</option>
+                <option value="tile">Tile</option><option value="center">Actual size</option></select></div>
+              <div class="field"><label for="ss-bg-pos">Keep in view</label><select id="ss-bg-pos">
+                <option value="">Center (default)</option><option value="top">Top</option><option value="bottom">Bottom</option>
+                <option value="left">Left</option><option value="right">Right</option></select></div>
+            </div>
+            <div class="field"><label for="ss-bg-blur">Blur — <span id="ss-bg-blur-v">none</span></label>
+              <input type="range" id="ss-bg-blur" min="0" max="20" step="1" value="0"></div>
+            <p class="hint u-m-0">Blur and the Intensity slider together turn a busy photo into a quiet backdrop.
+              Endpoints need agent 0.55.1 or later for fit, position and blur; older ones show the image filled and sharp.</p></div>
+
+          <h3>Navigation</h3>
+          <p class="hint u-m-0-0-8">Rename, reorder or hide the sidebar sections. At least one has to stay shown.</p>
+          <div class="ss-tabs" id="ss-tabs"></div>
+          <div class="ss-two u-mt-12">
+            <div class="field"><label for="ss-default">Opens on</label><select id="ss-default"></select></div>
+            <div class="field"><label for="ss-empty">Empty activity message</label><input id="ss-empty" maxlength="200" placeholder="No upcoming activity."></div>
+          </div>
+          <div class="checks">
+            <label><input type="checkbox" id="ss-hide-checkin"> Hide "Check in now"</label>
+            <label><input type="checkbox" id="ss-hide-badges"> Hide count badges</label>
+          </div>
+
+          <h3>Custom CSS</h3>
+          <div class="field"><label for="ss-css">Applied last, after everything above. CSS only — it can't run script.</label>
+            <textarea id="ss-css" class="code" maxlength="32768" spellcheck="false" placeholder=".side { border-right: 3px solid var(--accent); }"></textarea></div>
+
+          <h3>Appearance file</h3>
+          <p class="hint u-m-0-0-8">Download this whole look — text, colors, images, navigation and CSS — to keep
+            a copy or reuse it on another console. Uploading one fills the form; nothing changes on endpoints until you
+            save. A console theme file works too and sets just the colors.</p>
+          <div class="ss-share">
+            <button class="tiny" type="button" id="ss-file-down">Download appearance</button>
+            <button class="tiny" type="button" id="ss-file-up">Upload appearance…</button>
+            <input type="file" id="ss-file" accept=".json,application/json" hidden>
+          </div>
+
+          <div class="panel-actions">
+            <button class="primary" type="button" id="ss-save">Save and publish</button>
+            <button type="button" id="ss-revert">Discard changes</button>
+            <button type="button" id="ss-reset">Reset to default</button>
+          </div>
+        </div>
+
+        <div class="ss-preview">
+          <div class="ss-preview-bar" id="ss-preview-tabs"></div>
+          <iframe id="ss-frame" title="Self Service preview" src="/selfservice/preview"></iframe>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let items = null; // null until the packages have loaded
+let platformsByID = {};
+let allGroups = [];
+let requests = [];
+
+document.addEventListener("mustra:user", (e) => {
+  initModuleSections([
+    { hash: "items", label: "Offered Packages" },
+    { hash: "requests", label: "Requests" },
+    { hash: "appearance", label: "Appearance" },
+  ]);
+  renderPageHead("catalog-page-head", "/software", { title: "Self Service",
+    sub: "What endpoints may install themselves, and the requests waiting on you." });
+  renderQuickLinks("catalog-quick-links", "/software", e.detail, [
+    { label: "Computer Groups", href: "/groups", icon: "groups" },
+  ]);
+  loadGroups();
+  loadItems();
+  loadRequests();
+  loadAppearance();
+});
+
+async function loadGroups() {
+  const resp = await fetch("/api/groups");
+  if (!resp.ok) return;
+  allGroups = (await resp.json()).groups || [];
+  renderItems();
+}
+
+function groupName(id) {
+  const g = allGroups.find(g => g.id === id);
+  return g ? g.name : id;
+}
+
+// What Self Service offers is the packages published to it: the endpoint
+// window reads software_packages, so this list does too. Editing happens on
+// the package, so a package's scope is set in one place.
+async function loadItems() {
+  const resp = await fetch("/api/software");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const data = await resp.json();
+  // The server works out the platforms by the rule the endpoint window
+  // applies (the pinned version, installs that need no parameters), so the
+  // page cannot claim a platform endpoints are not offered.
+  platformsByID = data.self_service_platforms || {};
+  items = (data.packages || []).filter(p => p.self_service)
+    .sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name));
+  renderItems();
+}
+
+// The link the package list under Deploy uses; it opens the package editor.
+// The package editor never offers an action package in Self Service, but
+// POST/PUT /api/software can, and the endpoint window then lists it, so an
+// action package opens under Action Packages.
+function packageHref(p) {
+  return `/software?package=${encodeURIComponent(p.id)}${p.kind === "action" ? "#actions" : "#catalog"}`;
+}
+
+function renderItems() {
+  if (!items) return; // groups or requests arrived first; keep "loading…"
+  const body = document.getElementById("items-body");
+  const pending = {};
+  for (const r of requests) if (r.status === "pending") pending[r.item_id] = (pending[r.item_id] || 0) + 1;
+  document.getElementById("items-status").textContent = items.length ? `${items.length} package(s)` : "";
+  body.innerHTML = items.length === 0
+    ? '<tr><td class="empty" colspan="8">nothing is offered yet — open a package under Deploy → Software Catalog and tick “Offer in Self Service”</td></tr>'
+    : items.map(p => {
+      const platforms = platformsByID[p.id] || [];
+      return `
+      <tr>
+        <td><a href="${escapeHtml(safeUrl(packageHref(p)))}"><strong>${escapeHtml(p.name)}</strong></a>${p.description ? `<div class="u-fs-meta u-c-text-muted">${escapeHtml(p.description)}</div>` : ""}</td>
+        <td>${escapeHtml(p.category || "—")}</td>
+        <td>${platforms.length ? platforms.map(o => `<span class="pkg-chip">${escapeHtml(osLabel(o))}</span>`).join("") : "none"}</td>
+        <td class="u-ws-normal u-maxw-240 u-fs-meta u-c-text-muted">
+          ${(p.group_ids || []).length === 0 ? "everyone" : (p.group_ids || []).map(g => escapeHtml(groupName(g))).join(", ")}</td>
+        <td>${p.allow_requests ? "allowed" : "no"}</td>
+        <td data-sort="${escapeHtml(pending[p.id] || 0)}">${pending[p.id] ? `<a href="#requests">${escapeHtml(pending[p.id])}</a>` : "—"}</td>
+        <td><span class="kind-pill">${p.enabled ? "offered" : "disabled"}</span></td>
+        <td class="row-actions"><a href="${escapeHtml(safeUrl(packageHref(p)))}">edit package</a></td>
+      </tr>`;
+    }).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "catalog-offered-packages" });
+  if (dt) dt.refresh();
+}
+
+async function loadRequests() {
+  const resp = await fetch("/api/catalog/requests");
+  if (!resp.ok) return;
+  const reqs = await resp.json();
+  requests = reqs;
+  renderItems();
+  const pending = reqs.filter(r => r.status === "pending").length;
+  document.getElementById("requests-status").textContent = pending ? `${pending} awaiting a decision` : "";
+  const body = document.getElementById("requests-body");
+  body.innerHTML = reqs.length === 0
+    ? '<tr><td class="empty" colspan="7">no requests</td></tr>'
+    : reqs.map(r => `
+      <tr>
+        <td>${escapeHtml(r.item_name || r.item_id)}</td>
+        <td>${escapeHtml(r.hostname || r.agent_id)}</td>
+        <td>${escapeHtml(r.requested_by || "—")}</td>
+        <td class="u-ws-normal u-maxw-260 u-fs-12 u-c-text-muted">${escapeHtml(r.reason || "—")}</td>
+        <td data-sort="${escapeHtml(r.requested_at || "")}">${fmtAgo(r.requested_at)}</td>
+        <td><span class="kind-pill">${escapeHtml(r.status)}</span></td>
+        <td class="row-actions">
+          ${r.status === "pending" ? `
+            <button class="tiny" data-approve="${escapeHtml(r.id)}">approve</button>
+            <button class="tiny danger" data-deny="${escapeHtml(r.id)}">deny</button>` :
+            `<span class="u-fs-meta u-c-text-muted">${escapeHtml(r.decided_by || "")}</span>`}
+        </td>
+      </tr>`).join("");
+
+  body.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => decide(b.dataset.approve, "approved")));
+  body.querySelectorAll("[data-deny]").forEach(b => b.addEventListener("click", () => decide(b.dataset.deny, "denied")));
+  const dt = initDataTable(body.closest("table"), { storageKey: "catalog-requests" });
+  if (dt) dt.refresh();
+}
+
+async function decide(id, status) {
+  const resp = await fetch(`/api/catalog/requests/${id}/decide`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  // A 409 is another operator deciding first; the reload shows their decision.
+  if (!resp.ok) alert((await resp.text()).trim());
+  loadRequests();
+}
+// --- Appearance: the Self Service window's branding -------------------
+//
+// The form is the branding object; every edit is posted to the framed
+// preview (the endpoint's own page, served in preview mode) so what is
+// seen here is what endpoints will render, not an approximation of it.
+
+const SS_TABS = ["catalog", "updates", "history", "activity", "device"];
+const SS_TAB_NAMES = { catalog: "Catalog", updates: "Updates", history: "History", activity: "Activity", device: "This Computer" };
+const SS_COLOURS = [
+  ["accent", "Accent", "#0078d4", "#005fb8"],
+  ["background", "Background", "#1f1f1f", "#f8f8f8"],
+  ["sidebar", "Sidebar", "#181818", "#ffffff"],
+  ["surface", "Cards and lists", "#181818", "#ffffff"],
+  ["text", "Text", "#e2e2e2", "#1f1f1f"],
+];
+let ssSaved = {};
+let ssTabs = [];
+let ssLogo = "", ssBg = "", ssRadius = null, ssPop = null;
+let ssPreviewTab = "catalog";
+
+function ssVal(id) { return document.getElementById(id).value.trim(); }
+
+function ssRenderColours() {
+  const light = ssVal("ss-theme") === "light";
+  document.getElementById("ss-colours").innerHTML = SS_COLOURS.map(([k, label, dark, lite]) => `
+    <div class="field"><label for="ss-c-${escapeHtml(k)}">${escapeHtml(label)}</label>
+      <div class="ss-colour">
+        <input type="color" id="ss-cp-${escapeHtml(k)}" value="${escapeHtml(light ? lite : dark)}" aria-label="${escapeHtml(label)} colour">
+        <input type="text" id="ss-c-${escapeHtml(k)}" maxlength="7" placeholder="${escapeHtml(light ? lite : dark)}">
+      </div></div>`).join("");
+  SS_COLOURS.forEach(([k]) => {
+    const pick = document.getElementById("ss-cp-" + k), text = document.getElementById("ss-c-" + k);
+    pick.addEventListener("input", () => { text.value = pick.value; ssChanged(); });
+    text.addEventListener("input", () => { if (/^#[0-9a-f]{6}$/i.test(text.value.trim())) pick.value = text.value.trim(); });
+  });
+}
+
+// Presets: the console's own palettes (theme.js), mapped onto the window's
+// five colours for the mode the form is set to. The window has a sidebar
+// the console does not, so it gets a shade between the page and the cards
+// in dark mode and the card colour in light.
+function ssPaletteMode() { return ssVal("ss-theme") === "light" ? "light" : "dark"; }
+function ssMix(a, b, t) {
+  const c = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const x = c(a), y = c(b);
+  return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("");
+}
+function ssPaletteColours(seeds, mode) {
+  return { accent: seeds.accent, background: seeds.bg, surface: seeds.surface, text: seeds.text,
+    sidebar: mode === "light" ? seeds.surface : ssMix(seeds.bg, seeds.surface, 0.6) };
+}
+function ssSetColours(cols) {
+  SS_COLOURS.forEach(([k]) => {
+    if (!cols[k]) return;
+    document.getElementById("ss-c-" + k).value = cols[k];
+    document.getElementById("ss-cp-" + k).value = cols[k];
+  });
+}
+function ssRenderPalettes() {
+  const box = document.getElementById("ss-palettes");
+  const T = window.mustraTheme;
+  if (!T) { box.closest(".field").hidden = true; return; }
+  const mode = ssPaletteMode();
+  box.textContent = "";
+  const current = {}; SS_COLOURS.forEach(([k]) => current[k] = ssVal("ss-c-" + k).toLowerCase());
+  for (const [id, pal] of Object.entries(T.palettes)) {
+    const seeds = pal[mode];
+    const cols = ssPaletteColours(seeds, mode);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "palette-card";
+    b.setAttribute("aria-pressed", String(SS_COLOURS.every(([k]) => current[k] === cols[k])));
+    if (b.getAttribute("aria-pressed") === "true") b.setAttribute("aria-checked", "true");
+    const sw = document.createElement("span"); sw.className = "pc-swatch"; sw.style.background = seeds.bg;
+    const card = document.createElement("span"); card.className = "pc-card";
+    card.style.background = seeds.surface; card.style.borderColor = seeds.muted;
+    const l1 = document.createElement("span"); l1.className = "pc-line"; l1.style.background = seeds.text;
+    const dot = document.createElement("span"); dot.className = "pc-dot"; dot.style.background = seeds.accent;
+    card.append(l1, dot); sw.append(card);
+    const name = document.createElement("span"); name.className = "pc-name"; name.textContent = pal.name;
+    b.append(sw, name);
+    b.title = pal.name + " (" + mode + ")";
+    b.addEventListener("click", () => {
+      if (!ssVal("ss-theme") || ssVal("ss-theme") === "system") document.getElementById("ss-theme").value = mode === "light" ? "light" : "";
+      ssSetColours(cols);
+      ssChanged();
+    });
+    box.append(b);
+  }
+}
+
+// Readability of the five colours as they will render, using the window's
+// built-in colour wherever a field is empty.
+function ssRenderIssues() {
+  const list = document.getElementById("ss-issues");
+  const T = window.mustraTheme;
+  if (!T) return;
+  const light = ssVal("ss-theme") === "light";
+  const col = k => {
+    const v = ssVal("ss-c-" + k).toLowerCase();
+    if (/^#[0-9a-f]{6}$/.test(v)) return v;
+    const d = SS_COLOURS.find(c => c[0] === k);
+    return light ? d[3] : d[2];
+  };
+  const checks = [
+    ["text", "surface", 4.5, "Text on tables and cards"],
+    ["text", "background", 4.5, "Text on the background"],
+    ["text", "sidebar", 4.5, "Text in the sidebar"],
+    ["accent", "surface", 3, "Accent on tables and cards"],
+  ];
+  list.textContent = "";
+  for (const [a, b, min, what] of checks) {
+    const r = T.contrast(col(a), col(b));
+    if (r >= min) continue;
+    const li = document.createElement("li");
+    li.textContent = `Hard to read: ${what} is ${r.toFixed(1)}:1 (needs ${min}:1)`;
+    list.append(li);
+  }
+}
+
+function ssRenderTabs() {
+  const box = document.getElementById("ss-tabs");
+  box.innerHTML = ssTabs.map((t, i) => `
+    <div class="ss-tab">
+      <input type="checkbox" data-ss-show="${i}" ${t.hidden ? "" : "checked"} aria-label="Show ${escapeHtml(SS_TAB_NAMES[t.id])}">
+      <span>${escapeHtml(SS_TAB_NAMES[t.id])}</span>
+      <input type="text" data-ss-label="${i}" maxlength="40" aria-label="${escapeHtml(SS_TAB_NAMES[t.id])} tab label" value="${escapeHtml(t.label || "")}" placeholder="${escapeHtml(SS_TAB_NAMES[t.id])}">
+      <button class="tiny" type="button" data-ss-move="${i}:-1" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button>
+      <button class="tiny" type="button" data-ss-move="${i}:1" ${i === ssTabs.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button>
+    </div>`).join("");
+  const def = document.getElementById("ss-default");
+  const keep = def.value;
+  def.innerHTML = `<option value="">First shown section</option>` + ssTabs.filter(t => !t.hidden)
+    .map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.label || SS_TAB_NAMES[t.id])}</option>`).join("");
+  def.value = ssTabs.some(t => t.id === keep && !t.hidden) ? keep : "";
+  ssRenderPreviewTabs();
+}
+
+function ssRenderPreviewTabs() {
+  const bar = document.getElementById("ss-preview-tabs");
+  bar.innerHTML = `<span class="hint u-m-0">Preview</span><span class="grow"></span>` +
+    ssTabs.filter(t => !t.hidden).map(t =>
+      `<button class="tiny${t.id === ssPreviewTab ? " u-bc-accent" : ""}" type="button" data-ss-preview="${escapeHtml(t.id)}">${escapeHtml(t.label || SS_TAB_NAMES[t.id])}</button>`).join("");
+}
+
+function ssRenderImages() {
+  const logo = document.getElementById("ss-logo-thumb");
+  logo.style.backgroundImage = ssLogo ? `url("${ssLogo}")` : "";
+  const bg = document.getElementById("ss-bg-thumb");
+  bg.style.backgroundImage = ssBg ? `url("${ssBg}")` : "";
+  bg.style.backgroundSize = "cover";
+  document.getElementById("ss-bg-field").hidden = ssVal("ss-pattern") !== "image";
+}
+
+function ssRenderBlur() {
+  const v = +document.getElementById("ss-bg-blur").value;
+  document.getElementById("ss-bg-blur-v").textContent = v ? v + "px" : "none";
+}
+document.getElementById("ss-bg-blur").addEventListener("input", ssRenderBlur);
+
+function ssRenderRanges() {
+  const r = document.getElementById("ss-radius"), p = document.getElementById("ss-pop");
+  r.value = ssRadius ?? 12;
+  p.value = ssPop ?? (ssVal("ss-pattern") === "image" ? 100 : 35);
+  document.getElementById("ss-radius-v").textContent = ssRadius == null ? "default" : ssRadius + "px";
+  document.getElementById("ss-pop-v").textContent = ssPop == null ? "default" : ssPop + "%";
+}
+
+function ssFill(b) {
+  b = b || {};
+  const set = (id, v) => { document.getElementById(id).value = v || ""; };
+  set("ss-org", b.org_name); set("ss-title", b.window_title); set("ss-welcome", b.welcome);
+  set("ss-help-h", b.help_heading); set("ss-help-t", b.help_text); set("ss-help-u", b.help_url);
+  set("ss-theme", b.theme); set("ss-font", b.font); set("ss-pattern", b.pattern);
+  set("ss-empty", b.activity_empty); set("ss-css", b.custom_css);
+  ssRenderColours();
+  SS_COLOURS.forEach(([k]) => {
+    set("ss-c-" + k, b[k]);
+    if (b[k]) document.getElementById("ss-cp-" + k).value = b[k];
+  });
+  ssLogo = b.logo_data_url || ""; ssBg = b.background_data_url || "";
+  set("ss-bg-fit", b.background_fit); set("ss-bg-pos", b.background_position);
+  document.getElementById("ss-bg-blur").value = Number.isInteger(b.background_blur) ? b.background_blur : 0;
+  ssRenderBlur();
+  ssRadius = Number.isInteger(b.radius) ? b.radius : null;
+  ssPop = Number.isInteger(b.pattern_opacity) ? b.pattern_opacity : null;
+  const given = Array.isArray(b.tabs) ? b.tabs.filter(t => SS_TABS.includes(t.id)) : [];
+  ssTabs = given.map(t => ({ id: t.id, label: t.label || "", hidden: !!t.hidden }));
+  SS_TABS.forEach(id => { if (!ssTabs.some(t => t.id === id)) ssTabs.push({ id, label: "", hidden: false }); });
+  ssRenderTabs();
+  set("ss-default", b.default_tab);
+  document.getElementById("ss-hide-checkin").checked = !!b.hide_check_in;
+  document.getElementById("ss-hide-badges").checked = !!b.hide_badges;
+  ssRenderImages();
+  ssRenderRanges();
+}
+
+// ssCollect builds the object exactly as the server stores it: empty
+// fields are left out rather than sent as "", so an untouched form and the
+// saved branding compare equal and "unsaved changes" means something.
+function ssCollect() {
+  const b = {};
+  const put = (k, v) => { if (v !== "" && v != null && v !== false) b[k] = v; };
+  put("window_title", ssVal("ss-title")); put("org_name", ssVal("ss-org"));
+  put("welcome", ssVal("ss-welcome")); put("logo_data_url", ssLogo);
+  put("help_heading", ssVal("ss-help-h")); put("help_text", ssVal("ss-help-t")); put("help_url", ssVal("ss-help-u"));
+  put("theme", ssVal("ss-theme"));
+  SS_COLOURS.forEach(([k]) => put(k, ssVal("ss-c-" + k).toLowerCase()));
+  put("font", ssVal("ss-font")); put("radius", ssRadius);
+  put("pattern", ssVal("ss-pattern")); put("pattern_opacity", ssPop);
+  if (ssVal("ss-pattern") === "image") {
+    put("background_data_url", ssBg);
+    put("background_fit", ssVal("ss-bg-fit"));
+    put("background_position", ssVal("ss-bg-pos"));
+    const blur = +document.getElementById("ss-bg-blur").value;
+    if (blur > 0) b.background_blur = blur;
+  }
+  const tabs = ssTabs.map(t => { const o = { id: t.id }; if (t.label.trim()) o.label = t.label.trim(); if (t.hidden) o.hidden = true; return o; });
+  const isDefaultTabs = tabs.every((t, i) => t.id === SS_TABS[i] && !t.label && !t.hidden);
+  if (!isDefaultTabs) b.tabs = tabs;
+  put("default_tab", ssVal("ss-default")); put("activity_empty", ssVal("ss-empty"));
+  put("hide_check_in", document.getElementById("ss-hide-checkin").checked);
+  put("hide_badges", document.getElementById("ss-hide-badges").checked);
+  put("custom_css", ssVal("ss-css"));
+  return b;
+}
+
+function ssSame(a, b) {
+  const norm = o => JSON.stringify(Object.keys(o).sort().reduce((m, k) => (m[k] = o[k], m), {}));
+  const x = { ...a }, y = { ...b };
+  // The server fills in the full tab list; the default order means the same
+  // as no list at all.
+  [x, y].forEach(o => { if (Array.isArray(o.tabs) && o.tabs.every((t, i) => t.id === SS_TABS[i] && !t.label && !t.hidden)) delete o.tabs; });
+  return norm(x) === norm(y);
+}
+
+function ssChanged() {
+  ssRenderPalettes();
+  ssRenderIssues();
+  const b = ssCollect();
+  const frame = document.getElementById("ss-frame");
+  if (frame.contentWindow) frame.contentWindow.postMessage({ type: "mustra-branding", branding: b }, location.origin);
+  const status = document.getElementById("ss-status");
+  status.textContent = ssSame(b, ssSaved) ? "" : "unsaved changes";
+}
+
+async function loadAppearance() {
+  const resp = await fetch("/api/selfservice/branding");
+  if (!resp.ok) { document.getElementById("ss-status").textContent = "couldn't load the current appearance"; return; }
+  const data = await resp.json();
+  ssSaved = data.branding || {};
+  ssFill(ssSaved);
+  ssChanged();
+}
+
+// Images are shrunk in the browser before they are uploaded: they go to
+// every endpoint, and a 6 MB photo of the lobby is not a wallpaper.
+function ssDownsize(file, maxW, maxH, type, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, maxW / img.width, maxH / img.height);
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * k));
+      c.height = Math.max(1, Math.round(img.height * k));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL(type, quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("couldn't read that image")); };
+    img.src = url;
+  });
+}
+const ssBytes = dataURL => Math.floor((dataURL.length - dataURL.indexOf(",") - 1) * 3 / 4);
+
+document.getElementById("ss-logo-pick").addEventListener("click", () => document.getElementById("ss-logo-file").click());
+document.getElementById("ss-bg-pick").addEventListener("click", () => document.getElementById("ss-bg-file").click());
+document.getElementById("ss-logo-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    let d = await ssDownsize(f, 512, 512, "image/png");
+    if (ssBytes(d) > 256 * 1024) d = await ssDownsize(f, 256, 256, "image/webp", 0.9);
+    if (ssBytes(d) > 256 * 1024) throw new Error("that logo is still over 256 KB after shrinking it");
+    ssLogo = d; ssRenderImages(); ssChanged();
+  } catch (err) { document.getElementById("ss-status").textContent = err.message; }
+  e.target.value = "";
+});
+document.getElementById("ss-bg-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    let d = await ssDownsize(f, 1920, 1200, "image/jpeg", 0.85);
+    if (ssBytes(d) > 1024 * 1024) d = await ssDownsize(f, 1600, 1000, "image/jpeg", 0.7);
+    if (ssBytes(d) > 1024 * 1024) throw new Error("that image is still over 1 MB after shrinking it");
+    ssBg = d; ssRenderImages(); ssChanged();
+  } catch (err) { document.getElementById("ss-status").textContent = err.message; }
+  e.target.value = "";
+});
+// Drag a picture onto either thumbnail as well as picking one.
+[["ss-logo-thumb", "ss-logo-file"], ["ss-bg-thumb", "ss-bg-file"]].forEach(([thumbID, inputID]) => {
+  const thumb = document.getElementById(thumbID), input = document.getElementById(inputID);
+  thumb.title = "Drop an image here, or use Upload";
+  thumb.addEventListener("dragover", e => { e.preventDefault(); thumb.classList.add("drop"); });
+  thumb.addEventListener("dragleave", () => thumb.classList.remove("drop"));
+  thumb.addEventListener("drop", e => {
+    e.preventDefault();
+    thumb.classList.remove("drop");
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f || !/^image\//.test(f.type)) { document.getElementById("ss-status").textContent = "that isn't an image"; return; }
+    const dt = new DataTransfer(); dt.items.add(f);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change"));
+  });
+});
+
+// Appearance files: the branding object as the server stores it, wrapped
+// so a file says what it is. The server validates everything on save, so
+// an upload only has to be well-formed enough to fill the form.
+document.getElementById("ss-file-down").addEventListener("click", () => {
+  const doc = { mustra_selfservice_appearance: 1, branding: ssCollect() };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+  const a = document.createElement("a");
+  const name = (ssVal("ss-org") || "self-service").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "self-service";
+  a.href = url; a.download = name + ".mustra-appearance.json";
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+document.getElementById("ss-file-up").addEventListener("click", () => document.getElementById("ss-file").click());
+document.getElementById("ss-file").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  const status = document.getElementById("ss-status");
+  if (f.size > 4 * 1024 * 1024) { status.textContent = "that file is too large to be an appearance"; return; }
+  let doc;
+  try { doc = JSON.parse(await f.text()); } catch (err) { status.textContent = "that file is not JSON"; return; }
+  if (doc && typeof doc === "object" && doc.branding && typeof doc.branding === "object") {
+    ssFill(doc.branding);
+    ssChanged();
+    status.textContent = "appearance loaded — Save and publish to send it to endpoints";
+    return;
+  }
+  // A console theme file: colours only, from the mode the form is set to,
+  // or whichever mode the file has.
+  const T = window.mustraTheme;
+  if (T && doc && (doc.dark || doc.light)) {
+    let mode = ssPaletteMode();
+    let seeds = T.validSeeds(doc[mode]);
+    if (!seeds) { mode = mode === "dark" ? "light" : "dark"; seeds = T.validSeeds(doc[mode]); }
+    if (seeds) {
+      document.getElementById("ss-theme").value = mode === "light" ? "light" : "";
+      document.getElementById("ss-theme").dispatchEvent(new Event("change"));
+      ssSetColours(ssPaletteColours(seeds, mode));
+      ssChanged();
+      status.textContent = "colors loaded from the theme file — Save and publish to keep them";
+      return;
+    }
+  }
+  status.textContent = "that isn't an appearance or theme file";
+});
+
+document.getElementById("ss-logo-clear").addEventListener("click", () => { ssLogo = ""; ssRenderImages(); ssChanged(); });
+document.getElementById("ss-bg-clear").addEventListener("click", () => { ssBg = ""; ssRenderImages(); ssChanged(); });
+
+document.getElementById("ss-radius").addEventListener("input", (e) => { ssRadius = +e.target.value; ssRenderRanges(); ssChanged(); });
+document.getElementById("ss-pop").addEventListener("input", (e) => { ssPop = +e.target.value; ssRenderRanges(); ssChanged(); });
+// Clicking a slider's value puts it back to the default.
+document.getElementById("ss-radius-v").addEventListener("click", () => { ssRadius = null; ssRenderRanges(); ssChanged(); });
+document.getElementById("ss-pop-v").addEventListener("click", () => { ssPop = null; ssRenderRanges(); ssChanged(); });
+["ss-radius-v", "ss-pop-v"].forEach(id => { const el = document.getElementById(id); el.style.cursor = "pointer"; el.title = "Click to use the default"; });
+
+document.getElementById("ss-theme").addEventListener("change", () => {
+  const keep = {}; SS_COLOURS.forEach(([k]) => keep[k] = ssVal("ss-c-" + k));
+  ssRenderColours();
+  SS_COLOURS.forEach(([k]) => { document.getElementById("ss-c-" + k).value = keep[k]; if (keep[k]) document.getElementById("ss-cp-" + k).value = keep[k]; });
+});
+document.getElementById("ss-pattern").addEventListener("change", () => { ssRenderImages(); ssRenderRanges(); });
+
+document.getElementById("section-appearance").addEventListener("input", (e) => {
+  const lbl = e.target.dataset.ssLabel;
+  if (lbl != null) { ssTabs[+lbl].label = e.target.value; ssRenderPreviewTabs(); }
+  ssChanged();
+});
+document.getElementById("section-appearance").addEventListener("change", (e) => {
+  const show = e.target.dataset.ssShow;
+  if (show != null) {
+    ssTabs[+show].hidden = !e.target.checked;
+    if (ssTabs.every(t => t.hidden)) { ssTabs[+show].hidden = false; e.target.checked = true; }
+    ssRenderTabs();
+  }
+  ssChanged();
+});
+document.getElementById("section-appearance").addEventListener("click", (e) => {
+  const mv = e.target.closest("[data-ss-move]");
+  if (mv) {
+    const [i, d] = mv.dataset.ssMove.split(":").map(Number);
+    [ssTabs[i], ssTabs[i + d]] = [ssTabs[i + d], ssTabs[i]];
+    ssRenderTabs(); ssChanged();
+  }
+  const pv = e.target.closest("[data-ss-preview]");
+  if (pv) {
+    ssPreviewTab = pv.dataset.ssPreview;
+    document.getElementById("ss-frame").contentWindow.postMessage({ type: "mustra-tab", tab: ssPreviewTab }, location.origin);
+    ssRenderPreviewTabs();
+  }
+});
+
+window.addEventListener("message", (ev) => {
+  if (ev.origin !== location.origin || !ev.data || ev.data.type !== "mustra-preview-ready") return;
+  ssChanged();
+});
+
+async function ssSave(b) {
+  const status = document.getElementById("ss-status");
+  status.textContent = "saving…";
+  const resp = await fetch("/api/selfservice/branding", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">${escapeHtml((await resp.text()).trim())}</span>`; return; }
+  const data = await resp.json();
+  ssSaved = data.branding || {};
+  ssFill(ssSaved);
+  ssChanged();
+  status.innerHTML = `<span class="u-c-ok">published</span> — endpoints pick it up the next time the window opens`;
+}
+document.getElementById("ss-save").addEventListener("click", () => ssSave(ssCollect()));
+document.getElementById("ss-revert").addEventListener("click", () => { ssFill(ssSaved); ssChanged(); });
+// Build the empty form now: the framed preview can finish loading and ask
+// for the branding before the saved copy has come back from the server.
+ssFill({});
+
+document.getElementById("ss-reset").addEventListener("click", () => {
+  if (!confirm("Put the Self Service window back to mustra's default look on every endpoint?")) return;
+  ssSave({});
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+# Source build for Compose and local use. CI packages host-built binaries
+# with Dockerfile.image so the Go cache survives between hosted runners.
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS base
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+FROM base AS agents
+# Only agent dependencies: console/server edits must not invalidate this stage.
+#
+# This list is the agent's full transitive set of internal packages, and it
+# is checked by TestDockerfileCopiesAgentPackages (dockerfile_test.go):
+# CI builds Dockerfile.image from host-built binaries, so without that test
+# a missing entry failed nothing until someone ran `docker compose build`.
+# When cmd/agent gains an import, add it here --
+# `go list -deps ./cmd/agent | grep mustra/internal` prints the whole list.
+COPY cmd/agent/ cmd/agent/
+COPY cmd/mustra-tray/ cmd/mustra-tray/
+COPY internal/agent/ internal/agent/
+COPY internal/deploy/ internal/deploy/
+COPY internal/deploylog/ internal/deploylog/
+COPY internal/idgen/ internal/idgen/
+COPY internal/nats/ internal/nats/
+COPY internal/proto/ internal/proto/
+COPY internal/reveal/ internal/reveal/
+COPY internal/selfservice/ internal/selfservice/
+COPY internal/sensoroutput/ internal/sensoroutput/
+COPY internal/updatesig/ internal/updatesig/
+ARG MUSTRA_VERSION=dev
+ARG MUSTRA_AGENT_VERSION
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    set -e; \
+    for arch in amd64 arm64; do \
+      CGO_ENABLED=0 GOOS=windows GOARCH="$arch" go build -trimpath -buildvcs=false \
+        -ldflags="-H windowsgui -X main.version=${MUSTRA_AGENT_VERSION:-${MUSTRA_VERSION}}" \
+        -o "/out/agents/mustra-tray-windows-${arch}.exe" ./cmd/mustra-tray; \
+      cp "/out/agents/mustra-tray-windows-${arch}.exe" "internal/agent/trayembed/mustra-tray-windows-${arch}.bin"; \
+    done; \
+    for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do \
+      os="${target%/*}"; arch="${target#*/}"; \
+      ext=""; [ "$os" = "windows" ] && ext=".exe"; \
+      CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false \
+        -ldflags="-X main.version=${MUSTRA_AGENT_VERSION:-${MUSTRA_VERSION}}" \
+        -o "/out/agents/mustra-agent-${os}-${arch}${ext}" ./cmd/agent; \
+    done
+
+FROM --platform=$BUILDPLATFORM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS python-runtimes
+RUN apk add --no-cache python3 ca-certificates
+COPY tools/python-runtime/ /tools/
+RUN python3 /tools/package.py /out/agents
+
+FROM base AS server
+COPY . .
+ARG TARGETOS
+ARG TARGETARCH
+ARG MUSTRA_VERSION=dev
+ARG MUSTRA_AGENT_VERSION
+ARG MUSTRA_COMMIT=""
+ARG MUSTRA_BUILD_TIME=""
+# -trimpath matches `make servers`, so a Go cache from a host build (E2E
+# seeds one into these mounts) hits here despite the different directory.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
+      -ldflags="-X github.com/mustra-dev/mustra/internal/version.AgentVersion=${MUSTRA_AGENT_VERSION:-${MUSTRA_VERSION}} \
+                -X github.com/mustra-dev/mustra/internal/version.Version=${MUSTRA_VERSION} \
+                -X github.com/mustra-dev/mustra/internal/version.Commit=${MUSTRA_COMMIT} \
+                -X github.com/mustra-dev/mustra/internal/version.BuildTime=${MUSTRA_BUILD_TIME}" \
+      -o /out/mustra-server ./cmd/server
+
+# CA data is architecture-independent; installing it natively avoids QEMU.
+FROM --platform=$BUILDPLATFORM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS certificates
+RUN apk add --no-cache ca-certificates
+
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+# pg_dump and psql, for Administration -> Backup. Pinned to the same major
+# as the postgres service in docker-compose.yml: pg_dump refuses to dump a
+# server newer than itself, so a client that drifts behind turns backups off
+# with an error nobody sees until the day they need one.
+# apk upgrade: the pinned base digest only moves with Alpine's point
+# releases, and security fixes (OpenSSL, zlib) land in the repository first.
+RUN apk upgrade --no-cache && apk add --no-cache postgresql18-client \
+    && mkdir -p /var/lib/mustra/output /var/lib/mustra/package-files \
+    && chown -R 65532:65532 /var/lib/mustra
+# GHCR links a package to a repository by reading this label off the pushed
+# image, and an unlinked package is why "Inherit access from source
+# repository" was not on offer: with no source repository, there is nothing
+# to inherit from. Setting it here means the link is a property of the
+# build rather than a checkbox somebody has to remember after a rename.
+LABEL org.opencontainers.image.source="https://github.com/mustra-dev/mustra"
+LABEL org.opencontainers.image.url="https://github.com/mustra-dev/mustra"
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
+LABEL org.opencontainers.image.title="mustra"
+LABEL org.opencontainers.image.description="Fleet management and endpoint operations control plane."
+COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --link --from=agents /out/agents/ /usr/local/share/mustra-agent-builds/
+COPY --link --from=python-runtimes /out/agents/ /usr/local/share/mustra-agent-builds/
+COPY --from=server /out/mustra-server /usr/local/bin/mustra-server
+# Unprivileged: everything the server writes lives under /var/lib/mustra or
+# /tmp. Volumes created before this ran as root are re-owned by compose's
+# data-owner service; see docker-compose.yml.
+USER 65532:65532
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s CMD wget --spider -q http://127.0.0.1:8080/healthz || exit 1
+ENTRYPOINT ["/usr/local/bin/mustra-server"]

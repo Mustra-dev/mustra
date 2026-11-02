@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+    <div id="page-head"></div>
+
+    <div class="fold" id="fold-environment">
+      <div class="fold-head"><span class="fold-icon" data-icon="chart"></span><h2>Environment Status</h2><span class="fold-chevron">▾</span></div>
+      <div class="fold-body">
+        <div class="env-row" id="env-row"></div>
+      </div>
+    </div>
+
+    <div class="fold" id="fold-ask">
+      <div class="fold-head"><span class="fold-icon" data-icon="interact"></span><h2>Query</h2><span class="fold-chevron">▾</span></div>
+      <div class="fold-body">
+        <div class="ask-tabs">
+          <button class="ask-tab active" data-tab="ask">Query</button>
+          <button class="ask-tab" data-tab="find">Search Endpoints</button>
+        </div>
+        <div class="home-ask">
+          <input id="home-ask-input" autocomplete="off" spellcheck="false"
+                 placeholder="Type a query, for example: get os from all machines">
+          <button class="primary u-w-auto" id="home-ask-go">Run</button>
+          <button class="secondary qb-open" id="home-ask-build" type="button"><span data-icon="filter"></span>Build query</button>
+        </div>
+        <p class="u-fs-meta u-c-text-muted u-m-9-0-0" id="home-ask-hint">
+          Answered from the inventory mustra already holds, so offline endpoints are included.
+        </p>
+      </div>
+    </div>
+
+    <div class="fold" id="fold-modules" hidden>
+      <div class="fold-head"><span class="fold-icon" data-icon="grid"></span><h2>Modules</h2>
+        <span class="mod-count" id="mod-count"></span>
+        <button class="mod-edit" id="mod-edit" type="button">Choose</button>
+        <span class="fold-chevron">▾</span></div>
+      <div class="fold-body">
+        <div class="module-grid" id="module-grid"></div>
+        <p class="mod-empty" id="mod-empty" hidden>Every module is hidden. <button class="mod-link" id="mod-showall" type="button">Show them all</button></p>
+      </div>
+    </div>
+    <div class="fold" id="fold-dashboard" hidden>
+      <div class="fold-head"><span class="fold-icon" data-icon="chart"></span><h2 id="home-dash-title">Dashboard</h2><span class="fold-chevron">▾</span></div>
+      <div class="fold-body">
+        <div class="home-dash-filters">
+          <label>Computer group <select id="hd-group"><option value="">every endpoint</option></select></label>
+          <label>Timeframe <select id="hd-range"><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d" selected>30 days</option><option value="90d">90 days</option></select></label>
+          <label><input type="checkbox" id="hd-hl"> highlights only</label>
+          <a href="/dashboards" class="u-ml-auto u-fs-12">All dashboards</a>
+        </div>
+        <div class="pnl-grid" id="hd-grid"></div>
+        <div class="home-dash-list" id="hd-list"></div>
+      </div>
+    </div>
+
+    <div class="dash-group" id="group-environment" hidden>
+      <div class="dash-group-header" data-group="environment"><span class="chevron">▾</span><h2>Environment Status</h2></div>
+      <div class="stat-tiles" id="stat-tiles"></div>
+    </div>
+
+    <div class="dash-group" id="group-patch-status" hidden>
+      <div class="dash-group-header" data-group="patch-status"><span class="chevron">▾</span><h2>Patch Status</h2></div>
+      <div class="dash-row" id="patch-status-row"></div>
+    </div>
+
+    <div class="dash-group" id="group-risk" hidden>
+      <div class="dash-group-header" data-group="risk"><span class="chevron">▾</span><h2>Risk &amp; Compliance</h2></div>
+      <div class="dash-row" id="risk-row"></div>
+    </div>
+
+    <h2 class="section-title" id="modules-title" hidden>Modules</h2>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Endpoints</h2>
+        <span class="scan-status" id="agents-count"></span>
+      </div>
+      <div class="table-scroll table-scroll-y rows-10 no-cards">
+        <table class="table-compact table-nowrap">
+          <thead>
+            <tr><th>Status</th><th>Hostname</th><th>OS</th><th>Site</th><th>IPs</th><th>Last Seen</th><th>Agent ID</th></tr>
+          </thead>
+          <tbody id="agents-body"><tr><td class="empty" colspan="7">waiting for agents…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Live query / sensors</h2>
+      <div class="query-row">
+        <select class="select" id="query-kind" aria-label="Sensor to query">
+          <option value="facts">Facts</option>
+          <option value="processes">Processes</option>
+          <option value="services">Services</option>
+          <option value="installed_apps">Installed Apps</option>
+          <option value="patches">Patches</option>
+        </select>
+        <button class="primary" id="run-query">Run on all agents</button>
+        <span class="counter" id="query-counter"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead id="query-head">
+            <tr><th>Hostname</th><th>Agent ID</th><th>OS</th><th>Platform</th><th>CPUs</th><th>Mem (MB)</th><th>Uptime (s)</th><th>Responded At</th></tr>
+          </thead>
+          <tbody id="query-body"><tr><td class="empty" colspan="8">no query run yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script src="/static/charts.js"></script>
+<script>
+let allAgents = [];
+
+function renderAgents(payload) {
+  allAgents = payload.agents || [];
+  applyAgentFilter();
+  renderStatTiles();
+}
+
+function renderStatTiles() {
+  const total = allAgents.length;
+  const online = allAgents.filter(a => a.online).length;
+  const offline = total - online;
+  const sites = new Set(allAgents.map(a => a.site)).size;
+  const tiles = [
+    { label: "Online Endpoints", value: online, cls: "ok" },
+    { label: "Offline Endpoints", value: offline, cls: offline > 0 ? "off" : "" },
+    { label: "Total Endpoints", value: total, cls: "" },
+    { label: "Sites", value: sites, cls: "" },
+  ];
+  document.getElementById("stat-tiles").innerHTML = tiles.map(t => `
+    <div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls)}">${escapeHtml(t.value)}</div>
+    </div>
+  `).join("");
+
+  renderEnvironment(total, online, offline, sites);
+}
+
+// The environment panel is the first thing on the page, so it answers the
+// questions asked most often: how many endpoints, how many are up, and
+// what they run. The platform breakdown is a single stacked bar rather
+// than a pie — comparing lengths along one axis is easier than comparing
+// angles, and it fits the panel's width.
+const PLATFORM_COLORS = ["var(--viz-series)", "var(--viz-good)", "var(--viz-warning)", "var(--viz-critical)", "var(--viz-none)"];
+
+let lastEnvHTML = "";
+function renderEnvironment(total, online, offline, sites) {
+  const el = document.getElementById("env-row");
+  if (!el) return;
+
+  // Each platform keeps the conditions that select it, so its legend entry
+  // and bar segment can open exactly those endpoints. The label is tidied
+  // for reading ("Debian 12"); a query for the label would match nothing.
+  const byPlatform = {}, platformConds = {};
+  allAgents.forEach(a => {
+    const k = osDisplay(a) || osLabel(a.os);
+    byPlatform[k] = (byPlatform[k] || 0) + 1;
+    if (!platformConds[k]) platformConds[k] = platformConditions(a);
+  });
+  let platforms = Object.entries(byPlatform).sort((a, b) => b[1] - a[1]);
+  // Never invent a colour for an nth series: everything past the palette
+  // folds into one honest "Other" rather than cycling hues.
+  if (platforms.length > PLATFORM_COLORS.length) {
+    const keep = platforms.slice(0, PLATFORM_COLORS.length - 1);
+    const rest = platforms.slice(PLATFORM_COLORS.length - 1)
+      .reduce((sum, [, n]) => sum + n, 0);
+    platforms = keep.concat([["Other", rest]]);
+    // Interact cannot mix "and" with "or", so "not any of the named
+    // platforms" has no query; "Other" opens its own endpoints by ID.
+    const kept = new Set(keep.map(([name]) => name));
+    const ids = allAgents.filter(a => !kept.has(osDisplay(a) || osLabel(a.os))).map(a => a.agent_id);
+    platformConds.Other = [`agent_id in ${ids.join(",")}`];
+  }
+
+  const pct = n => total ? Math.round((n / total) * 100) : 0;
+  const platformHref = name => platformConds[name]
+    ? askHref(["hostname", "os", "platform", "platform_version"], platformConds[name]) : "";
+  const bar = platforms.map(([name, n], i) => {
+    const href = platformHref(name);
+    const style = `flex:${n};background:${PLATFORM_COLORS[i]}`;
+    return href
+      ? `<a href="${escapeHtml(safeUrl(href))}"${sx(style)} title="${escapeHtml(name)}: ${escapeHtml(n)}"></a>`
+      : `<span${sx(style)}></span>`;
+  }).join("");
+  const legend = platforms.map(([name, n], i) => {
+    const href = platformHref(name);
+    const tag = href ? `a href="${escapeHtml(href)}"` : "div";
+    return `
+    <${tag} class="env-legend-item">
+      <span class="tick"${sx(`background:${PLATFORM_COLORS[i]}`)}></span>
+      <span>
+        <span class="n">${escapeHtml(n.toLocaleString())}</span><span class="pct">(${pct(n)}%)</span>
+        <span class="lbl">${escapeHtml(name)}</span>
+      </span>
+    </${href ? "a" : "div"}>`;
+  }).join("");
+
+  const card = (label, value, cls, href) => `
+    <a class="env-card" href="${escapeHtml(safeUrl(href))}"><div class="k">${escapeHtml(label)}</div>
+      <div class="v ${escapeHtml(cls)}">${escapeHtml(value.toLocaleString())}</div></a>`;
+  const html = `
+    ${card("Online endpoints", online, "ok", askHref(["hostname", "os"], ["online equals true"]))}
+    ${card("Total endpoints", total, "", "/agents")}
+    <div class="env-card wide">
+      <div class="k">Operating platform</div>
+      <div class="env-bar">${bar || '<span class="u-flex-1 u-bg-viz-none"></span>'}</div>
+      <div class="env-legend">${legend || '<span class="env-empty">No endpoints yet</span>'}</div>
+    </div>
+    ${card("Offline endpoints", offline, offline > 0 ? "bad" : "", askHref(["hostname", "os", "ip"], ["online equals false"]))}
+    ${card("Sites", sites, "", askHref(["hostname", "site"], []))}
+    ${total === 0 ? `<div class="env-start">
+      <div><strong>Connect your first endpoint.</strong> Create an enrollment token and run the one-line install command on a Windows, macOS or Linux computer; it appears here within a minute.</div>
+      <div class="env-start-actions"><a class="env-start-primary" href="/agents#install">Install an agent</a><a href="/help#getting-started">Getting started guide</a></div>
+    </div>` : ""}
+  `;
+  // The agent stream calls this on every heartbeat, several times a second
+  // across a fleet. Rebuilding identical cards each time restarted their
+  // hover transition -- on a phone, where a tapped card keeps its hover
+  // state, that read as the card flickering. Only touch the DOM on change.
+  if (html === lastEnvHTML) return;
+  lastEnvHTML = html;
+  el.innerHTML = html;
+}
+
+// askHref opens Interact on a query, the same hand-off the dashboard panels
+// use for their drill-downs, so every number on Home answers "which ones?".
+function askHref(fields, conds) {
+  const q = `get ${fields.join(" and ")} from all machines` +
+    (conds.length ? ` with ${conds.join(" and ")}` : "");
+  return "/interact#ask?q=" + encodeURIComponent(q);
+}
+
+// platformConditions mirrors osDisplay: the version is part of the label
+// only when the platform name does not already carry one.
+function platformConditions(a) {
+  if (!a.platform) return [`os equals ${quoteValue(a.os)}`];
+  const conds = [`platform equals ${quoteValue(a.platform)}`];
+  const version = (a.platform_version || "").trim();
+  if (!/\d/.test(platformLabel(a.platform)) && version) conds.push(`platform_version equals ${quoteValue(version)}`);
+  return conds;
+}
+
+function applyAgentFilter() {
+  const searchEl = document.getElementById("topbar-search");
+  const q = (searchEl ? searchEl.value : "").toLowerCase().trim();
+  const body = document.getElementById("agents-body");
+  const filtered = !q ? allAgents : allAgents.filter(a => {
+    const hay = [a.hostname, a.os, a.arch, a.site, a.agent_id, ...(a.ips || [])].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  document.getElementById("agents-count").textContent =
+    q ? `${filtered.length} of ${allAgents.length} matching "${q}"` : `${allAgents.length} endpoint(s)`;
+  if (allAgents.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="7">no agents registered yet</td></tr>';
+    return;
+  }
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="7">no endpoints match your search</td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(a => `
+    <tr>
+      <td data-sort="${a.online ? 1 : 0}"><span class="badge-pill ${a.online ? "online" : "offline"}">${a.online ? "online" : "offline"}</span></td>
+      <td><a href="/endpoint/${encodeURIComponent(a.agent_id)}">${escapeHtml(a.hostname)}</a></td>
+      <td>${escapeHtml(osDisplay(a))}</td>
+      <td>${escapeHtml(a.site)}</td>
+      <td>${escapeHtml((a.ips || []).join(", ") || "—")}</td>
+      <td data-sort="${escapeHtml(a.last_heartbeat || "")}">${fmtAgo(a.last_heartbeat)}</td>
+      <td><code class="mono">${escapeHtml(a.agent_id)}</code></td>
+    </tr>
+  `).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "endpoints" });
+  if (dt) dt.refresh();
+}
+
+document.getElementById("topbar-search").addEventListener("input", applyAgentFilter);
+
+// Collapsible dashboard groups (Environment Status, Patch Status) — click
+// the header to fold/unfold, remembered per-group across visits.
+document.querySelectorAll(".dash-group-header").forEach(header => {
+  const group = header.closest(".dash-group");
+  const key = "mustra-dash-collapsed-" + header.dataset.group;
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(key) === "1"; } catch (e) {}
+  group.classList.toggle("collapsed", collapsed);
+  header.addEventListener("click", () => {
+    const now = group.classList.toggle("collapsed");
+    try { localStorage.setItem(key, now ? "1" : "0"); } catch (e) {}
+  });
+});
+
+function miniBarsHtml(entries, cls) {
+  if (entries.length === 0) return '<div class="mini-chart-empty">no data</div>';
+  const max = Math.max(...entries.map(e => e[1]), 1);
+  // An optional third element is where the row leads; a row with one is a
+  // link to the endpoints or findings its number counts.
+  return entries.map(([label, value, href]) => `
+    <${href ? `a href="${escapeHtml(href)}"` : "div"} class="mini-bar-row">
+      <span class="mini-bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+      <div class="mini-bar"><div class="mini-bar-fill ${escapeHtml(cls || "")}"${sx(`width:${Math.max(4, value / max * 100)}%`)}></div></div>
+      <span class="mini-bar-value">${escapeHtml(value)}</span>
+    </${href ? "a" : "div"}>
+  `).join("");
+}
+
+// Patch Status: built from the same aggregate the Patches tab uses — real
+// fleet data (missing-patch counts by OS, compliance split, top missing
+// patches), not a fabricated risk score. Mustra has no risk-scoring
+// capability, so there is no "Risk and Compliance" group here — showing
+// one would mean making up numbers.
+async function renderPatchStatusGroup() {
+  try {
+    const resp = await fetch("/api/patches");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const patches = data.patches || [];
+    const agents = data.agents || [];
+    if (agents.length === 0) return; // no agent has published the patches sensor yet
+
+    document.getElementById("group-patch-status").hidden = false;
+
+    const byOS = {}, osKey = {};
+    patches.forEach(p => {
+      const label = osLabel(p.os);
+      byOS[label] = (byOS[label] || 0) + p.affected_count;
+      osKey[label] = p.os;
+    });
+    const osEntries = Object.entries(byOS).sort((a, b) => b[1] - a[1])
+      .map(([label, n]) => [label, n, askHref(["hostname", "patches.count"],
+        [`os equals ${quoteValue(osKey[label])}`, "patches.count gt 0"])]);
+
+    const needsPatching = agents.filter(a => a.patch_count > 0).length;
+    const compliant = agents.length - needsPatching;
+
+    const topPatches = [...patches].sort((a, b) => b.affected_count - a.affected_count).slice(0, 5)
+      .map(p => [p.name, p.affected_count,
+        askHref(["hostname", "patches.name"], [`patches.name equals ${quoteValue(p.name)}`])]);
+
+    document.getElementById("patch-status-row").innerHTML = `
+      <div class="mini-chart-card">
+        <div class="mini-chart-title">Missing Patches by OS</div>
+        ${miniBarsHtml(osEntries)}
+      </div>
+      <div class="mini-chart-card">
+        <div class="mini-chart-title">Endpoint Patch Compliance</div>
+        ${miniBarsHtml([["Compliant", compliant, "/patches?devices=up_to_date"],
+          ["Needs patching", needsPatching, "/patches?devices=needs_patching"]])}
+      </div>
+      <div class="mini-chart-card">
+        <div class="mini-chart-title">Top Missing Patches</div>
+        ${miniBarsHtml(topPatches, "security")}
+      </div>
+    `;
+  } catch (e) {
+    // Non-critical to the home page — the Patches tab is the source of truth.
+  }
+}
+renderPatchStatusGroup();
+
+// Risk & Compliance: real CVE matches from OSV.dev (see docs/ARCHITECTURE.md's
+// Risk section) — no fabricated risk score, just actual severity counts and
+// which packages/hosts they're on.
+async function renderRiskGroup() {
+  try {
+    const resp = await fetch("/api/risk");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const vulns = data.vulnerabilities || [];
+    const agents = data.agents || [];
+    if (agents.length === 0) return; // no scan has found anything scannable yet
+
+    document.getElementById("group-risk").hidden = false;
+
+    const counts = data.severity_counts || {};
+    const severityEntries = ["critical", "high", "medium", "low"]
+      .filter(s => counts[s] > 0).map(s => [s, counts[s], "/risk?severity=" + s]);
+
+    const byPackage = {};
+    vulns.forEach(v => { byPackage[v.package_name] = (byPackage[v.package_name] || 0) + 1; });
+    const topPackages = Object.entries(byPackage).sort((a, b) => b[1] - a[1]).slice(0, 5)
+      .map(([name, n]) => [name, n, "/risk?q=" + encodeURIComponent(name)]);
+
+    const byHost = [...agents].sort((a, b) => b.vuln_count - a.vuln_count).slice(0, 5)
+      .map(a => [a.hostname, a.vuln_count, "/endpoint/" + encodeURIComponent(a.agent_id)]);
+
+    document.getElementById("risk-row").innerHTML = `
+      <div class="mini-chart-card">
+        <div class="mini-chart-title">Vulnerabilities by Severity</div>
+        ${miniBarsHtml(severityEntries, "security")}
+      </div>
+      <div class="mini-chart-card">
+        <div class="mini-chart-title">Most Vulnerable Packages</div>
+        ${miniBarsHtml(topPackages)}
+      </div>
+      <div class="mini-chart-card">
+        <div class="mini-chart-title">Devices by Vulnerability Count</div>
+        ${miniBarsHtml(byHost)}
+      </div>
+    `;
+  } catch (e) {
+    // Non-critical to the home page — the Risk & Compliance tab is the source of truth.
+  }
+}
+renderRiskGroup();
+
+document.addEventListener("mustra:user", (e) => {
+  renderPageHead("page-head", "/", { title: "Home",
+    sub: "Your fleet at a glance: what's online, what it's running, and what needs attention." });
+  initFolds();
+
+  // The home query bar is the same grammar Interact uses; it hands off
+  // rather than reimplementing, so there is one parser and one results
+  // grid.
+  const askGo = () => {
+    const q = document.getElementById("home-ask-input").value.trim();
+    if (q) window.location.href = "/interact#ask?q=" + encodeURIComponent(q);
+  };
+  document.getElementById("home-ask-go").addEventListener("click", askGo);
+  // The Query Builder is Interact's; whatever is typed here comes along.
+  document.getElementById("home-ask-build").addEventListener("click", () => {
+    const q = document.getElementById("home-ask-input").value.trim();
+    window.location.href = "/interact#builder" + (q ? "?q=" + encodeURIComponent(q) : "");
+  });
+  document.getElementById("home-ask-input").addEventListener("keydown", ev => {
+    if (ev.key === "Enter") askGo();
+  });
+  document.querySelectorAll(".ask-tab").forEach(tab => tab.addEventListener("click", () => {
+    document.querySelectorAll(".ask-tab").forEach(t => t.classList.toggle("active", t === tab));
+    const finding = tab.dataset.tab === "find";
+    document.getElementById("home-ask-input").placeholder = finding
+      ? "Find an endpoint by hostname, IP, or platform"
+      : "Type a query, for example: get os from all machines";
+    document.getElementById("home-ask-hint").textContent = finding
+      ? "Jumps straight to the endpoint when one name matches."
+      : "Answered from the inventory mustra already holds, so offline endpoints are included.";
+    // The button names the verb for the tab you are on: "Run" reads wrong
+    // over a hostname search, the same way "Ask" read wrong over a query.
+    document.getElementById("home-ask-go").textContent = finding ? "Find" : "Run";
+    document.getElementById("home-ask-build").hidden = finding;
+  }));
+
+  initHomeDashboards().catch(() => {});
+
+  // There are far more module cards than anyone wants on one page, so the
+  // grid is the viewer's to choose. Hidden ones are stored per user by
+  // href; an empty list means show everything, which is what a new user
+  // and everybody from before this existed both get.
+  allModuleCards = visibleModules(e.detail);
+  if (allModuleCards.length === 0) return;
+  document.getElementById("fold-modules").hidden = false;
+  document.getElementById("mod-edit").addEventListener("click", openModulePicker);
+  document.getElementById("mod-showall").addEventListener("click", () => saveHiddenModules([]));
+  renderModules();
+  fetch("/api/preferences").then(r => r.ok ? r.json() : {}).then(p => {
+    hiddenModules = new Set(p.hidden_modules || []);
+    renderModules();
+  }).catch(() => {});
+  initFolds();
+});
+
+// ---- module grid ---------------------------------------------------------
+let allModuleCards = [], hiddenModules = new Set();
+
+function renderModules() {
+  const shown = allModuleCards.filter(m => !hiddenModules.has(m.href));
+  document.getElementById("mod-count").textContent =
+    hiddenModules.size ? `${shown.length} of ${allModuleCards.length}` : `${allModuleCards.length}`;
+  document.getElementById("mod-empty").hidden = shown.length > 0;
+  document.getElementById("module-grid").innerHTML = shown.map(m => `
+    <a class="module-card" href="${escapeHtml(safeUrl(m.href))}">
+      <span class="module-card-icon"${sx(`--hue:${moduleHue(m)}`)}>${icon(m.icon)}</span>
+      <span class="module-card-body">
+        <span class="module-card-title">${escapeHtml(m.label)}</span>
+        <span class="module-card-desc">${escapeHtml(m.desc || "")}</span>
+      </span>
+    </a>`).join("");
+  paintIcons();
+}
+
+// Grouped the way the sidebar groups them.
+function openModulePicker() {
+  const groups = new Map();
+  for (const m of allModuleCards) {
+    const cat = m.category || "Modules";
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(m);
+  }
+  const body = `
+    <p class="hint u-m-0-0-10">Tick what you want on Home. Everything stays reachable from the sidebar either way, and a module added in a later release appears here on its own.</p>
+    <div class="u-d-flex u-gap-8 u-mb-6">
+      <button class="mod-edit u-m-0" id="mp-all" type="button">Select all</button>
+      <button class="mod-edit u-m-0" id="mp-none" type="button">Select none</button>
+      <span class="hint u-m-0-0-0-auto u-as-center" id="mp-count"></span>
+    </div>
+    <div class="u-maxh-56vh u-ov-auto">
+      ${[...groups].map(([cat, items]) => `
+        <div class="mod-pick-cat">${escapeHtml(cat)}</div>
+        <div class="mod-pick-grid">
+          ${items.map(m => `
+            <label class="mod-pick" title="${escapeHtml(m.desc || "")}">
+              <input type="checkbox" data-href="${escapeHtml(m.href)}" ${hiddenModules.has(m.href) ? "" : "checked"}>
+              <span><b>${escapeHtml(m.label)}</b></span>
+            </label>`).join("")}
+        </div>`).join("")}
+    </div>
+    <div class="u-d-flex u-gap-8 u-jc-flex-end u-mt-12">
+      <button class="mod-edit u-m-0 u-bc-accent u-c-accent u-fwt-600" id="mp-save" type="button">Save</button>
+    </div>`;
+  openModal("Modules on Home", body, wrap => {
+    const boxes = () => Array.from(wrap.querySelectorAll("input[data-href]"));
+    const count = () => {
+      const n = boxes().filter(b => b.checked).length;
+      wrap.querySelector("#mp-count").textContent = `${n} of ${allModuleCards.length} shown`;
+    };
+    count();
+    wrap.addEventListener("change", count);
+    wrap.querySelector("#mp-all").addEventListener("click", () => { boxes().forEach(b => { b.checked = true; }); count(); });
+    wrap.querySelector("#mp-none").addEventListener("click", () => { boxes().forEach(b => { b.checked = false; }); count(); });
+    wrap.querySelector("#mp-save").addEventListener("click", async () => {
+      await saveHiddenModules(boxes().filter(b => !b.checked).map(b => b.dataset.href));
+      document.getElementById("mustra-modal")?.remove();
+    });
+  });
+}
+
+// The grid updates first and the preference is written after: the choice
+// should feel instant, and a failed write must not leave the page showing
+// something different from what was clicked.
+async function saveHiddenModules(hidden) {
+  hiddenModules = new Set(hidden);
+  renderModules();
+  try {
+    const r = await fetch("/api/preferences");
+    if (!r.ok) return;
+    const p = await r.json();
+    p.hidden_modules = hidden;
+    await fetch("/api/preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
+  } catch (e) { /* the grid still reflects the choice for this page load */ }
+}
+
+const QUERY_HEADERS = {
+  facts: ["Hostname", "Agent ID", "OS", "Platform", "CPUs", "Mem (MB)", "Uptime (s)", "Responded At"],
+  processes: ["Agent", "PID", "Name", "User", "CPU %", "Mem %", "RSS (MB)"],
+  services: ["Agent", "Name", "Display Name", "Status", "Start Type"],
+  installed_apps: ["Agent", "Name", "Version", "Publisher"],
+  patches: ["Agent", "Name", "Current", "New", "Severity"],
+};
+
+function renderQueryRow(kind, r) {
+  const agentCell = `<code class="mono">${escapeHtml(r.agent_id)}</code>`;
+  if (r.error) {
+    const cols = QUERY_HEADERS[kind].length;
+    return `<tr><td>${agentCell}</td><td colspan="${cols - 1}" class="u-c-off">${escapeHtml(r.error)}</td></tr>`;
+  }
+  if (kind === "facts" && r.facts) {
+    const f = r.facts;
+    return `<tr>
+      <td>${escapeHtml(f.hostname)}</td><td>${agentCell}</td>
+      <td title="${escapeHtml(f.os)}">${escapeHtml(osLabel(f.os))}</td>
+      <td>${escapeHtml(platformLabel(f.platform))} ${escapeHtml(f.platform_version || "")}</td>
+      <td>${escapeHtml(f.cpu_count)}</td><td>${escapeHtml(f.mem_total_mb)}</td><td>${escapeHtml(f.uptime_sec)}</td><td>${fmtAgo(r.timestamp)}</td>
+    </tr>`;
+  }
+  if (kind === "processes" && r.processes) {
+    return r.processes.slice(0, 500).map(p => `<tr>
+      <td>${agentCell}</td><td>${escapeHtml(p.pid)}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.username || "—")}</td>
+      <td>${(p.cpu_percent || 0).toFixed(1)}</td><td>${(p.mem_percent || 0).toFixed(1)}</td><td>${escapeHtml(p.mem_rss_mb || 0)}</td>
+    </tr>`).join("");
+  }
+  if (kind === "services" && r.services) {
+    return r.services.map(s => `<tr>
+      <td>${agentCell}</td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.display_name || "—")}</td>
+      <td>${escapeHtml(s.status)}</td><td>${escapeHtml(s.start_type || "—")}</td>
+    </tr>`).join("");
+  }
+  if (kind === "installed_apps" && r.installed_apps) {
+    return r.installed_apps.map(a => `<tr>
+      <td>${agentCell}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.version || "—")}</td><td>${escapeHtml(a.publisher || "—")}</td>
+    </tr>`).join("");
+  }
+  if (kind === "patches" && r.patches) {
+    if (r.patches.length === 0) return `<tr><td>${agentCell}</td><td colspan="${QUERY_HEADERS[kind].length - 1}" class="empty">up to date</td></tr>`;
+    return r.patches.map(p => `<tr>
+      <td>${agentCell}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.current_version || "—")}</td>
+      <td>${escapeHtml(p.new_version || "—")}</td><td>${escapeHtml(p.severity || "—")}</td>
+    </tr>`).join("");
+  }
+  return `<tr><td>${agentCell}</td><td colspan="${QUERY_HEADERS[kind].length - 1}" class="empty">no data</td></tr>`;
+}
+
+function renderQuery(kind, snap) {
+  document.getElementById("query-counter").innerHTML =
+    `<b>${escapeHtml(snap.responded)}</b> / <b>${escapeHtml(snap.expected)}</b> responded`;
+  document.getElementById("query-head").innerHTML =
+    "<tr>" + QUERY_HEADERS[kind].map(h => `<th>${escapeHtml(h)}</th>`).join("") + "</tr>";
+  const body = document.getElementById("query-body");
+  const results = snap.results || [];
+  if (results.length === 0) {
+    body.innerHTML = `<tr><td class="empty" colspan="${escapeHtml(QUERY_HEADERS[kind].length)}">waiting for responses…</td></tr>`;
+    return;
+  }
+  body.innerHTML = results.map(r => renderQueryRow(kind, r)).join("");
+}
+
+// Over plain HTTP a browser allows six connections per host, shared by
+// every tab, and each open stream holds one for as long as it lives. A few
+// Home tabs left in the background were enough to queue every other
+// console request behind them. A hidden tab therefore gives its stream up
+// after a grace period — long enough that switching away briefly doesn't
+// reconnect — and reconnects when shown. Nothing is lost meanwhile: every
+// message is the whole fleet, and the server sends one on connect.
+const AGENTS_STREAM_HIDDEN_GRACE_MS = 60000;
+let agentsStream = null, agentsStreamIdle = null;
+
+function connectAgentsStream() {
+  if (agentsStream) return;
+  const es = new EventSource("/api/agents/stream");
+  agentsStream = es;
+  es.onmessage = (ev) => renderAgents(JSON.parse(ev.data));
+  // close() doesn't fire this, so only a stream the browser gave up on —
+  // typically an expired session — reloads into the login redirect.
+  es.onerror = () => { if (es.readyState === EventSource.CLOSED) window.location.reload(); };
+}
+
+function disconnectAgentsStream() {
+  if (!agentsStream) return;
+  agentsStream.close();
+  agentsStream = null;
+}
+
+function syncAgentsStream() {
+  clearTimeout(agentsStreamIdle);
+  agentsStreamIdle = null;
+  if (document.hidden) {
+    agentsStreamIdle = setTimeout(disconnectAgentsStream, AGENTS_STREAM_HIDDEN_GRACE_MS);
+  } else {
+    connectAgentsStream();
+  }
+}
+document.addEventListener("visibilitychange", syncAgentsStream);
+
+// A query's stream stays open on the server until the browser closes it,
+// so close it once every expected agent has answered, or once the query
+// expires server-side (queryExpiry, 5 minutes) and no answer can arrive.
+const QUERY_STREAM_MAX_MS = 5 * 60 * 1000;
+let queryStream = null, queryStreamTimer = null;
+
+function closeQueryStream() {
+  clearTimeout(queryStreamTimer);
+  queryStreamTimer = null;
+  if (queryStream) queryStream.close();
+  queryStream = null;
+}
+
+document.getElementById("run-query").addEventListener("click", async () => {
+  const btn = document.getElementById("run-query");
+  const kind = document.getElementById("query-kind").value;
+  btn.disabled = true;
+  try {
+    const resp = await fetch("/api/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind }),
+    });
+    if (resp.status === 401) { window.location.href = "/login"; return; }
+    if (!resp.ok) throw new Error(await resp.text());
+    const { query_id, expected } = await resp.json();
+    renderQuery(kind, { responded: 0, expected, results: [] });
+
+    closeQueryStream();
+    const qs = new EventSource(`/api/query/${encodeURIComponent(query_id)}/stream`);
+    queryStream = qs;
+    queryStreamTimer = setTimeout(() => { if (queryStream === qs) closeQueryStream(); }, QUERY_STREAM_MAX_MS);
+    qs.onmessage = (ev) => {
+      const snap = JSON.parse(ev.data);
+      renderQuery(kind, snap);
+      if (snap.responded >= snap.expected && queryStream === qs) closeQueryStream();
+    };
+  } catch (e) {
+    alert("query failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// A tab opened in the background still connects, for its first snapshot,
+// and then lets the stream go like any other hidden tab.
+connectAgentsStream();
+syncAgentsStream();
+
+// ---- Home dashboards ------------------------------------------------------
+// One dashboard at full size, then up to five as micro-chart cards;
+// clicking a card swaps it into the full slot. Which ones are the user's
+// preference; with none set, the first shared dashboards.
+let hdDashboards = [], hdMain = null, hdList = [], hdGroups = [];
+async function initHomeDashboards() {
+  const [dr, pr, gr] = await Promise.all([fetch("/api/dashboards"), fetch("/api/preferences"), fetch("/api/groups")]);
+  if (!dr.ok) return;
+  hdDashboards = (await dr.json()).dashboards || [];
+  if (!hdDashboards.length) return;
+  const prefs = pr.ok ? await pr.json() : {};
+  hdGroups = gr.ok ? ((await gr.json()).groups || []) : [];
+  document.getElementById("hd-group").innerHTML = '<option value="">every endpoint</option>' + hdGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("");
+  const byId = id => hdDashboards.find(d => d.id === id);
+  hdMain = byId(prefs.home_dashboard_id) || hdDashboards[0];
+  hdList = (prefs.home_dashboard_list || []).map(byId).filter(Boolean);
+  if (!hdList.length) hdList = hdDashboards.filter(d => d.id !== hdMain.id).slice(0, 5);
+  if (!hdList.some(d => d.id === hdMain.id)) hdList = [hdMain].concat(hdList).slice(0, 5);
+  document.getElementById("fold-dashboard").hidden = false;
+  ["hd-group", "hd-range", "hd-hl"].forEach(id => document.getElementById(id).addEventListener("change", renderHomeDashboard));
+  await renderHomeDashboard();
+  renderHomeDashList();
+  initFolds();
+}
+function hdParams() {
+  return `groups=${encodeURIComponent(document.getElementById("hd-group").value)}&range=${encodeURIComponent(document.getElementById("hd-range").value)}&highlights=${document.getElementById("hd-hl").checked ? 1 : 0}`;
+}
+async function renderHomeDashboard() {
+  if (!hdMain) return;
+  document.getElementById("home-dash-title").textContent = hdMain.name;
+  const grid = document.getElementById("hd-grid");
+  grid.innerHTML = '<div class="hint">loading…</div>';
+  const r = await fetch(`/api/dashboards/${encodeURIComponent(hdMain.id)}/data?${hdParams()}`);
+  if (!r.ok) { grid.innerHTML = `<div class="hint">${escapeHtml(await r.text())}</div>`; return; }
+  const d = await r.json();
+  grid.innerHTML = d.panels.length ? d.panels.map(p => renderPanel(p, false)).join("") : '<div class="hint">nothing to show</div>';
+  wirePanels(grid);
+  document.querySelectorAll(".hd-card").forEach(c => c.classList.toggle("active", c.dataset.id === hdMain.id));
+}
+// The other dashboards, to switch to: the one already drawn in full above
+// is left out rather than repeated as a card beneath itself.
+async function renderHomeDashList() {
+  const wrap = document.getElementById("hd-list");
+  const others = hdList.filter(d => d.id !== hdMain.id);
+  if (!others.length) { wrap.innerHTML = ""; return; }
+  wrap.innerHTML = others.map(d => `<div class="hd-card ${d.id === hdMain.id ? "active" : ""}" data-id="${escapeHtml(d.id)}"><div class="hd-card-title">${escapeHtml(d.name)}</div><div class="hd-card-body"><span class="hint">loading…</span></div></div>`).join("");
+  wrap.querySelectorAll(".hd-card").forEach(c => c.addEventListener("click", () => { hdMain = hdDashboards.find(d => d.id === c.dataset.id); renderHomeDashboard(); renderHomeDashList(); }));
+  await Promise.all(others.map(async d => {
+    const r = await fetch(`/api/dashboards/${encodeURIComponent(d.id)}/data?range=${encodeURIComponent(document.getElementById("hd-range").value)}`);
+    const card = wrap.querySelector(`.hd-card[data-id="${CSS.escape(d.id)}"]`);
+    if (!card) return;
+    if (!r.ok) { card.querySelector(".hd-card-body").innerHTML = ""; return; }
+    const data = await r.json();
+    const micro = data.panels.filter(p => p.chart !== "text" && p.chart !== "table").slice(0, 2);
+    if (data.highlighted) card.querySelector(".hd-card-title").insertAdjacentHTML("beforeend", `<span class="os-pill">${escapeHtml(data.highlighted)} highlighted</span>`);
+    card.querySelector(".hd-card-body").innerHTML = micro.map(p => renderPanel(p, true)).join("") || `<span class="hint">${escapeHtml(data.panels.length)} panel(s)</span>`;
+  }));
+}
+</script>
+</body>
+</html>

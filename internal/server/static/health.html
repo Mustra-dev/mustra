@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .b { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
+  .b.good { background: var(--ok-bg); color: var(--ok); }
+  .b.fair { background: color-mix(in srgb, var(--viz-warning) 20%, transparent); color: var(--warn); }
+  .b.poor, .b.high { background: color-mix(in srgb, var(--off) 18%, transparent); color: var(--off); }
+  .b\.very { background: var(--off-bg); color: var(--off); }
+  .b.verypoor, .b.critical { background: var(--off-bg); color: var(--off); }
+  .b.unreported { background: var(--surface-2); color: var(--text-muted); }
+  .b.low { background: var(--ok-bg); color: var(--ok); }
+  .b.medium { background: color-mix(in srgb, var(--viz-warning) 20%, transparent); color: var(--warn); }
+  .num { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .meterbar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; min-width: 70px; }
+  .meterbar span { display: block; height: 100%; }
+  .sub { font-size: var(--fs-meta); color: var(--text-muted); }
+  select.crit { padding: 3px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: var(--fs-meta); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+
+    <div class="module-section" id="section-health" hidden>
+      <div id="health-page-head"></div>
+      <div class="stat-tiles" id="health-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Endpoint health</h2><span class="scan-status" id="health-status"></span></div>
+        <p class="hint">
+          Each endpoint samples itself every 15 seconds and keeps the samples locally; only a summary travels, so
+          the server stays an inventory rather than becoming a metrics store. A category scores 100/(1+events),
+          which makes the first bad event expensive and the tenth nearly free — matching how people actually reason
+          about repeated problems. An endpoint that hasn't reported scores nothing rather than 100: no history is
+          not a clean bill of health.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>Score</th><th>Band</th><th>CPU now</th><th>Memory now</th><th>Fullest disk</th><th>Pressure events 24h</th><th>Window</th></tr></thead>
+            <tbody id="health-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-risk" hidden>
+      <div class="stat-tiles" id="risk-tiles"></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Risk by endpoint</h2><span class="scan-status" id="risk-status"></span></div>
+        <p class="hint">
+          Risk asks a different question from health: not "is this machine working" but "what would it cost us if
+          this one were compromised". Known vulnerabilities, missing patches, whether mustra can even manage it,
+          and whether it's reachable — each capped so no single factor saturates the score — then multiplied by how
+          much the endpoint matters. The same vulnerability on a domain controller and on a spare laptop are not
+          the same finding, and a number that treats them alike is one nobody trusts.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Endpoint</th><th>Risk</th><th>Band</th><th>Criticality</th><th>Vulnerabilities</th><th>Missing patches</th><th>Manageable</th><th>Contributing</th></tr></thead>
+            <tbody id="risk-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let canManage = false;
+
+document.addEventListener("mustra:user", (e) => {
+  canManage = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("patches.manage")));
+  renderPageHead("health-page-head", "/health", { title: "Performance" });
+  initModuleSections([
+    { hash: "health", label: "Endpoint Health" },
+    { hash: "risk", label: "Risk Score" },
+  ]);
+  loadHealth();
+  loadRisk();
+});
+
+const pctBar = (v, warnAt) => `
+  <div class="u-d-flex u-ai-center u-gap-7">
+    <span class="num">${Math.round(v)}%</span>
+    <div class="meterbar u-flex-1"><span${sx(`width:${Math.min(100, v)}%;background:${
+      v >= warnAt ? "var(--off)" : v >= warnAt - 25 ? "var(--viz-warning)" : "var(--viz-good)"}`)}></span></div>
+  </div>`;
+
+async function loadHealth() {
+  const resp = await fetch("/api/health");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const d = await resp.json();
+  const b = d.bands || {};
+
+  document.getElementById("health-tiles").innerHTML = [
+    { label: "Fleet health", value: d.fleet_score, cls: d.fleet_score >= 90 ? "ok" : d.fleet_score >= 70 ? "" : "bad" },
+    { label: "Good", value: b.good || 0, cls: "ok" },
+    { label: "Fair", value: b.fair || 0 },
+    { label: "Poor or worse", value: (b.poor || 0) + (b["very poor"] || 0), cls: ((b.poor || 0) + (b["very poor"] || 0)) ? "bad" : "" },
+    { label: "Not reporting", value: b.unreported || 0, cls: (b.unreported || 0) ? "bad" : "" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+
+  const rows = d.endpoints || [];
+  document.getElementById("health-status").textContent = `${rows.length} endpoint(s)`;
+  document.getElementById("health-body").innerHTML = rows.map(h => {
+    const p = h.detail || {};
+    const events = (p.cpu_events || 0) + (p.memory_events || 0) + (p.disk_events || 0);
+    return `<tr>
+      <td><a href="/endpoint/${escapeHtml(h.agent_id)}">${escapeHtml(h.hostname)}</a>
+          <div class="sub">${escapeHtml(osLabel(h.os))}${h.site ? " · " + escapeHtml(h.site) : ""}</div></td>
+      <td class="num" data-sort="${escapeHtml(h.score)}">${escapeHtml(h.reported ? h.score : "—")}</td>
+      <td><span class="b ${escapeHtml((h.band || "").replace(" ", ""))}">${escapeHtml(h.band)}</span></td>
+      <td data-sort="${escapeHtml(p.cpu_current || 0)}">${h.reported ? pctBar(p.cpu_current || 0, 90) : "—"}</td>
+      <td data-sort="${escapeHtml(p.memory_current || 0)}">${h.reported ? pctBar(p.memory_current || 0, 90) : "—"}</td>
+      <td data-sort="${escapeHtml(p.disk_current || 0)}">${h.reported ? pctBar(p.disk_current || 0, 90) : "—"}</td>
+      <td class="num" data-sort="${escapeHtml(events)}">${escapeHtml(h.reported ? events : "—")}</td>
+      <td class="sub" data-sort="${escapeHtml(p.samples || 0)}">${h.reported ? `${escapeHtml(p.samples)} samples` : "no data yet"}</td>
+    </tr>`;
+  }).join("") || '<tr><td class="empty" colspan="8">no endpoints</td></tr>';
+  const dt = initDataTable(document.getElementById("health-body").closest("table"), { storageKey: "endpoint-health" });
+  if (dt) dt.refresh();
+}
+
+async function loadRisk() {
+  const resp = await fetch("/api/risk/scores");
+  if (!resp.ok) return;
+  const d = await resp.json();
+  const b = d.bands || {};
+
+  document.getElementById("risk-tiles").innerHTML = [
+    { label: "Fleet risk", value: d.fleet_score, cls: d.fleet_score >= 500 ? "bad" : "" },
+    { label: "Critical", value: b.critical || 0, cls: (b.critical || 0) ? "bad" : "" },
+    { label: "High", value: b.high || 0, cls: (b.high || 0) ? "bad" : "" },
+    { label: "Medium", value: b.medium || 0 },
+    { label: "Low", value: b.low || 0, cls: "ok" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+
+  const rows = d.endpoints || [];
+  document.getElementById("risk-status").textContent = `${rows.length} endpoint(s)`;
+  document.getElementById("risk-body").innerHTML = rows.map(r => {
+    const factors = Object.entries(r.factors || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`).join(", ") || "nothing";
+    return `<tr>
+      <td><a href="/endpoint/${escapeHtml(r.agent_id)}">${escapeHtml(r.hostname)}</a>
+          <div class="sub">${escapeHtml(osLabel(r.os))}</div></td>
+      <td class="num" data-sort="${escapeHtml(r.score)}">${escapeHtml(r.score)}</td>
+      <td><span class="b ${escapeHtml(r.band)}">${escapeHtml(r.band)}</span></td>
+      <td>${canManage
+        ? `<select class="crit" data-agent="${escapeHtml(r.agent_id)}" aria-label="Criticality">${
+            (d.levels || []).map(l => `<option value="${escapeHtml(l)}" ${l === r.criticality ? "selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select>`
+        : `<span class="b ${escapeHtml(r.criticality)}">${escapeHtml(r.criticality)}</span>`}</td>
+      <td class="num" data-sort="${escapeHtml(r.vulnerabilities)}">${escapeHtml(r.vulnerabilities)}${r.critical_vulnerabilities ? ` <span class="sub">(${escapeHtml(r.critical_vulnerabilities)} sev)</span>` : ""}</td>
+      <td class="num" data-sort="${escapeHtml(r.missing_patches)}">${escapeHtml(r.missing_patches)}</td>
+      <td>${r.manageable ? '<span class="b good">yes</span>' : '<span class="b poor">no</span>'}</td>
+      <td class="sub u-ws-normal u-maxw-220">${escapeHtml(factors)}</td>
+    </tr>`;
+  }).join("") || '<tr><td class="empty" colspan="8">no endpoints</td></tr>';
+
+  document.querySelectorAll("select.crit").forEach(sel => sel.addEventListener("change", async () => {
+    await fetch("/api/risk/criticality", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent_id: sel.dataset.agent, level: sel.value }),
+    });
+    loadRisk();
+  }));
+  const dt = initDataTable(document.getElementById("risk-body").closest("table"), { storageKey: "risk-scores" });
+  if (dt) dt.refresh();
+}
+</script>
+</body>
+</html>

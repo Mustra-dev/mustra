@@ -1,0 +1,2615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Administration — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/deploy.css">
+<script src="/static/theme.js"></script>
+<style>
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; margin-bottom: 14px; }
+  .form-grid .field { margin: 0 0 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select { width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: var(--fs-meta); font-weight: 700; }
+  .status-pill.active { background: var(--ok-bg); color: var(--ok); }
+  .status-pill.discovering { background: var(--surface-2); color: var(--text-muted); }
+  .status-pill.disabled { background: var(--off-bg); color: var(--off); }
+  .settings-section { max-width: 560px; }
+  .save-row { display: flex; align-items: center; gap: 10px 12px; margin-top: 4px; flex-wrap: wrap; }
+  /* Buttons and status pills keep their one-line shape and wrap to a new
+     line as whole pieces, rather than being squeezed into tall ovals. */
+  .save-row > button, .save-row > .status-pill { flex: 0 0 auto; white-space: nowrap; }
+  .save-status { font-size: 12px; color: var(--text-muted); }
+  .readonly-list { font-size: 12px; color: var(--text-muted); }
+  .readonly-list div { padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 12px; }
+  .readonly-list div:last-child { border-bottom: none; }
+  .readonly-list code { font-family: var(--mono); color: var(--text); }
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -6px 0 12px; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: var(--fs-meta); }
+  .chip button { border: none; background: none; color: var(--text-muted); cursor: pointer; font-size: 12px; line-height: 1; padding: 0; }
+  .chip button:hover { color: var(--off); }
+  .chip.builtin { color: var(--accent); }
+  .badge-flag { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; }
+  .badge-flag.on { background: var(--ok-bg); color: var(--ok); }
+  .badge-flag.off { background: var(--surface-2); color: var(--text-muted); }
+  .dur { display: flex; gap: 6px; }
+  .dur input { flex: 1 1 80px; min-width: 70px; }
+  .dur select { flex: 0 1 auto; width: auto; min-width: 0; }
+  .dur-note { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 4px; min-height: 1em; }
+  .checklist-title { display: block; font-size: var(--fs-small); font-weight: 600; margin: 14px 0 0; }
+  .checklist-title + .checklist-sub { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-top: 2px; }
+  .role-scope-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 18px; }
+  .inline-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .inline-actions select { padding: 5px 8px; font-size: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); }
+  button.tiny { font-size: var(--fs-meta); padding: 4px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  .changelog { font-size: 12.5px; line-height: 1.6; max-height: 460px; overflow-y: auto; padding-right: 8px; }
+  .changelog h3 { font-size: 13px; margin: 18px 0 6px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+  .changelog h3:first-child { margin-top: 0; }
+  .changelog h4 { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 12px 0 4px; }
+  .changelog p { margin: 0 0 8px; color: var(--text-muted); }
+  .changelog li { margin-bottom: 5px; margin-left: 16px; }
+  .changelog code { font-family: var(--mono); font-size: var(--fs-meta); background: var(--surface-2); border-radius: 4px; padding: 1px 5px; }
+  /* Integrations: one card per category, a dot per connection. */
+  .int-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .int-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--surface); }
+  .int-card h3 { margin: 0 0 8px; font-size: 13px; }
+  .int-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+  .int-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong, #555); flex: 0 0 auto; }
+  .int-dot.on { background: var(--ok); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <h1 class="sr-only">Administration</h1>
+    <div class="module-section" id="section-sso" hidden>
+      <div class="setup-split">
+        <div>
+          <div class="panel settings-section">
+            <div class="panel-header"><h2>Identity providers</h2><span class="status-pill" id="sso-status">—</span></div>
+            <p class="hint">Each provider you add becomes its own button on the sign-in page. The local account keeps working regardless.</p>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>Provider</th><th>Type</th><th>Issuer</th><th>Status</th><th>Enabled</th><th>Action</th></tr></thead>
+                <tbody id="idp-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel settings-section">
+            <h2 id="idp-form-title">Add an identity provider</h2>
+            <div class="form-grid">
+              <div class="field"><label for="idp-kind">Type</label>
+                <select id="idp-kind">
+                  <option value="azure">Microsoft Entra ID (Azure AD)</option>
+                  <option value="google">Google</option>
+                  <option value="discord">Discord</option>
+                  <option value="authentik">Authentik</option>
+                  <option value="okta">Okta</option>
+                  <option value="keycloak">Keycloak</option>
+                  <option value="github">GitHub</option>
+                  <option value="generic">Other (any OIDC provider)</option>
+                </select>
+              </div>
+              <div class="field"><label for="idp-label">Button label</label><input id="idp-label" placeholder="Microsoft"></div>
+              <div class="field"><label for="idp-id">ID (URL slug)</label><input id="idp-id" placeholder="microsoft"></div>
+              <div class="field u-gc-full"><label for="idp-issuer">Issuer URL</label><input id="idp-issuer" placeholder="https://login.microsoftonline.com/<tenant-id>/v2.0"></div>
+              <div class="field"><label for="idp-client-id">Client ID</label><input id="idp-client-id"></div>
+              <div class="field"><label for="idp-client-secret">Client secret</label><input id="idp-client-secret" type="password" placeholder="leave blank to keep unchanged"></div>
+              <div class="field u-gc-full">
+                <label for="idp-redirect">Redirect URI <span class="u-tt-none u-c-text-muted">— paste this into the IdP</span></label>
+                <input id="idp-redirect">
+              </div>
+            </div>
+            <div class="save-row">
+              <button class="primary" id="idp-save">Save provider</button>
+              <button class="secondary u-w-auto" id="idp-cancel" hidden>Cancel edit</button>
+              <span class="save-status" id="idp-save-status"></span>
+            </div>
+          </div>
+
+          <div class="panel settings-section">
+            <h2>SSO allowlist</h2>
+            <p class="hint">Who may sign in through any identity provider. With no rule here or in the environment, every SSO sign-in is refused. Email rules need the IdP to mark the address verified. One entry per line.</p>
+            <p class="hint u-c-bad u-fwt-600" id="sso-allowlist-warning" hidden></p>
+            <div class="form-grid">
+              <div class="field"><label for="sso-allowed-domains">Email domains</label><textarea id="sso-allowed-domains" rows="3" class="u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-rs-vertical" placeholder="example.com"></textarea></div>
+              <div class="field"><label for="sso-allowed-emails">Email addresses</label><textarea id="sso-allowed-emails" rows="3" class="u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-rs-vertical" placeholder="alice@example.com"></textarea></div>
+              <div class="field"><label for="sso-allowed-groups">Groups</label><textarea id="sso-allowed-groups" rows="3" class="u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-rs-vertical" placeholder="mustra-operators"></textarea></div>
+              <div class="field"><label for="sso-groups-claim">Groups claim</label><input id="sso-groups-claim" placeholder="groups"></div>
+            </div>
+            <p class="hint" id="sso-allowlist-env"></p>
+            <div class="save-row">
+              <button class="primary" id="sso-allowlist-save">Save allowlist</button>
+              <span class="save-status" id="sso-allowlist-save-status"></span>
+            </div>
+          </div>
+        </div>
+
+        <aside class="panel setup-guide" id="idp-guide"></aside>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-integrations" hidden>
+      <div class="cl-head"><h1>Integrations</h1><div class="cl-head-actions"><button class="primary" type="button" id="int-new">Add integration</button></div></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Connected systems</h2></div>
+        <p class="hint">Everything Mustra connects to, in one place. Some are configured on their own pages; follow the link.</p>
+        <div class="int-cards" id="int-cards"></div>
+      </div>
+      <style>#entra-panel code { overflow-wrap: anywhere; }</style>
+      <div class="panel u-mt-14" id="entra-panel">
+        <div class="panel-header"><h2>Microsoft Entra ID and Intune</h2><span class="status-pill" id="entra-status">—</span></div>
+        <p class="hint">
+          Reads Entra ID's devices and Intune's managed devices every hour through Microsoft Graph and joins them to
+          endpoints (by the Entra device ID the endpoint reports, then by hostname): each endpoint shows its join type,
+          compliance, Intune check-in and primary user, with Intune <b>Sync</b> and <b>Restart</b> buttons.
+          Create an app registration (Entra admin center → App registrations → New), add a client secret, and grant the
+          Microsoft Graph <i>application</i> permissions <code>Device.Read.All</code>,
+          <code>DeviceManagementManagedDevices.Read.All</code> and, for the buttons,
+          <code>DeviceManagementManagedDevices.PrivilegedOperations.All</code>, then <b>Grant admin consent</b>.
+          Without Intune, the Entra half still works.
+        </p>
+        <div class="form-grid" id="entra-form">
+          <div class="field"><label for="entra-tenant">Directory (tenant) ID</label><input id="entra-tenant" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000"></div>
+          <div class="field"><label for="entra-client">Application (client) ID</label><input id="entra-client" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="entra-secret">Client secret</label><input id="entra-secret" type="password" autocomplete="off"></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="entra-save">Save</button>
+          <button id="entra-sync">Sync now</button>
+          <button id="entra-clear">Disconnect</button>
+          <span class="save-status" id="entra-save-status"></span>
+        </div>
+      </div>
+      <section class="cl-panel u-mt-14">
+        <div class="cl-bar"><div class="cl-count-line" id="int-count"></div></div>
+        <div class="table-scroll table-scroll-y rows-10 no-cards u-bt-1-solid-border">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th>Name</th><th>Type</th><th>Sends</th><th>Status</th><th>Delivered</th><th>Action</th></tr></thead>
+            <tbody id="int-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <p class="hint u-mt-10">
+        <b>Event streaming</b> sends each alert (a console notification: a failed patch run, a certificate renewal, an
+        approval waiting) and, if chosen, each audit event, the moment it happens, to a webhook (signed with HMAC-SHA256 in
+        <code>X-Mustra-Signature</code> when a secret is set), Slack, Microsoft Teams (a Workflows webhook), Discord, Splunk
+        (HTTP Event Collector), Grafana Loki or ServiceNow (one incident per event). <b>Prometheus</b> scrapes
+        <code>/metrics</code> with <code>Authorization: Bearer &lt;token&gt;</code> for agents by OS and version, pending
+        patches, sensor coverage and certificate expiry, for Grafana. Scheduled exports of answers are in
+        <a href="/connect">Connect</a>; syslog forwarding of the audit log in <a href="/logs#settings">Logging</a>.
+      </p>
+      <div class="panel" id="int-form" hidden>
+        <h2 id="int-form-title">Add integration</h2>
+        <div class="form-grid">
+          <div class="field"><label for="int-kind">Type</label><select id="int-kind"></select></div>
+          <div class="field"><label for="int-name">Name</label><input id="int-name" placeholder="#ops channel"></div>
+          <div class="field" data-int-hide="prometheus"><label for="int-url">URL</label><input id="int-url" placeholder="https://"></div>
+          <div class="field"><label for="int-secret" id="int-secret-label">Secret</label><input id="int-secret" type="password" autocomplete="off"></div>
+          <div class="field" data-int-only="splunk_hec"><label for="int-index">Splunk index (optional)</label><input id="int-index"></div>
+          <div class="field" data-int-only="servicenow"><label for="int-group">Assignment group (optional)</label><input id="int-group"></div>
+          <div class="field" data-int-hide="prometheus"><label>Send</label>
+            <label><input type="checkbox" id="int-ev-alert" checked> Alerts</label> <label><input type="checkbox" id="int-ev-audit"> Audit events</label>
+            <label><input type="checkbox" id="int-ev-expiry"> Certificate &amp; credential expiry</label></div>
+          <div class="field" id="int-expiry-field" hidden><label for="int-expiry-days">Expiry: only at these thresholds (days)</label>
+            <input id="int-expiry-days" placeholder="every threshold, e.g. 60 or 60,7,expired" title="Leave blank for every threshold set under Cert Manager → Alerts. For one ServiceNow incident per item, give just the first, e.g. 60."></div>
+          <div class="field" data-int-hide="prometheus"><label for="int-sev">Minimum severity</label>
+            <select id="int-sev"><option value="info">info (everything)</option><option value="notice">notice</option><option value="warning" selected>warning</option><option value="error">error</option></select></div>
+          <div class="field"><label><input type="checkbox" id="int-enabled" checked> Enabled</label></div>
+        </div>
+        <p class="hint" id="int-help"></p>
+        <div class="save-row"><button class="primary" id="int-save">Save</button><button id="int-cancel">Cancel</button><span class="save-status" id="int-save-status"></span></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-backdoor" hidden>
+      <div class="panel settings-section">
+        <h2>Break-glass account</h2>
+        <p class="hint">Always works even if SSO is down. Leave the password blank to keep the current one.</p>
+        <div class="form-grid">
+          <div class="field"><label for="backdoor-username">Username</label><input id="backdoor-username"></div>
+          <div class="field"><label for="backdoor-password">New password</label><input id="backdoor-password" type="password" placeholder="leave blank to keep unchanged"></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="backdoor-save">Save break-glass account</button>
+          <span class="save-status" id="backdoor-save-status"></span>
+          <span class="status-pill" id="backdoor-status"></span>
+        </div>
+      </div>
+      <div class="panel settings-section">
+        <h2>Two-step sign-in</h2>
+        <p class="hint">Local accounts can add a code from an authenticator app under Preferences. SSO accounts use their identity provider's.</p>
+        <label class="mfa-require"><input type="checkbox" id="mfa-required"> Require it for every local account, the break-glass account included</label>
+        <p class="hint" id="mfa-required-hint">An account without it sets it up at its next sign-in, before it gets a session. Keep the break-glass account's recovery codes with its password.</p>
+        <span class="save-status" id="mfa-required-status" role="status"></span>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-scim" hidden>
+      <div class="setup-split">
+        <div class="panel settings-section">
+          <div class="panel-header"><h2>SCIM provisioning</h2><span class="status-pill" id="scim-status">—</span></div>
+          <p class="hint">Your IdP pushes users and groups here, so accounts exist in mustra before anyone signs in — and are deactivated when they leave.</p>
+          <div class="form-grid">
+            <div class="field u-gc-full"><label for="scim-base-url">SCIM base URL</label><input id="scim-base-url" readonly></div>
+            <div class="field u-gc-full"><label for="scim-token">SCIM bearer token</label><input id="scim-token"></div>
+          </div>
+          <div class="save-row">
+            <button class="primary" id="scim-save">Save SCIM token</button>
+            <button class="secondary u-w-auto" id="scim-generate">Generate random token</button>
+            <span class="save-status" id="scim-save-status"></span>
+          </div>
+        </div>
+
+        <aside class="panel setup-guide">
+          <div class="field u-mb-12">
+            <label for="scim-guide-kind">Setup steps for</label>
+            <select id="scim-guide-kind">
+              <option value="azure">Microsoft Entra ID (Azure AD)</option>
+              <option value="okta">Okta</option>
+              <option value="authentik">Authentik</option>
+              <option value="google">Google Workspace</option>
+              <option value="keycloak">Keycloak</option>
+              <option value="generic">Other SCIM 2.0 client</option>
+            </select>
+          </div>
+          <div id="scim-guide"></div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-agent-behavior" hidden>
+      <div class="panel settings-section">
+        <h2>Agent behavior</h2>
+        <div class="form-grid">
+          <div class="field"><label>Stale after</label>
+            <div class="dur"><input id="stale-after" type="number" min="1"><select id="stale-after-unit"></select></div>
+            <div class="dur-note" id="stale-after-note"></div></div>
+          <div class="field"><label>Offline expiry</label>
+            <div class="dur"><input id="offline-expiry" type="number" min="1"><select id="offline-expiry-unit"></select></div>
+            <div class="dur-note" id="offline-expiry-note"></div></div>
+          <div class="field"><label for="agent-nats-url">Agent-facing NATS URL</label><input id="agent-nats-url" placeholder="nats://10.0.0.5:4222"></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="agent-save">Save agent settings</button>
+          <span class="save-status" id="agent-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-agent-identity" hidden>
+      <div class="panel settings-section" id="agent-trust">
+        <div class="panel-header"><h2>Agent identity</h2><span class="status-pill" id="trust-status">—</span></div>
+        <p class="hint" id="trust-admin-note" hidden><b>Read-only.</b> Changing the public URL needs the <b>Change agent trust</b> permission.</p>
+        <p class="hint">
+          <b>Public URL.</b> The address endpoints reach this console at. Every install command, binary download and
+          package download handed to an agent is built from it — never from the address a request arrived on, which
+          the requester chooses. https only, unless you allow plain http for a trusted LAN or development.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="trust-public-url">Public URL</label>
+            <input id="trust-public-url" type="url" placeholder="https://mustra.example.com" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label><input type="checkbox" id="trust-allow-http"> Allow plain http (trusted LAN or development only)</label></div>
+        </div>
+        <p class="hint" id="trust-suggestion" hidden></p>
+        <div class="save-row">
+          <button class="primary" id="trust-url-save">Save public URL</button>
+          <button id="trust-use-suggestion" hidden>Use the suggested URL</button>
+          <span class="save-status" id="trust-url-save-status"></span>
+        </div>
+        <p class="hint u-mt-16" id="trust-legacy-note"></p>
+        <p class="hint" id="trust-signing"></p>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-uninstall-password" hidden>
+      <div class="panel settings-section">
+        <h2>Uninstall password</h2>
+        <p class="hint">
+          Asked for by the uninstaller that ships on every endpoint — Add/Remove Programs on Windows,
+          <code>uninstall.sh</code> on macOS and Linux. Only the hash is stored and only the hash reaches endpoints,
+          so the password can be changed later without anything holding a copy of the old one. Leave blank to keep
+          the current one; clear it to remove the requirement.
+        </p>
+        <p class="hint">
+          <b>What this stops is the person using the machine removing the agent because it is in their way.</b>
+          It is not a defence against an administrator of that machine and cannot be: anyone who can run the
+          uninstaller can also stop the service and delete the directory. Endpoints pick up a change at their next
+          install or update.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="uninstall-password">New uninstall password</label>
+            <input id="uninstall-password" type="password" placeholder="leave blank to keep unchanged"></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="uninstall-save">Save uninstall password</button>
+          <button id="uninstall-clear">Remove the requirement</button>
+          <span class="save-status" id="uninstall-save-status"></span>
+          <span class="status-pill" id="uninstall-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-macos-mdm" hidden>
+      <div class="panel settings-section">
+        <h2>macOS MDM enrollment</h2>
+        <p class="hint">
+          Optional. A Mac only gets Full Disk Access without someone clicking through System Settings when an MDM it is
+          enrolled in pushes the grant, and macOS ignores the same grant installed any other way. Enter your MDM's
+          enrollment page here and a Mac agent that starts without Full Disk Access, on a Mac that is not enrolled,
+          opens that page for the person signed in and asks them to install the profile. That happens once a day at most.
+        </p>
+        <p class="hint">
+          <b>Leave it empty to keep the current behavior</b>: the agent asks the person to add it under Privacy &amp;
+          Security by hand. The page usually carries your MDM's enroll secret, and every Mac that installs the agent
+          gets a copy of it. Endpoints pick up a change at their next install or update.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="mdm-enroll-url">Enrollment page</label>
+            <input id="mdm-enroll-url" type="url" placeholder="https://fleet.example.com/enroll?enroll_secret=…" autocomplete="off" spellcheck="false"></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="mdm-enroll-save">Save enrollment page</button>
+          <button id="mdm-enroll-clear">Turn off</button>
+          <span class="save-status" id="mdm-enroll-save-status"></span>
+          <span class="status-pill" id="mdm-enroll-status"></span>
+        </div>
+      </div>
+
+      <div class="panel settings-section" id="macos-mdm-updates">
+        <div class="panel-header"><h2>macOS updates through the MDM</h2><span class="status-pill" id="fleet-status">—</span></div>
+        <p class="hint">
+          On Apple Silicon, macOS itself installs only with the password of a user who owns the disk, which the agent does
+          not have. An MDM holding the Mac's Bootstrap Token can install it without one. Connect Fleet here and, after a
+          Mac's patch job installs what the agent can, Mustra asks Fleet to install the pending macOS update. Linux,
+          Windows, Intel Macs and app updates do not need this. Setup: <code>docs/MACOS-UPDATES.md</code>.
+        </p>
+        <p class="hint">
+          Patching with a restart option installs macOS at once and restarts the Mac. Without one, the Mac downloads it and
+          asks the person signed in to install it. Use an API-only Fleet user with the maintainer role.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="fleet-url">Fleet URL</label>
+            <input id="fleet-url" type="url" placeholder="https://fleet.example.com" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="fleet-token">API token</label>
+            <input id="fleet-token" type="password" placeholder="API-only maintainer token" autocomplete="off"></div>
+          <div class="field"><label><input type="checkbox" id="fleet-major"> Also install major upgrades (macOS 26 → 27)</label></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="fleet-save">Save</button>
+          <button id="fleet-test">Test connection</button>
+          <button id="fleet-clear">Disconnect</button>
+          <span class="save-status" id="fleet-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-network-allowlists" hidden>
+      <div class="panel settings-section">
+        <h2>Import allowlist</h2>
+        <p class="hint">Hosts that "Import from URL" may download from although they resolve to an internal address, and the only hosts a stored credential is ever sent to. One host name per line. Changing it needs the <b>Change network allowlists</b> permission.</p>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="import-allowed-hosts">Allowed hosts</label><textarea id="import-allowed-hosts" rows="3" class="u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-rs-vertical" placeholder="files.example.com"></textarea></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="import-allowlist-save">Save import allowlist</button>
+          <span class="save-status" id="import-allowlist-save-status"></span>
+        </div>
+      </div>
+
+      <div class="panel settings-section">
+        <h2>Internal destinations allowlist</h2>
+        <p class="hint">Hosts the server may reach although they resolve to an internal address: webhooks (Connect exports, report delivery, Jump Gate notifications), Prometheus remote_write (Telemetry), syslog (audit forwarding and Connect syslog exports) and the directory's LDAP server — an in-house SIEM, Loki or a domain controller, say. Any other host may not be loopback, private, link-local or a metadata address, and a webhook to it must use https. One host name or IP address per line. Changing it needs the <b>Change network allowlists</b> permission. Destinations already configured when this check arrived were added for you.</p>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="webhook-allowed-hosts">Allowed hosts</label><textarea id="webhook-allowed-hosts" rows="3" class="u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-font-inherit u-rs-vertical" placeholder="siem.internal.example"></textarea></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="webhook-allowlist-save">Save allowlist</button>
+          <span class="save-status" id="webhook-allowlist-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-message-buffer" hidden>
+      <div class="panel settings-section">
+        <h2>Message buffer</h2>
+        <p class="u-fs-12_5 u-c-text-muted u-mt-n8 u-lh-1_55">
+          Agents never talk to this server directly — they publish to NATS, which writes every message to disk, and the
+          server reads from there. That buffer is what lets the two ends fail independently: during a deploy or a restart
+          the endpoints keep publishing, and the server picks up exactly where it stopped.
+        </p>
+        <p class="u-fs-12_5 u-c-text-muted u-lh-1_55">
+          <b>Retention is how long the control plane may be down before published work is lost.</b> What that costs
+          differs by message: replaying an old sensor snapshot is worthless (only the newest matters) and replaying an
+          old heartbeat is actively wrong, since it would claim a machine was alive when it wasn't. What you would
+          genuinely lose is <b>patch results and security events</b> older than the window. Set it to how long an outage
+          could plausibly go unnoticed here.
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label>Keep messages for (hours)</label>
+            <div class="dur"><input id="stream-retention" type="number" min="1"><select id="stream-retention-unit"></select></div>
+            <div class="dur-note" id="stream-retention-note"></div>
+          </div>
+          <div class="field">
+            <label for="stream-size">Currently buffered</label>
+            <input id="stream-size" disabled>
+          </div>
+        </div>
+        <p class="u-fs-12 u-c-text-muted u-mt-n4" id="stream-hint"></p>
+        <div class="save-row">
+          <button class="primary" id="stream-save">Save retention</button>
+          <span class="save-status" id="stream-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-directory" hidden>
+      <div class="panel settings-section">
+        <h2>Directory</h2>
+        <p class="hint">
+          Read users, groups, computers and memberships from Active Directory over LDAP so Impact can say what an
+          account can reach. The bind account needs no rights beyond an ordinary domain user; nothing is ever written
+          to the directory. Use <code>ldaps://</code> or StartTLS — the sync refuses to send the password over plain LDAP
+          unless you say so explicitly.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="dir-url">Server URL</label><input id="dir-url" placeholder="ldaps://dc01.example.internal:636"></div>
+          <div class="field"><label for="dir-base-dn">Base DN</label><input id="dir-base-dn" placeholder="DC=example,DC=internal"></div>
+          <div class="field"><label for="dir-bind-dn">Bind DN or UPN</label><input id="dir-bind-dn" placeholder="CN=mustra reader,OU=Service Accounts,DC=example,DC=internal"></div>
+          <div class="field"><label for="dir-password">Bind password</label><input id="dir-password" type="password" placeholder="leave blank to keep unchanged"></div>
+          <div class="field"><label for="dir-interval">Sync every (minutes)</label><input id="dir-interval" type="number" min="5" max="1440" value="60"></div>
+          <div class="field u-gc-full"><label for="dir-ca-pem">CA certificate (PEM) — pin a self-signed domain controller certificate instead of skipping verification</label><textarea id="dir-ca-pem" rows="4" class="u-w-100p u-ff-mono u-fs-meta" placeholder="-----BEGIN CERTIFICATE-----"></textarea></div>
+          <div class="field"><label>Options</label>
+            <label class="dep-check"><input type="checkbox" id="dir-enabled"> Sync on a schedule</label>
+            <label class="dep-check"><input type="checkbox" id="dir-starttls"> StartTLS on an ldap:// connection</label>
+            <label class="dep-check"><input type="checkbox" id="dir-skip-verify"> Skip certificate verification (self-signed DC certificates)</label>
+            <label class="dep-check"><input type="checkbox" id="dir-allow-insecure"> Allow the bind over plain LDAP (password on the wire)</label>
+          </div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="dir-save">Save directory settings</button>
+          <button id="dir-test">Test connection</button>
+          <button id="dir-sync">Sync now</button>
+          <span class="save-status" id="dir-save-status"></span>
+          <span class="status-pill" id="dir-status"></span>
+        </div>
+        <p class="hint u-mt-10" id="dir-summary"></p>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-environment" hidden>
+      <div class="panel settings-section">
+        <h2>Console logo</h2>
+        <p class="u-fs-12 u-c-text-muted u-mt-n8">
+          Replaces mustra's mark in the top bar, the rail, and the menu. PNG, JPEG, WebP, or GIF, up to 512&nbsp;KB.
+        </p>
+        <div class="u-d-flex u-ai-center u-gap-14 u-fw-wrap">
+          <div id="logo-preview" class="u-w-44 u-h-44 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-d-flex u-ai-center u-jc-center u-ov-hidden">
+            <span class="u-fs-meta u-c-text-muted">none</span>
+          </div>
+          <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <button class="primary u-w-auto" id="logo-upload">Upload logo</button>
+          <button class="secondary u-w-auto" id="logo-reset">Reset to default</button>
+        </div>
+        <div id="logo-status" class="u-fs-12 u-mt-10"></div>
+      </div>
+
+    </div>
+
+    <div class="module-section" id="section-telemetry" hidden>
+      <div class="panel settings-section u-maxw-none">
+        <div class="panel-header"><h2>Endpoint metrics</h2><span class="status-pill" id="tel-status">—</span></div>
+        <p class="hint">
+          Agents collect host metrics (CPU, memory, load, filesystems, disks, network, temperatures, open files) under
+          node_exporter's metric and label names, so existing Prometheus dashboards and alert rules work unchanged, and
+          send them over the connection they already hold. This server labels each series with
+          <code>job</code>, <code>instance</code> and <code>instance_name</code> (the endpoint's hostname),
+          <code>site</code>, and any extra labels below, then pushes it by remote_write, serves it for scraping, or both.
+          Endpoints pick up a change within five minutes.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label><input type="checkbox" id="tel-enabled"> Collect metrics on endpoints</label></div>
+          <div class="field"><label for="tel-interval">Every (seconds)</label><input id="tel-interval" type="number" min="5" max="3600" placeholder="15"></div>
+        </div>
+        <div class="role-scope-grid">
+          <div>
+            <span class="checklist-title" id="tel-groups-title">Endpoints</span>
+            <span class="checklist-sub">The computer groups that collect. None means every endpoint.</span>
+            <div id="tel-groups" aria-labelledby="tel-groups-title"></div>
+          </div>
+          <div>
+            <span class="checklist-title" id="tel-collectors-title">Collectors</span>
+            <span class="checklist-sub">What to collect. None means all of them.</span>
+            <div id="tel-collectors" aria-labelledby="tel-collectors-title"></div>
+          </div>
+        </div>
+
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Remote write</h3>
+        <p class="hint">
+          Pushes every batch as it arrives to a Prometheus remote_write endpoint: Prometheus started with
+          <code>--web.enable-remote-write-receiver</code> (<code>http://prometheus:9090/api/v1/write</code>), Mimir,
+          VictoriaMetrics or Grafana Cloud. A username with the password makes basic auth; the password alone is sent as a
+          bearer token. A receiver on an internal address must be on the
+          <a href="#network-allowlists">internal destinations allowlist</a>, and only then may it use plain http. Batches wait
+          in memory while the receiver is down, up to about the last eight minutes for a hundred endpoints.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label><input type="checkbox" id="tel-rw-enabled"> Send by remote_write</label></div>
+          <div class="field"><label for="tel-rw-url">URL</label><input id="tel-rw-url" type="url" autocomplete="off" spellcheck="false" placeholder="http://prometheus:9090/api/v1/write"></div>
+          <div class="field"><label for="tel-rw-user">Username</label><input id="tel-rw-user" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="tel-rw-secret">Password or token</label><input id="tel-rw-secret" type="password" autocomplete="new-password">
+            <div class="dur-note" id="tel-rw-secret-note"></div></div>
+        </div>
+
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Scrape</h3>
+        <p class="hint">
+          Serves each endpoint's latest batch, with the agent's own timestamps, at <code id="tel-scrape-path">/metrics/endpoints</code>
+          on this console, behind the Prometheus integration's token (<a href="#integrations">Integrations</a>):
+          <code>authorization: {credentials: &lt;token&gt;}</code> and <code>honor_labels: true</code> in the scrape job, so each
+          endpoint keeps its own <code>job</code> and <code>instance</code>. Endpoints silent for five minutes drop out.
+          Either way each endpoint in scope also gets an <code>up</code> series, 1 while it heartbeats and 0 once it goes quiet,
+          so an <code>up == 0</code> alert works without Prometheus scraping it.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label><input type="checkbox" id="tel-scrape"> Serve for scraping</label></div>
+        </div>
+
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Labels</h3>
+        <div class="form-grid">
+          <div class="field"><label><input type="checkbox" id="tel-proxmox"> Label Proxmox guests with <code>vmid</code>, <code>node</code> and <code>guest_type</code></label></div>
+          <div class="field"><label for="tel-job">Job label</label><input id="tel-job" autocomplete="off" spellcheck="false" placeholder="mustra"></div>
+          <div class="field"><label for="tel-extra">Extra labels, one <code>name=value</code> per line; <code>site</code> here replaces the endpoint's site</label><textarea id="tel-extra" rows="3" spellcheck="false" placeholder="env=production"></textarea></div>
+        </div>
+        <span class="checklist-title">Labels by computer group</span>
+        <span class="checklist-sub">Labels for the endpoints of one group, over the extra labels: <code>device_class=laptop</code> on a Laptops group lets
+          alert rules leave laptops out with <code>{device_class!="laptop"}</code>. Separate several with commas.</span>
+        <div id="tel-group-labels"></div>
+        <div class="save-row u-mt-6"><button type="button" id="tel-group-add">Add a group</button></div>
+        <div class="save-row">
+          <button class="primary" id="tel-save">Save</button>
+          <button id="tel-test">Send a test sample</button>
+          <span class="save-status" id="tel-save-status"></span>
+        </div>
+      </div>
+      <section class="cl-panel u-mt-14">
+        <div class="cl-bar"><div class="cl-count-line" id="tel-count"></div></div>
+        <div class="table-scroll table-scroll-y rows-10 no-cards u-bt-1-solid-border">
+          <table class="table-compact table-nowrap">
+            <thead><tr><th>Endpoint</th><th>OS</th><th>Series</th><th>Last batch</th></tr></thead>
+            <tbody id="tel-body"><tr><td class="empty" colspan="4">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div class="module-section" id="section-tokens" hidden>
+      <div class="panel settings-section u-maxw-none">
+        <h2>API tokens</h2>
+        <p class="hint">
+          Scripts and integrations can call the same HTTP API the console uses:
+          <code class="mono">Authorization: Bearer &lt;token&gt;</code>. A token holds only the permissions you give
+          it — never its creator's — so revoking one is a complete answer.
+        </p>
+        <div id="token-reveal" hidden></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Prefix</th><th>Permissions</th><th>Created</th><th>Last used</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="tokens-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">New token</h3>
+        <div class="form-grid u-maxw-560">
+          <div class="field"><label for="token-name">Name</label><input id="token-name" placeholder="inventory export script"></div>
+          <div class="field"><label for="token-expires">Expires in (days)</label><input id="token-expires" type="number" min="0" placeholder="0 = never"></div>
+        </div>
+        <span class="checklist-title" id="token-perms-title">Permissions</span>
+        <span class="checklist-sub">What this token may change. Tick nothing for a read-only token.</span>
+        <div id="token-perms" aria-labelledby="token-perms-title"></div>
+        <div class="save-row">
+          <button class="primary" id="token-create">Create token</button>
+          <span class="save-status" id="token-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-about" hidden>
+      <div class="panel settings-section">
+        <h2>This build</h2>
+        <p class="hint">What's actually running right now, reported by the binary itself.</p>
+        <div class="readonly-list" id="build-list"></div>
+      </div>
+
+      <!-- Server configuration sits beside the build: both are read-only facts
+           about what is running, and they used to be split across two pages. -->
+      <div class="panel settings-section">
+        <h2>Server configuration (read-only)</h2>
+        <div class="readonly-list" id="readonly-list"></div>
+      </div>
+
+      <div class="panel settings-section">
+        <h2>Update source</h2>
+        <p class="hint">Where <b>Check for updates</b> above looks. A public repository needs nothing here beyond
+          its name; a private one also needs a token with read access, because GitHub answers 404 rather than 403
+          for a repository you cannot see.</p>
+        <div class="form-grid">
+          <div class="field"><label for="update-repo">Repository</label><input id="update-repo" placeholder="owner/name"></div>
+          <div class="field"><label for="update-token">Access token (optional)</label><input id="update-token" type="password" placeholder="only needed for a private repo"></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="update-save">Save</button>
+          <span class="save-status" id="update-save-status"></span>
+        </div>
+      </div>
+
+      <div class="panel settings-section">
+        <h2>Changelog</h2>
+        <div class="changelog" id="changelog">loading…</div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-users" hidden>
+      <div class="panel">
+        <h2>Users</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Username</th><th>Display name</th><th>Source</th><th>Admin</th><th>Active</th><th>Roles</th><th>Groups</th><th>Actions</th></tr></thead>
+            <tbody id="users-body"><tr><td class="empty" colspan="8">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Add local user</h3>
+        <div class="form-grid">
+          <div class="field"><label for="user-username">Username</label><input id="user-username"></div>
+          <div class="field"><label for="user-displayname">Display name</label><input id="user-displayname"></div>
+          <div class="field"><label for="user-password">Password</label><input id="user-password" type="password"></div>
+          <div class="field"><button class="primary" id="user-add">Add user</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-groups" hidden>
+      <div class="panel">
+        <h2>Groups</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Source</th><th>Members</th><th>Roles</th><th>Actions</th></tr></thead>
+            <tbody id="groups-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Create group</h3>
+        <div class="form-grid">
+          <div class="field"><label for="group-name">Display name</label><input id="group-name"></div>
+          <div class="field"><button class="primary" id="group-add">Create group</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-roles" hidden>
+      <div class="panel">
+        <h2>Roles</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Description</th><th>Permissions</th><th>Assigned to</th><th>Actions</th></tr></thead>
+            <tbody id="roles-body"><tr><td class="empty" colspan="5">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <h3 id="role-editor-title" class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Create role</h3>
+        <div class="form-grid">
+          <div class="field"><label for="role-name">Name</label><input id="role-name"></div>
+          <div class="field"><label for="role-description">Description</label><input id="role-description"></div>
+        </div>
+        <span class="checklist-title" id="role-perm-title">Permissions</span>
+        <span class="checklist-sub">Tick nothing for a <strong>read-only</strong> role: viewing the console needs no permission, so these gate only what changes things.</span>
+        <div id="role-perm-checks" aria-labelledby="role-perm-title"></div>
+        <div class="role-scope-grid">
+          <div>
+            <span class="checklist-title" id="role-groups-title">Management rights</span>
+            <span class="checklist-sub">The endpoints this role may act on. None means the whole fleet; a user holding one unscoped role is unscoped.</span>
+            <div id="role-groups" aria-labelledby="role-groups-title"></div>
+          </div>
+          <div>
+            <span class="checklist-title" id="role-content-sets-title">Content sets</span>
+            <span class="checklist-sub">What this role may use. None means all content. Manage the sets under <a href="/access#content">Access</a>.</span>
+            <div id="role-content-sets" aria-labelledby="role-content-sets-title"></div>
+          </div>
+        </div>
+        <p class="u-fs-meta u-c-text-muted u-m-8-0-0">
+          Built-in roles cannot be edited or deleted — <code>admin</code> and <code>user</code> are what the
+          product guarantees they mean, and a console where &ldquo;admin&rdquo; had quietly been redefined would
+          be worse than one with no roles at all. They are also rewritten on every server start, so an edit
+          would not survive a restart. Use <strong>duplicate to edit</strong> on the role's row for a copy you own.
+          <br><br>
+          A role with no permissions is <strong>read-only</strong>, not powerless: every signed-in user can see
+          endpoints, sensor data, deployments and findings. Permissions gate only the actions that change
+          something — which is what the built-in <code>user</code> role is.
+        </p>
+        <div class="panel-actions u-mt-12">
+          <button class="primary" id="role-add">Create role</button>
+          <button id="role-cancel" hidden>Cancel</button>
+          <span class="scan-status" id="role-status"></span>
+        </div>
+      </div>
+    </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+// --- Settings (SSO/backdoor/SCIM/agent behavior/environment) ---
+
+async function loadSettings() {
+  const resp = await fetch("/api/admin/settings");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const s = await resp.json();
+
+  statusPill(document.getElementById("sso-status"), s.sso_status, { active: "active", discovering: "discovering…", disabled: "disabled" });
+  const al = s.sso_allowlist || {};
+  document.getElementById("sso-allowed-domains").value = al.domains || "";
+  document.getElementById("sso-allowed-emails").value = al.emails || "";
+  document.getElementById("sso-allowed-groups").value = al.groups || "";
+  document.getElementById("sso-groups-claim").value = al.groups_claim || "";
+  const alWarn = document.getElementById("sso-allowlist-warning");
+  alWarn.textContent = al.warning || "";
+  alWarn.hidden = !al.warning;
+  const envBits = [["domains", al.env_domains], ["emails", al.env_emails], ["groups", al.env_groups]].filter(x => x[1]);
+  document.getElementById("sso-allowlist-env").textContent = envBits.length
+    ? "Also allowed by the server's environment (MUSTRA_OIDC_ALLOWED_*): " + envBits.map(x => x[0] + ": " + x[1]).join("; ")
+    : "";
+
+  document.getElementById("backdoor-username").value = s.backdoor_username || "";
+  const mfaReq = document.getElementById("mfa-required");
+  mfaReq.checked = !!s.local_mfa_required;
+  mfaReq.disabled = !s.credential_vault_configured && !s.local_mfa_required;
+  if (mfaReq.disabled) document.getElementById("mfa-required-hint").textContent = "Needs the credential encryption key (MUSTRA_CREDENTIAL_ENCRYPTION_KEY) to protect each account's secret.";
+  statusPill(document.getElementById("backdoor-status"), s.backdoor_password_set ? "active" : "disabled", { active: "password set", disabled: "no password set" });
+
+  // The server never returns a stored token; it is shown once, when set.
+  document.getElementById("scim-token").value = "";
+  document.getElementById("scim-token").placeholder = s.scim_token_set ? "a token is set — paste or generate one to replace it" : "no token set";
+  document.getElementById("scim-base-url").value = window.location.origin + "/scim/v2/";
+  statusPill(document.getElementById("scim-status"), s.scim_enabled ? "active" : "disabled", { active: "enabled", disabled: "disabled" });
+
+  setupDuration("stale-after", { minSecs: 5 });
+  setupDuration("offline-expiry", { minSecs: 60 });
+  setDuration("stale-after", s.stale_after_seconds);
+  setDuration("offline-expiry", s.offline_expiry_seconds);
+  renderStreamSettings(s);
+  document.getElementById("agent-nats-url").value = s.agent_nats_url || "";
+  document.getElementById("import-allowed-hosts").value = s.import_allowed_hosts || "";
+  document.getElementById("webhook-allowed-hosts").value = s.webhook_allowed_hosts || "";
+  statusPill(document.getElementById("uninstall-status"),
+    s.uninstall_password_set ? "active" : "disabled",
+    { active: "password set", disabled: "no password — anyone can uninstall" });
+  renderMDMEnroll(s.macos_mdm_enroll_url || "");
+  renderFleet(s);
+
+  document.getElementById("readonly-list").innerHTML = `
+    <div><span>Internal NATS URL</span><code>${escapeHtml(s.nats_url)}</code></div>
+    <div><span>HTTP listen address</span><code>${escapeHtml(s.http_addr)}</code></div>
+    <div><span>Cookie Secure</span><code>${escapeHtml(s.cookie_secure)}</code></div>
+    <div><span>Credential vault configured</span><code>${escapeHtml(s.credential_vault_configured)}</code></div>
+  `;
+
+  renderLogoPreview(s.logo_url);
+
+  document.getElementById("update-repo").value = s.update_repo || "";
+  document.getElementById("update-token").value = "";
+  if (s.update_token_set) document.getElementById("update-token").placeholder = "a token is set — enter one to replace it";
+}
+
+// --- Console logo ---
+
+function renderLogoPreview(logoUrl) {
+  const box = document.getElementById("logo-preview");
+  box.innerHTML = logoUrl
+    ? `<img src="${escapeHtml(safeUrl(logoUrl))}" alt="" class="u-w-100p u-h-100p u-of-cover">`
+    : `<span class="u-fs-meta u-c-text-muted">none</span>`;
+}
+
+async function saveLogo(dataUrl) {
+  const status = document.getElementById("logo-status");
+  status.textContent = "saving…";
+  try {
+    const resp = await fetch("/api/admin/branding", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logo_data_url: dataUrl }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    renderLogoPreview(data.logo_url);
+    status.innerHTML = `<span class="u-c-ok">${dataUrl ? "logo updated" : "logo reset"}</span> — reload to see it in the top bar`;
+  } catch (e) {
+    status.innerHTML = `<span class="u-c-off">failed: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+document.getElementById("logo-upload").addEventListener("click", () => {
+  const file = document.getElementById("logo-file").files[0];
+  if (!file) { alert("pick an image file first"); return; }
+  const reader = new FileReader();
+  reader.onload = () => saveLogo(reader.result);
+  reader.onerror = () => { document.getElementById("logo-status").textContent = "couldn't read that file"; };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById("logo-reset").addEventListener("click", () => {
+  if (!confirm("Reset the console logo back to mustra's default mark?")) return;
+  document.getElementById("logo-file").value = "";
+  saveLogo("");
+});
+
+async function saveSettings(body, statusElId) {
+  const statusEl = document.getElementById(statusElId);
+  statusEl.textContent = "saving…";
+  try {
+    const resp = await fetch("/api/admin/settings", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    statusEl.textContent = "saved";
+    setTimeout(() => { statusEl.textContent = ""; }, 2000);
+    loadSettings();
+  } catch (e) {
+    statusEl.textContent = "failed: " + e.message;
+  }
+}
+
+// --- Identity providers (multi-IdP SSO) ---
+
+// Per-IdP setup steps, shown beside the form and swapped when the type
+// changes. `redirect` is substituted with the redirect URI this console
+// actually expects, so the admin can copy the real value rather than a
+// placeholder they have to assemble themselves.
+const IDP_GUIDES = {
+  azure: {
+    title: "Microsoft Entra ID (Azure AD)",
+    sub: "Portal → Microsoft Entra ID → App registrations",
+    steps: [
+      'New registration → name it "mustra".',
+      'Supported account types: "Accounts in this organizational directory only" unless you need guests.',
+      'Redirect URI: platform "Web", value <code>{redirect}</code>.',
+      'After creating it, copy <b>Application (client) ID</b> into Client ID here.',
+      'Certificates &amp; secrets → New client secret → copy the <b>Value</b> (not the ID) into Client secret.',
+      'Issuer URL is <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</code> — the tenant ID is on the app\'s Overview page.',
+      'Token configuration → add optional claim <code>email</code> and <code>preferred_username</code> so accounts get readable names.',
+    ],
+    note: "Entra issues tokens with the v2.0 endpoint only when the issuer ends in /v2.0 — leaving it off is the usual cause of a discovery failure.",
+  },
+  google: {
+    title: "Google",
+    sub: "Google Cloud console → APIs &amp; Services → Credentials",
+    steps: [
+      'Configure the OAuth consent screen first (Internal if this is a Workspace org).',
+      'Create Credentials → OAuth client ID → Application type "Web application".',
+      'Authorized redirect URI: <code>{redirect}</code>.',
+      'Copy the client ID and client secret into the fields here.',
+      'Issuer URL is <code>https://accounts.google.com</code>.',
+    ],
+    note: "Google won't accept a redirect URI on a private hostname or a raw IP — use the console's public HTTPS URL.",
+  },
+  discord: {
+    title: "Discord",
+    sub: "Discord Developer Portal → Applications",
+    steps: [
+      'New Application → name it, then open OAuth2.',
+      'Add a redirect: <code>{redirect}</code>.',
+      'Copy the Client ID and Client Secret into the fields here.',
+      'Issuer URL is <code>https://discord.com</code>.',
+    ],
+    note: "Discord's OIDC support covers the identify and email scopes; everyone in your server who authorizes the app can sign in, so pair it with roles rather than leaving new users with default access.",
+  },
+  authentik: {
+    title: "Authentik",
+    sub: "Admin interface → Applications → Providers",
+    steps: [
+      'Create an OAuth2/OpenID provider; authorization flow "implicit consent" is typical for an internal tool.',
+      'Redirect URI: <code>{redirect}</code> (strict matching).',
+      'Client type "Confidential" — copy the generated Client ID and Client Secret here.',
+      'Create an Application bound to that provider and note its slug.',
+      'Issuer URL is <code>https://&lt;authentik&gt;/application/o/&lt;app-slug&gt;/</code> — the trailing slash matters.',
+    ],
+    note: "The provider's signing key must be one Authentik publishes in its JWKS, which the default RS256 key is.",
+  },
+  okta: {
+    title: "Okta",
+    sub: "Admin console → Applications",
+    steps: [
+      'Create App Integration → OIDC → Web Application.',
+      'Sign-in redirect URI: <code>{redirect}</code>.',
+      'Assign the app to the users or groups who should reach mustra.',
+      'Copy the Client ID and Client secret into the fields here.',
+      'Issuer URL is <code>https://&lt;your-org&gt;.okta.com</code>, or the custom authorization server\'s issuer if you use one.',
+    ],
+    note: "If you use a custom authorization server, its issuer ends in /oauth2/<server-id> — copy it from the Security → API screen.",
+  },
+  keycloak: {
+    title: "Keycloak",
+    sub: "Admin console → Clients",
+    steps: [
+      'Create a client with Client authentication ON (confidential) and the Standard flow enabled.',
+      'Valid redirect URI: <code>{redirect}</code>.',
+      'Credentials tab → copy the client secret here; the client ID is the one you chose.',
+      'Issuer URL is <code>https://&lt;keycloak&gt;/realms/&lt;realm&gt;</code>.',
+    ],
+    note: "Keycloak's issuer has no trailing slash and no /protocol/openid-connect on the end — discovery adds that itself.",
+  },
+  github: {
+    title: "GitHub",
+    sub: "Settings → Developer settings → OAuth Apps",
+    steps: [
+      'Register a new OAuth application.',
+      'Authorization callback URL: <code>{redirect}</code>.',
+      'Copy the Client ID and generate a client secret.',
+      'Issuer URL: GitHub does not publish standard OIDC discovery for OAuth apps — use an IdP in front of it, or pick "Other" and supply a compatible issuer.',
+    ],
+    note: "GitHub is here for completeness; unless you're fronting it with something that speaks OIDC discovery, prefer one of the other providers.",
+  },
+  generic: {
+    title: "Any OIDC provider",
+    sub: "Whatever your IdP calls its OpenID Connect client settings",
+    steps: [
+      'Create a confidential client (one with a client secret) that supports the authorization code flow.',
+      'Redirect URI: <code>{redirect}</code>.',
+      'Issuer URL is the value whose <code>/.well-known/openid-configuration</code> document exists — mustra discovers everything else from there.',
+      'Request the <code>openid</code>, <code>profile</code>, and <code>email</code> scopes for readable usernames.',
+    ],
+    note: "If the provider is reachable but the button stays greyed out, check the server log for \"OIDC discovery failed\" — it names the exact issuer it tried.",
+  },
+};
+
+function redirectURIFor(id) {
+  return window.location.origin + "/auth/callback/" + (id || "<id>");
+}
+
+function renderIdpGuide() {
+  const kind = document.getElementById("idp-kind").value;
+  const g = IDP_GUIDES[kind] || IDP_GUIDES.generic;
+  const redirect = escapeHtml(redirectURIFor(document.getElementById("idp-id").value.trim()));
+  document.getElementById("idp-guide").innerHTML = `
+    <h3>${escapeHtml(g.title)}</h3>
+    <p class="guide-sub">${/* safe-html: static guide text written in this file */ g.sub}</p>
+    <ol>${g.steps.map(s => `<li>${/* safe-html: static guide text written in this file */ s.replace("{redirect}", redirect)}</li>`).join("")}</ol>
+    <div class="guide-note">${/* safe-html: static guide text written in this file */ g.note}</div>
+  `;
+}
+
+function syncIdpDefaults() {
+  const kind = document.getElementById("idp-kind").value;
+  const labelEl = document.getElementById("idp-label");
+  const idEl = document.getElementById("idp-id");
+  const defaults = {
+    azure: ["Microsoft", "microsoft"], google: ["Google", "google"], discord: ["Discord", "discord"],
+    authentik: ["Authentik", "authentik"], okta: ["Okta", "okta"], keycloak: ["Keycloak", "keycloak"],
+    github: ["GitHub", "github"], generic: ["SSO", "sso"],
+  }[kind] || ["SSO", "sso"];
+  if (!labelEl.dataset.touched) labelEl.value = defaults[0];
+  if (!idEl.dataset.touched) idEl.value = defaults[1];
+  document.getElementById("idp-redirect").value = redirectURIFor(idEl.value.trim());
+  renderIdpGuide();
+}
+
+document.getElementById("idp-kind").addEventListener("change", syncIdpDefaults);
+document.getElementById("idp-label").addEventListener("input", (e) => { e.target.dataset.touched = "1"; });
+document.getElementById("idp-id").addEventListener("input", (e) => {
+  e.target.dataset.touched = "1";
+  document.getElementById("idp-redirect").value = redirectURIFor(e.target.value.trim());
+  renderIdpGuide();
+});
+
+async function loadIdps() {
+  const resp = await fetch("/api/admin/oidc-providers");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  renderIdps(data.providers || []);
+}
+
+function renderIdps(providers) {
+  const body = document.getElementById("idp-body");
+  if (providers.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="6">no identity providers yet — add one below</td></tr>';
+    return;
+  }
+  body.innerHTML = providers.map(p => `
+    <tr>
+      <td>${escapeHtml(p.label)}<div class="u-fs-meta u-c-text-muted">${escapeHtml(p.id)}</div></td>
+      <td>${escapeHtml(p.kind)}</td>
+      <td class="u-ff-mono u-fs-meta u-maxw-260 u-ow-anywhere u-ws-normal">${escapeHtml(p.issuer_url)}</td>
+      <td>${p.enabled ? (p.ready
+          ? '<span class="status-pill active">ready</span>'
+          : '<span class="status-pill">discovering…</span>')
+        : '<span class="status-pill">off</span>'}</td>
+      <td><input type="checkbox" class="idp-enabled" data-id="${escapeHtml(p.id)}" aria-label="Enable ${escapeHtml(p.label || p.id)}" ${p.enabled ? "checked" : ""}></td>
+      <td>
+        <button class="tiny" data-edit-idp="${escapeHtml(p.id)}">edit</button>
+        <button class="tiny danger" data-delete-idp="${escapeHtml(p.id)}">delete</button>
+      </td>
+    </tr>
+  `).join("");
+
+  body.querySelectorAll(".idp-enabled").forEach(el => el.addEventListener("change", async () => {
+    await fetch(`/api/admin/oidc-providers/${el.dataset.id}/enabled`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: el.checked }),
+    });
+    loadIdps();
+    loadSettings();
+  }));
+  body.querySelectorAll("[data-delete-idp]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this identity provider? Anyone who signs in through it will lose that option — their accounts stay.")) return;
+    await fetch(`/api/admin/oidc-providers/${btn.dataset.deleteIdp}`, { method: "DELETE" });
+    loadIdps();
+    loadSettings();
+  }));
+  body.querySelectorAll("[data-edit-idp]").forEach(btn => btn.addEventListener("click", () => {
+    const p = providers.find(x => x.id === btn.dataset.editIdp);
+    if (p) editIdp(p);
+  }));
+}
+
+function editIdp(p) {
+  document.getElementById("idp-form-title").textContent = "Edit " + p.label;
+  document.getElementById("idp-kind").value = p.kind;
+  const labelEl = document.getElementById("idp-label");
+  const idEl = document.getElementById("idp-id");
+  labelEl.value = p.label; labelEl.dataset.touched = "1";
+  idEl.value = p.id; idEl.dataset.touched = "1";
+  idEl.readOnly = true;
+  document.getElementById("idp-issuer").value = p.issuer_url;
+  document.getElementById("idp-client-id").value = p.client_id;
+  const secret = document.getElementById("idp-client-secret");
+  secret.value = "";
+  // The secret is never sent back; show only whether one is stored.
+  secret.placeholder = p.client_secret_set ? "set — leave blank to keep unchanged" : "not set";
+  document.getElementById("idp-redirect").value = p.redirect_url;
+  document.getElementById("idp-cancel").hidden = false;
+  renderIdpGuide();
+  document.getElementById("idp-form-title").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetIdpForm() {
+  document.getElementById("idp-form-title").textContent = "Add an identity provider";
+  const labelEl = document.getElementById("idp-label");
+  const idEl = document.getElementById("idp-id");
+  delete labelEl.dataset.touched;
+  delete idEl.dataset.touched;
+  idEl.readOnly = false;
+  document.getElementById("idp-issuer").value = "";
+  document.getElementById("idp-client-id").value = "";
+  const secretReset = document.getElementById("idp-client-secret");
+  secretReset.value = "";
+  secretReset.placeholder = "leave blank to keep unchanged";
+  document.getElementById("idp-cancel").hidden = true;
+  document.getElementById("idp-save-status").textContent = "";
+  syncIdpDefaults();
+}
+
+document.getElementById("idp-cancel").addEventListener("click", resetIdpForm);
+
+document.getElementById("idp-save").addEventListener("click", async () => {
+  const status = document.getElementById("idp-save-status");
+  const body = {
+    id: document.getElementById("idp-id").value.trim(),
+    label: document.getElementById("idp-label").value.trim(),
+    kind: document.getElementById("idp-kind").value,
+    issuer_url: document.getElementById("idp-issuer").value.trim(),
+    client_id: document.getElementById("idp-client-id").value.trim(),
+    client_secret: document.getElementById("idp-client-secret").value,
+    redirect_url: document.getElementById("idp-redirect").value.trim(),
+  };
+  status.textContent = "saving…";
+  const resp = await fetch("/api/admin/oidc-providers", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">failed: ${escapeHtml(await resp.text())}</span>`; return; }
+  status.innerHTML = `<span class="u-c-ok">saved</span> — discovery runs in the background; the row shows "ready" once it succeeds`;
+  resetIdpForm();
+  loadIdps();
+  loadSettings();
+});
+
+// --- API tokens ---
+
+let allPermissions = [];
+let shownTokens = [];
+
+async function loadTokens() {
+  const resp = await fetch("/api/admin/tokens");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  allPermissions = data.permissions || [];
+  renderTokenPermChecks();
+  renderTokens(data.tokens || []);
+}
+
+function renderTokenPermChecks() {
+  tokenPermList.setItems(permissionItems(allPermissions));
+}
+
+function renderTokens(tokens) {
+  shownTokens = tokens;
+  const body = document.getElementById("tokens-body");
+  if (tokens.length === 0) {
+    body.innerHTML = '<tr><td class="empty" colspan="8">no API tokens yet</td></tr>';
+    return;
+  }
+  body.innerHTML = tokens.map(t => {
+    const expired = t.expires_at && new Date(t.expires_at) < new Date();
+    const state = t.revoked ? "revoked" : (expired ? "expired" : "active");
+    const cls = state === "active" ? "on" : "off";
+    return `
+      <tr>
+        <td>${escapeHtml(t.name)}</td>
+        <td><code class="mono">${escapeHtml(t.prefix)}…</code></td>
+        <td><div class="chip-row">${(t.permissions || []).map(p => `<span class="chip">${escapeHtml(p)}</span>`).join("")}</div></td>
+        <td data-sort="${escapeHtml(t.created_at)}">${fmtAgo(t.created_at)}<div class="u-fs-meta u-c-text-muted">${escapeHtml(t.created_by || "")}</div></td>
+        <td data-sort="${escapeHtml(t.last_used_at || "")}">${t.last_used_at ? fmtAgo(t.last_used_at) : "never"}</td>
+        <td>${escapeHtml(t.expires_at ? fmtDate(t.expires_at) : "never")}</td>
+        <td><span class="badge-flag ${cls}">${state}</span></td>
+        <td class="inline-actions">
+          ${t.revoked ? "" : `<button class="tiny" data-edit-token="${escapeHtml(t.id)}">edit</button><button class="tiny" data-revoke-token="${escapeHtml(t.id)}">revoke</button>`}
+          <button class="tiny danger" data-delete-token="${escapeHtml(t.id)}">delete</button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  body.querySelectorAll("[data-edit-token]").forEach(btn => btn.addEventListener("click", () => {
+    const t = shownTokens.find(x => x.id === btn.dataset.editToken);
+    if (t) editToken(t);
+  }));
+  body.querySelectorAll("[data-revoke-token]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Revoke this token? Anything using it stops working immediately.")) return;
+    await fetch(`/api/admin/tokens/${btn.dataset.revokeToken}/revoke`, { method: "POST" });
+    loadTokens();
+  }));
+  body.querySelectorAll("[data-delete-token]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this token's record entirely? Revoking instead keeps the audit trail of what it did.")) return;
+    await fetch(`/api/admin/tokens/${btn.dataset.deleteToken}`, { method: "DELETE" });
+    loadTokens();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "api-tokens" });
+  if (dt) dt.refresh();
+}
+
+// editToken changes a token's name, permissions and approval exemption in
+// place. The secret does not change, so whatever uses the token keeps
+// working; the new permissions apply from its next request.
+function editToken(t) {
+  openModal(`Edit token: ${t.name}`, `
+    <p class="modal-note">The token's secret stays the same, so scripts using it keep working. Changes apply from its next request.</p>
+    <div class="field"><label for="te-name">Name</label><input id="te-name" value="${escapeHtml(t.name)}"></div>
+    <div id="te-perms"></div>
+    <label class="pa-opt"><input type="checkbox" id="te-exempt"${t.approval_exempt ? " checked" : ""}><span><b>Approval-exempt</b><span class="pa-hint">May run operations an approval policy covers without waiting for approval. Administrators only.</span></span></label>
+    <div class="modal-actions u-d-flex u-gap-8 u-mt-16 u-ai-center">
+      <button class="primary" id="te-save" type="button">Save</button><button class="tiny" id="te-cancel" type="button">Cancel</button>
+      <span class="muted" id="te-status"></span></div>`, wrap => {
+    const list = mountChecklist(wrap.querySelector("#te-perms"), { label: "Token permissions", searchPlaceholder: "Search permissions", noneText: "read-only token" });
+    list.setItems(permissionItems(allPermissions));
+    list.setValues(t.permissions || []);
+    wrap.querySelector("#te-cancel").addEventListener("click", () => wrap.remove());
+    wrap.querySelector("#te-save").addEventListener("click", async () => {
+      const status = wrap.querySelector("#te-status");
+      const name = wrap.querySelector("#te-name").value.trim();
+      const perms = list.values();
+      if (!name) { status.textContent = "name is required"; return; }
+      if (perms.length === 0) { status.textContent = "pick at least one permission"; return; }
+      status.textContent = "saving…";
+      const resp = await fetch(`/api/admin/tokens/${encodeURIComponent(t.id)}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, permissions: perms, approval_exempt: wrap.querySelector("#te-exempt").checked }),
+      });
+      if (!resp.ok) { status.textContent = (await resp.text()).trim(); return; }
+      wrap.remove();
+      showToast("Token updated");
+      loadTokens();
+    });
+  });
+}
+
+document.getElementById("token-create").addEventListener("click", async () => {
+  const status = document.getElementById("token-status");
+  const name = document.getElementById("token-name").value.trim();
+  const perms = tokenPermList.values();
+  if (!name) { status.textContent = "name is required"; return; }
+  if (perms.length === 0) { status.textContent = "pick at least one permission"; return; }
+
+  const body = { name, permissions: perms, expires_days: parseInt(document.getElementById("token-expires").value, 10) || 0 };
+  status.textContent = "creating…";
+  const resp = await fetch("/api/admin/tokens", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!resp.ok) { status.innerHTML = `<span class="u-c-off">failed: ${escapeHtml(await resp.text())}</span>`; return; }
+  const data = await resp.json();
+  status.textContent = "";
+
+  // Shown once, deliberately loud: nothing stores the plaintext.
+  const reveal = document.getElementById("token-reveal");
+  reveal.hidden = false;
+  reveal.innerHTML = `
+    <div class="u-bg-ok-bg u-b-1-solid-ok u-br-radius u-p-12-14 u-mb-14">
+      <div class="u-fwt-700 u-mb-6">Token created — copy it now</div>
+      <div class="u-fs-12 u-c-text-muted u-mb-8">${escapeHtml(data.note || "")}</div>
+      <div class="u-d-flex u-gap-8 u-ai-center u-fw-wrap">
+        <code class="mono u-bg-surface u-b-1-solid-border u-br-radius-sm u-p-7-10 u-fs-12 u-ow-anywhere u-flex-1" id="new-token-value">${escapeHtml(data.token)}</code>
+        <button class="secondary u-w-auto" id="copy-token">Copy</button>
+      </div>
+    </div>`;
+  document.getElementById("copy-token").addEventListener("click", () => {
+    navigator.clipboard.writeText(data.token).then(() => {
+      const b = document.getElementById("copy-token");
+      b.textContent = "Copied!";
+      setTimeout(() => { b.textContent = "Copy"; }, 1500);
+    });
+  });
+
+  document.getElementById("token-name").value = "";
+  document.getElementById("token-expires").value = "";
+  tokenPermList.setValues([]);
+  loadTokens();
+});
+
+// --- About: build identity, fleet agent versions, updates, changelog ---
+
+let aboutData = null;
+
+async function loadAbout() {
+  const resp = await fetch("/api/about");
+  if (!resp.ok) return;
+  aboutData = await resp.json();
+  renderBuild();
+  renderChangelog();
+}
+
+function renderBuild() {
+  const s = aboutData.server || {};
+  const rows = [
+    ["Version", `<code>${escapeHtml(s.version || "dev")}</code>
+       <button class="tiny u-ml-8" id="version-check">Check for updates</button>
+       <span id="version-check-result" class="u-ml-8"></span>`, true],
+    ["Commit", s.short_sha || "not stamped into this build"],
+    ["Built", s.build_time ? fmtTime(s.build_time) : "unknown"],
+    ["Go", s.go_version || "—"],
+    ["Platform", s.platform || "—"],
+    ["Server started", aboutData.started_at ? `${fmtTime(aboutData.started_at)} (${fmtAgo(aboutData.started_at)})` : "—"],
+  ];
+  document.getElementById("build-list").innerHTML = rows.map(([k, v, isHTML]) =>
+    `<div><span>${escapeHtml(k)}</span>${isHTML ? /* safe-html: only the Version row sets isHTML, built escaped above */ v : `<code>${escapeHtml(String(v))}</code>`}</div>`
+  ).join("");
+  document.getElementById("version-check").addEventListener("click", () => checkForUpdates("version-check", "version-check-result"));
+}
+
+// checkForUpdates drives both entry points: the button beside the version
+// and the one in the Updates section below, which also carries the
+// repository and token this needs.
+async function checkForUpdates(btnID, outID) {
+  const btn = document.getElementById(btnID), out = document.getElementById(outID);
+  btn.disabled = true;
+  const wasLabel = btn.textContent;
+  btn.textContent = "checking…";
+  out.textContent = "";
+  try {
+    const resp = await fetch("/api/admin/update-check", { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || JSON.stringify(data));
+    renderUpdateResult(out, data);
+  } catch (e) {
+    out.innerHTML = `<span class="u-c-off">check failed: ${escapeHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = wasLabel;
+  }
+}
+
+// Three outcomes, and the one that matters is the middle one: an update
+// exists and the server cannot install it, so the answer has to be what to
+// run rather than a button that would lie.
+function renderUpdateResult(out, data) {
+  // Three states, three colours, each with words that say the same thing:
+  // red could not check, green current, amber behind. The colour is
+  // reinforcement, never the only signal — the amber in particular is
+  // the one people with a red-green deficiency are most likely to read as
+  // the green.
+  if (!data.checked) {
+    out.innerHTML = `<span class="u-c-off u-fwt-600">✕ couldn't check</span>
+      <div class="u-c-text-muted u-mt-3">${escapeHtml(data.message)}</div>`;
+    return;
+  }
+  if (data.up_to_date) {
+    out.innerHTML = `<span class="u-c-ok u-fwt-600">✓ already up to date</span>
+      <span class="u-c-text-muted u-ml-6">${escapeHtml(data.message)}</span>`;
+    return;
+  }
+  out.innerHTML = `
+    <div class="u-c-warn u-fwt-600">▲ ${escapeHtml(data.latest_version)} is available</div>
+    <div class="u-c-text-muted u-mt-3">
+      This server is running ${escapeHtml(data.running_version)}${data.latest_date ? " · released " + escapeHtml(fmtAgo(data.latest_date)) : ""}
+      ${data.release_url ? `· <a href="${escapeHtml(safeUrl(data.release_url))}" target="_blank" rel="noreferrer">release notes</a>` : ""}
+    </div>
+    ${data.upgrade_command ? `
+      <div class="u-mt-8">
+        <div class="u-c-text-muted u-mb-4">To install it, from <code>deploy/</code> on the server:</div>
+        <code class="upgrade-cmd">${escapeHtml(data.upgrade_command)}</code>
+      </div>` : ""}
+    ${data.release_notes ? `<details class="u-mt-8"><summary class="u-cur-pointer u-c-text-muted">what changed</summary>
+      <pre class="release-notes">${escapeHtml(data.release_notes)}</pre></details>` : ""}`;
+}
+
+
+// A deliberately small Markdown subset — headings, list items, bold, and
+// inline code — applied after escaping, since the only document rendered
+// here is the changelog shipped inside the binary.
+function renderChangelog() {
+  // CHANGELOG.md wraps its lines at ~75 columns. Each source line used to
+  // become its own <p>, so a paragraph read as a stack of fragments with
+  // gaps between them. Wrapped lines are joined back into the paragraph or
+  // list item they belong to; a blank line, a heading or a new item ends one.
+  const blocks = [];
+  let cur = null;
+  const flush = () => { if (cur) blocks.push(cur); cur = null; };
+  for (const raw of escapeHtml(aboutData.changelog || "").split("\n")) {
+    const line = raw.replace(/\s+$/, "");
+    if (/^### /.test(line)) { flush(); blocks.push({ tag: "h4", text: line.slice(4) }); continue; }
+    if (/^## /.test(line)) { flush(); blocks.push({ tag: "h3", text: line.slice(3) }); continue; }
+    if (/^# /.test(line)) { flush(); continue; }
+    if (line.trim() === "") { flush(); continue; }
+    const item = line.match(/^(?:- |\d+\. )(.*)$/);
+    if (item) { flush(); cur = { tag: "li", text: item[1] }; continue; }
+    if (cur) { cur.text += " " + line.trim(); continue; }
+    cur = { tag: "p", text: line.trim() };
+  }
+  flush();
+  const html = blocks.map(b => `<${/* safe-html: one of h3, h4, li, p, set above */ b.tag}>${/* safe-html: the whole changelog was escaped before splitting */ b.text}</${/* safe-html: one of h3, h4, li, p, set above */ b.tag}>`).join("")
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`(.+?)`/g, "<code>$1</code>");
+  document.getElementById("changelog").innerHTML = /* safe-html: escaped as a whole, then only fixed tags added */ html;
+}
+
+document.getElementById("update-save").addEventListener("click", () => {
+  const body = { update_repo: document.getElementById("update-repo").value.trim() };
+  const token = document.getElementById("update-token").value;
+  if (token) body.update_token = token;
+  saveSettings(body, "update-save-status");
+});
+
+
+// --- SCIM setup guide ---
+
+const SCIM_GUIDES = {
+  azure: {
+    title: "Microsoft Entra ID",
+    sub: "Enterprise applications → your app → Provisioning",
+    steps: [
+      'Open the enterprise application for mustra (create a non-gallery app if you only set up SSO via app registration).',
+      'Provisioning → Get started → Mode: <b>Automatic</b>.',
+      'Tenant URL: <code>{base}</code>',
+      'Secret Token: the bearer token on the left.',
+      'Test Connection, then Save and turn Provisioning Status On.',
+      'Under Mappings, keep the default user attributes; <code>userName</code> and <code>displayName</code> are what mustra uses.',
+    ],
+    note: "Entra provisions on its own ~40 minute cycle. Use Provision on demand to test a single user immediately.",
+  },
+  okta: {
+    title: "Okta",
+    sub: "Applications → your app → Provisioning",
+    steps: [
+      'Open the app, Provisioning tab → Configure API Integration → Enable API integration.',
+      'Base URL: <code>{base}</code>',
+      'API Token: the bearer token on the left.',
+      'Test API Credentials, then Save.',
+      'Under To App, enable Create Users, Update User Attributes, and Deactivate Users.',
+      'Push Groups if you want mustra groups to mirror Okta groups (roles can then be assigned per group).',
+    ],
+    note: "Deactivate Users is what makes an offboarded person lose console access without anyone touching mustra.",
+  },
+  authentik: {
+    title: "Authentik",
+    sub: "Admin interface → Applications → Providers → SCIM",
+    steps: [
+      'Create a SCIM provider.',
+      'URL: <code>{base}</code>',
+      'Token: the bearer token on the left.',
+      'Choose the user and group filters that decide who gets provisioned.',
+      'Attach the SCIM provider to the mustra application as a <b>backchannel</b> provider.',
+      'Save, then use the provider\'s sync action to run it immediately rather than waiting for the schedule.',
+    ],
+    note: "Authentik's SCIM property mappings sometimes come back empty on creation — check the provider has both user and group mappings set before syncing.",
+  },
+  google: {
+    title: "Google Workspace",
+    sub: "Admin console → Apps → Web and mobile apps",
+    steps: [
+      'Google Workspace only auto-provisions to apps in its catalog, so add mustra as a custom SAML/SCIM app if your edition allows it.',
+      'Where a SCIM endpoint is accepted, use <code>{base}</code> with the bearer token on the left.',
+      'Otherwise leave SCIM off: mustra creates an account on first SSO sign-in anyway.',
+    ],
+    note: "Without SCIM you lose automatic deactivation — remove or deactivate departing users in mustra's Users tab instead.",
+  },
+  keycloak: {
+    title: "Keycloak",
+    sub: "Not built in — use an extension",
+    steps: [
+      'Keycloak has no first-party outbound SCIM client; community extensions (e.g. scim-for-keycloak) add one.',
+      'Point the extension at <code>{base}</code> with the bearer token on the left.',
+      'If you\'d rather not add an extension, skip SCIM: accounts are created on first sign-in.',
+    ],
+    note: "Mustra's SCIM endpoint is standard SCIM 2.0, so any compliant client works — the constraint is on the Keycloak side.",
+  },
+  generic: {
+    title: "Any SCIM 2.0 client",
+    sub: "Users and Groups endpoints, bearer-token auth",
+    steps: [
+      'Base URL: <code>{base}</code>',
+      'Authentication: HTTP bearer token — the value on the left.',
+      'Supported resources: <code>/Users</code> and <code>/Groups</code>, with GET, POST, PUT, PATCH, and DELETE.',
+      'Filtering is supported on <code>userName</code> and <code>displayName</code>, which is what most clients use to reconcile.',
+    ],
+    note: "Check /scim/v2/ServiceProviderConfig with your token if a client wants to discover capabilities first.",
+  },
+};
+
+function renderScimGuide() {
+  const kind = document.getElementById("scim-guide-kind").value;
+  const g = SCIM_GUIDES[kind] || SCIM_GUIDES.generic;
+  const base = escapeHtml(window.location.origin + "/scim/v2/");
+  document.getElementById("scim-guide").innerHTML = `
+    <h3>${escapeHtml(g.title)}</h3>
+    <p class="guide-sub">${/* safe-html: static guide text written in this file */ g.sub}</p>
+    <ol>${g.steps.map(s => `<li>${/* safe-html: static guide text written in this file */ s.replace("{base}", base)}</li>`).join("")}</ol>
+    <div class="guide-note">${/* safe-html: static guide text written in this file */ g.note}</div>
+  `;
+}
+document.getElementById("scim-guide-kind").addEventListener("change", renderScimGuide);
+
+document.getElementById("backdoor-save").addEventListener("click", () => {
+  const body = { backdoor_username: document.getElementById("backdoor-username").value.trim() };
+  const pw = document.getElementById("backdoor-password").value;
+  if (pw) body.backdoor_password = pw;
+  saveSettings(body, "backdoor-save-status");
+  document.getElementById("backdoor-password").value = "";
+});
+
+document.getElementById("sso-allowlist-save").addEventListener("click", () => {
+  saveSettings({
+    sso_allowed_domains: document.getElementById("sso-allowed-domains").value,
+    sso_allowed_emails: document.getElementById("sso-allowed-emails").value,
+    sso_allowed_groups: document.getElementById("sso-allowed-groups").value,
+    sso_groups_claim: document.getElementById("sso-groups-claim").value.trim(),
+  }, "sso-allowlist-save-status");
+});
+
+document.getElementById("scim-generate").addEventListener("click", () => {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  document.getElementById("scim-token").value = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+});
+
+document.getElementById("scim-save").addEventListener("click", () => {
+  const token = document.getElementById("scim-token").value.trim();
+  if (!token) { document.getElementById("scim-save-status").textContent = "Enter or generate a token first."; return; }
+  saveSettings({ scim_token: token }, "scim-save-status");
+});
+
+document.getElementById("uninstall-save").addEventListener("click", () => {
+  const pw = document.getElementById("uninstall-password").value;
+  if (!pw) {
+    document.getElementById("uninstall-save-status").textContent = "enter a password, or use Remove the requirement";
+    return;
+  }
+  saveSettings({ uninstall_password: pw }, "uninstall-save-status");
+  document.getElementById("uninstall-password").value = "";
+});
+
+document.getElementById("uninstall-clear").addEventListener("click", () => {
+  if (!confirm("Remove the uninstall password?\n\nEndpoints will then be removable by anyone who can run the uninstaller on them.")) return;
+  saveSettings({ uninstall_password: "" }, "uninstall-save-status");
+  document.getElementById("uninstall-password").value = "";
+});
+
+function renderMDMEnroll(url) {
+  document.getElementById("mdm-enroll-url").value = url;
+  statusPill(document.getElementById("mdm-enroll-status"), url ? "active" : "disabled",
+    { active: "Macs are offered enrollment", disabled: "off — Macs are asked to grant access by hand" });
+}
+
+document.getElementById("mdm-enroll-save").addEventListener("click", () => {
+  const url = document.getElementById("mdm-enroll-url").value.trim();
+  if (!url) {
+    document.getElementById("mdm-enroll-save-status").textContent = "enter the enrollment page, or use Turn off";
+    return;
+  }
+  saveSettings({ macos_mdm_enroll_url: url }, "mdm-enroll-save-status");
+});
+
+document.getElementById("mdm-enroll-clear").addEventListener("click", () => {
+  saveSettings({ macos_mdm_enroll_url: "" }, "mdm-enroll-save-status");
+});
+
+// macOS updates through Fleet (internal/server/fleetmdm.go).
+function renderFleet(s) {
+  document.getElementById("fleet-url").value = s.fleet_url || "";
+  const token = document.getElementById("fleet-token");
+  token.value = "";
+  token.placeholder = s.fleet_token_set ? "a token is set — enter one to replace it" : "API-only maintainer token";
+  document.getElementById("fleet-major").checked = !!s.fleet_macos_major;
+  const on = !!(s.fleet_url && s.fleet_token_set);
+  statusPill(document.getElementById("fleet-status"), on ? "active" : "disabled",
+    { active: "connected — macOS updates go through Fleet", disabled: "off — Apple Silicon Macs skip macOS updates" });
+}
+
+document.getElementById("fleet-save").addEventListener("click", () => {
+  const body = { fleet_url: document.getElementById("fleet-url").value.trim(), fleet_macos_major: document.getElementById("fleet-major").checked };
+  const token = document.getElementById("fleet-token").value.trim();
+  if (token) body.fleet_token = token;
+  saveSettings(body, "fleet-save-status");
+});
+
+document.getElementById("fleet-clear").addEventListener("click", () => {
+  saveSettings({ fleet_url: "", fleet_token: "", fleet_macos_major: false }, "fleet-save-status");
+});
+
+document.getElementById("fleet-test").addEventListener("click", async () => {
+  const st = document.getElementById("fleet-save-status");
+  st.textContent = "testing…";
+  try {
+    const resp = await fetch("/api/admin/settings/fleet-test", { method: "POST" });
+    if (!resp.ok) throw new Error(await resp.text());
+    st.textContent = "connected as " + (await resp.json()).user;
+  } catch (e) {
+    st.textContent = "failed: " + e.message;
+  }
+});
+
+// Agent identity (internal/server/enroll_publicurl.go).
+let trustSuggestion = "";
+function renderAgentTrust(t) {
+  const url = document.getElementById("trust-public-url");
+  url.value = t.public_url || "";
+  url.disabled = !!t.public_url_from_env;
+  document.getElementById("trust-allow-http").checked = !!t.allow_http;
+  document.getElementById("trust-allow-http").disabled = !!t.public_url_from_env;
+  document.getElementById("trust-url-save").disabled = !!t.public_url_from_env;
+  const sug = document.getElementById("trust-suggestion");
+  trustSuggestion = t.suggestion || "";
+  if (t.public_url_from_env) {
+    sug.textContent = "Set by MUSTRA_PUBLIC_URL on the server; change it there.";
+    sug.hidden = false;
+  } else if (trustSuggestion) {
+    sug.textContent = "Not set. An earlier version recorded " + trustSuggestion + " from request headers. Check it is really this console's address before using it: anyone who could reach the console could have written it.";
+    sug.hidden = false;
+  } else {
+    sug.hidden = true;
+  }
+  document.getElementById("trust-use-suggestion").hidden = !(trustSuggestion && !t.public_url_from_env);
+  // Retired wherever the callout authenticates agents; without it there is
+  // no per-agent identity at all, which is the thing to say instead.
+  document.getElementById("trust-legacy-note").innerHTML = t.identity_enforced
+    ? `<b>Legacy shared agent credential: retired.</b> Every agent connects with a credential of its own; the one password
+       all agents once shared is no longer accepted and cannot be switched back on.` +
+      (t.needs_reenrollment ? ` <b class="u-c-off">${escapeHtml(t.needs_reenrollment)} endpoint${t.needs_reenrollment === 1 ? " has" : "s have"} never enrolled</b>
+       and cannot connect until reinstalled with an enrollment token (Client Management lists them).` : "")
+    : `<b>Agents are not authenticated individually.</b> Without the auth callout key (<code>MUSTRA_NATS_CALLOUT_SEED</code>)
+       the broker does not ask this server who an agent is. Fine for local development; run <code>deploy/init.sh</code> for anything else.`;
+  // Changing these needs agents.trust; a settings.manage holder without it
+  // sees them but cannot save (enforced server-side in handlePutAgentTrust).
+  if (!t.caller_is_admin) {
+    url.disabled = true;
+    document.getElementById("trust-allow-http").disabled = true;
+    document.getElementById("trust-url-save").disabled = true;
+    document.getElementById("trust-use-suggestion").hidden = true;
+    const note = document.getElementById("trust-admin-note");
+    if (note) note.hidden = false;
+  }
+  statusPill(document.getElementById("trust-status"), t.identity_enforced ? "active" : "disabled", {
+    active: "per-agent identity enforced",
+    disabled: "not enforced (no auth callout key)",
+  });
+  document.getElementById("trust-signing").textContent = t.signing_key_id
+    ? "Agent updates are signed (" + t.signing_mode + ", key " + t.signing_key_id + "); agents pin this key when they enroll and refuse updates it did not sign."
+    : "No agent update signing key is configured; agents will refuse every update.";
+}
+async function loadAgentTrust() {
+  const resp = await fetch("/api/agent-trust");
+  if (!resp.ok) { document.getElementById("agent-trust").style.display = "none"; return; }
+  renderAgentTrust(await resp.json());
+}
+async function saveAgentTrust(body, statusID) {
+  const status = document.getElementById(statusID);
+  status.textContent = "saving…";
+  const resp = await fetch("/api/agent-trust", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { status.textContent = await resp.text(); return; }
+  renderAgentTrust(await resp.json());
+  status.textContent = "saved";
+}
+document.getElementById("trust-url-save").addEventListener("click", () => {
+  saveAgentTrust({ public_url: document.getElementById("trust-public-url").value.trim(),
+    allow_http: document.getElementById("trust-allow-http").checked }, "trust-url-save-status");
+});
+document.getElementById("trust-use-suggestion").addEventListener("click", () => {
+  if (!trustSuggestion) return;
+  if (!confirm("Use " + trustSuggestion + " as the console's public URL?\n\nEvery agent will download installers and updates from it.")) return;
+  document.getElementById("trust-public-url").value = trustSuggestion;
+  document.getElementById("trust-allow-http").checked = trustSuggestion.startsWith("http://");
+});
+loadAgentTrust();
+
+// --- Telemetry (endpoint metrics to Prometheus) ---
+
+const telGroupList = mountChecklist(document.getElementById("tel-groups"), {
+  label: "Endpoints", searchPlaceholder: "Search computer groups", noneText: "every endpoint",
+  emptyHTML: 'No computer groups yet, so every endpoint collects. <a href="/groups">Create a group</a>.',
+});
+const telCollectorList = mountChecklist(document.getElementById("tel-collectors"), {
+  label: "Collectors", searchPlaceholder: "Search collectors", noneText: "all collectors",
+});
+const TEL_COLLECTOR_HINTS = {
+  cpu: "node_cpu_seconds_total by mode", memory: "node_memory_*", load: "node_load1/5/15",
+  filesystem: "node_filesystem_* by mount", diskstats: "node_disk_* by device", netdev: "node_network_* by interface",
+  stat: "boot time, context switches, interrupts, processes", uname: "node_uname_info", time: "node_time_seconds",
+  hwmon: "temperatures and their thresholds (Linux)", filefd: "open file handles (Linux)",
+  health: "stale services, broken packages, pending apt updates, reboot required (Linux, every 5 minutes)",
+  pressure: "CPU, memory and I/O pressure stall time (Linux)", vmstat: "OOM kills, paging and page faults (Linux)",
+  netstat: "TCP, UDP, IP and ICMP counters (Linux)", sockstat: "sockets in use (Linux)",
+  timex: "NTP synchronisation of the clock (Linux)", conntrack: "connection-tracking table use (Linux)",
+  zfs: "ZFS ARC and pool state (Linux)", cpufreq: "CPU frequency and governor (Linux)",
+  os: "OS name and version (Linux)", thermal: "thermal zones and cooling devices (Linux)",
+  entropy: "kernel entropy (Linux)", arp: "ARP entries per interface (Linux)",
+  systemd: "every unit's state, node_systemd_unit_state (Linux, every minute)", netclass: "link state, speed and MTU per interface (Linux)",
+};
+function renderTelemetry(d) {
+  const t = d.settings;
+  document.getElementById("tel-enabled").checked = t.metrics.enabled;
+  document.getElementById("tel-interval").value = t.metrics.interval_seconds || 15;
+  telCollectorList.setItems((d.collectors || []).map(c => ({ value: c, label: c, hint: TEL_COLLECTOR_HINTS[c] || "" })));
+  telCollectorList.setValues(t.metrics.collectors);
+  telGroupList.setValues(t.metrics.group_ids);
+  document.getElementById("tel-rw-enabled").checked = t.remote_write.enabled;
+  document.getElementById("tel-rw-url").value = t.remote_write.url || "";
+  document.getElementById("tel-rw-user").value = t.remote_write.username || "";
+  document.getElementById("tel-rw-secret").value = "";
+  document.getElementById("tel-rw-secret").placeholder = t.remote_write.secret_set ? "stored; type to replace" : "";
+  document.getElementById("tel-rw-secret-note").innerHTML = t.remote_write.secret_set
+    ? 'A password is stored. <button type="button" class="tiny danger" id="tel-rw-clear">Remove it</button>' : "";
+  const clear = document.getElementById("tel-rw-clear");
+  if (clear) clear.addEventListener("click", () => {
+    if (confirm("Remove the stored remote_write password?")) saveTelemetry({ clear_secret: true });
+  });
+  document.getElementById("tel-scrape").checked = t.scrape.enabled;
+  document.getElementById("tel-scrape-path").textContent = d.scrape_path;
+  document.getElementById("tel-job").value = t.labels.job || "mustra";
+  document.getElementById("tel-proxmox").checked = !!t.labels.proxmox_guests;
+  document.getElementById("tel-extra").value = Object.entries(t.labels.extra || {}).sort().map(([k, v]) => k + "=" + v).join("\n");
+  document.getElementById("tel-group-labels").innerHTML = "";
+  (t.labels.groups || []).forEach(g => addTelGroupRow(g.group_id, Object.entries(g.labels || {}).sort().map(([k, v]) => k + "=" + v).join(", ")));
+
+  const st = d.stats || {};
+  const pill = document.getElementById("tel-status");
+  const failing = t.remote_write.enabled && st.last_error && (!st.last_sent_at || st.last_error_at > st.last_sent_at);
+  statusPill(pill, !t.metrics.enabled ? "discovering" : failing ? "disabled" : "active",
+    { discovering: "off", disabled: "failing", active: "on" });
+  pill.title = failing ? st.last_error : "";
+  const rows = d.endpoints || [];
+  let line = rows.length + " endpoint" + (rows.length === 1 ? "" : "s") + " reporting";
+  if (t.remote_write.enabled) {
+    line += " · " + (st.batches_sent || 0) + " batches sent";
+    if (st.last_sent_at) line += ", last " + fmtAgo(st.last_sent_at);
+    if (st.batches_dropped) line += " · " + st.batches_dropped + " dropped";
+    if (st.last_error) line += " · last error " + fmtAgo(st.last_error_at) + ": " + st.last_error;
+  }
+  document.getElementById("tel-count").textContent = line;
+  document.getElementById("tel-body").innerHTML = rows.length ? rows.map(r => `<tr>
+      <td><a href="/endpoint?id=${encodeURIComponent(r.agent_id)}">${escapeHtml(r.hostname || r.agent_id)}</a></td>
+      <td>${escapeHtml(r.os || "")}</td><td>${escapeHtml(String(r.series))}</td><td title="${escapeHtml(fmtTime(r.received))}">${escapeHtml(fmtAgo(r.received))}</td></tr>`).join("")
+    : `<tr><td class="empty" colspan="4">${t.metrics.enabled ? "No endpoint has sent metrics in the last five minutes." : "Metrics collection is off."}</td></tr>`;
+}
+let telComputerGroups = [];
+function addTelGroupRow(groupID, labels) {
+  const row = document.createElement("div");
+  row.className = "form-grid tel-group-row";
+  row.style.alignItems = "end";
+  const known = telComputerGroups.some(g => g.id === groupID);
+  row.innerHTML = `<div class="field"><label>Computer group</label><select class="tel-group-id">
+      <option value="">choose a group</option>
+      ${telComputerGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("")}
+      ${groupID && !known ? `<option value="${escapeHtml(groupID)}">deleted group (${escapeHtml(groupID)})</option>` : ""}
+    </select></div>
+    <div class="field"><label>Labels</label><input class="tel-group-labels" spellcheck="false" placeholder="device_class=laptop"></div>
+    <div class="field"><button type="button" class="tiny danger tel-group-remove">Remove</button></div>`;
+  row.querySelector(".tel-group-id").value = groupID || "";
+  row.querySelector(".tel-group-labels").value = labels || "";
+  row.querySelector(".tel-group-remove").addEventListener("click", () => row.remove());
+  document.getElementById("tel-group-labels").appendChild(row);
+}
+document.getElementById("tel-group-add").addEventListener("click", () => addTelGroupRow("", ""));
+function parseTelLabels(text, sep) {
+  const out = {};
+  for (const part of text.split(sep)) {
+    const l = part.trim();
+    if (!l) continue;
+    const i = l.indexOf("=");
+    if (i < 1) return null;
+    out[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+  }
+  return out;
+}
+async function loadTelemetry() {
+  const resp = await fetch("/api/telemetry");
+  if (!resp.ok) return;
+  const g = await fetch("/api/groups").then(r => r.ok ? r.json() : { groups: [] }).catch(() => ({ groups: [] }));
+  telComputerGroups = g.groups || [];
+  telGroupList.setItems(telComputerGroups.map(x => ({ value: x.id, label: x.name, hint: x.description || "" })));
+  renderTelemetry(await resp.json());
+}
+async function saveTelemetry(extra) {
+  const status = document.getElementById("tel-save-status");
+  const labels = parseTelLabels(document.getElementById("tel-extra").value, "\n");
+  if (!labels) { status.textContent = "extra labels: write name=value, one per line"; return; }
+  const groupLabels = [];
+  for (const row of document.querySelectorAll("#tel-group-labels .tel-group-row")) {
+    const id = row.querySelector(".tel-group-id").value;
+    const l = parseTelLabels(row.querySelector(".tel-group-labels").value, ",");
+    if (!l) { status.textContent = "group labels: write name=value, separated by commas"; return; }
+    if (!Object.keys(l).length) continue;
+    if (!id) { status.textContent = "choose a computer group for each row of group labels"; return; }
+    groupLabels.push({ group_id: id, labels: l });
+  }
+  const body = {
+    metrics: { enabled: document.getElementById("tel-enabled").checked,
+      interval_seconds: parseInt(document.getElementById("tel-interval").value, 10) || 15,
+      collectors: telCollectorList.values(), group_ids: telGroupList.values() },
+    remote_write: { enabled: document.getElementById("tel-rw-enabled").checked,
+      url: document.getElementById("tel-rw-url").value.trim(),
+      username: document.getElementById("tel-rw-user").value.trim(),
+      secret: document.getElementById("tel-rw-secret").value, ...(extra || {}) },
+    scrape: { enabled: document.getElementById("tel-scrape").checked },
+    labels: { job: document.getElementById("tel-job").value.trim(), extra: labels, groups: groupLabels,
+      proxmox_guests: document.getElementById("tel-proxmox").checked },
+  };
+  status.textContent = "saving…";
+  const resp = await fetch("/api/telemetry", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { status.textContent = await resp.text(); return; }
+  renderTelemetry(await resp.json());
+  status.textContent = "saved";
+}
+document.getElementById("tel-save").addEventListener("click", () => saveTelemetry());
+document.getElementById("tel-test").addEventListener("click", async () => {
+  const status = document.getElementById("tel-save-status");
+  status.textContent = "sending…";
+  const resp = await fetch("/api/telemetry/test", { method: "POST" });
+  if (!resp.ok) { status.textContent = await resp.text(); return; }
+  const r = await resp.json();
+  status.textContent = (r.ok ? "" : "failed: ") + r.message;
+});
+loadTelemetry();
+
+document.getElementById("agent-save").addEventListener("click", () => {
+  saveSettings({
+    stale_after_seconds: totalSeconds("stale-after"),
+    offline_expiry_seconds: totalSeconds("offline-expiry"),
+    agent_nats_url: document.getElementById("agent-nats-url").value.trim(),
+  }, "agent-save-status");
+});
+
+document.getElementById("import-allowlist-save").addEventListener("click", () => {
+  saveSettings({ import_allowed_hosts: document.getElementById("import-allowed-hosts").value }, "import-allowlist-save-status");
+});
+document.getElementById("webhook-allowlist-save").addEventListener("click", () => {
+  saveSettings({ webhook_allowed_hosts: document.getElementById("webhook-allowed-hosts").value }, "webhook-allowlist-save-status");
+});
+
+// --- Directory (Active Directory over LDAP, for Impact) ---
+
+async function loadDirectory() {
+  const resp = await fetch("/api/directory");
+  if (!resp.ok) return;
+  const d = await resp.json();
+  document.getElementById("dir-url").value = d.url || "";
+  document.getElementById("dir-base-dn").value = d.base_dn || "";
+  document.getElementById("dir-bind-dn").value = d.bind_dn || "";
+  document.getElementById("dir-interval").value = d.interval_minutes || 60;
+  document.getElementById("dir-enabled").checked = !!d.enabled;
+  document.getElementById("dir-starttls").checked = !!d.starttls;
+  document.getElementById("dir-skip-verify").checked = !!d.insecure_skip_verify;
+  document.getElementById("dir-allow-insecure").checked = !!d.allow_insecure;
+  document.getElementById("dir-ca-pem").value = d.ca_pem || "";
+  document.getElementById("dir-password").placeholder = d.password_set ? "leave blank to keep (re-enter it to change the server or its security)" : "not set";
+  const state = d.last_error ? "disabled" : (d.counts && d.counts.users ? "active" : "discovering");
+  statusPill(document.getElementById("dir-status"), state, { active: "synced", discovering: "never synced", disabled: "last sync failed" });
+  const c = d.counts || {};
+  document.getElementById("dir-summary").innerHTML = d.last_error
+    ? `Last sync failed: <code>${escapeHtml(d.last_error)}</code>`
+    : (c.users ? `${escapeHtml(c.users)} users, ${escapeHtml(c.groups)} groups, ${escapeHtml(c.computers)} computers, ${escapeHtml(c.memberships)} memberships — synced ${escapeHtml(fmtAgo(d.last_sync))}.` : "Nothing synced yet. Save the settings, test the connection, then sync.");
+}
+
+function directoryBody() {
+  const body = {
+    url: document.getElementById("dir-url").value.trim(),
+    base_dn: document.getElementById("dir-base-dn").value.trim(),
+    bind_dn: document.getElementById("dir-bind-dn").value.trim(),
+    interval_minutes: Number(document.getElementById("dir-interval").value) || 60,
+    enabled: document.getElementById("dir-enabled").checked,
+    starttls: document.getElementById("dir-starttls").checked,
+    insecure_skip_verify: document.getElementById("dir-skip-verify").checked,
+    allow_insecure: document.getElementById("dir-allow-insecure").checked,
+    ca_pem: document.getElementById("dir-ca-pem").value.trim(),
+  };
+  const pw = document.getElementById("dir-password").value;
+  if (pw) body.bind_password = pw;
+  return body;
+}
+
+async function directoryCall(path, body, label) {
+  const st = document.getElementById("dir-save-status");
+  st.textContent = label + "…";
+  try {
+    const resp = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const text = await resp.text();
+    if (!resp.ok) throw new Error(text);
+    let out = null; try { out = JSON.parse(text); } catch (e) {}
+    if (out && out.ok === false) { st.textContent = "failed: " + out.error; return; }
+    st.textContent = out && out.info ? out.info : (out && out.last_summary ? out.last_summary : "done");
+    document.getElementById("dir-password").value = "";
+    loadDirectory();
+  } catch (e) {
+    st.textContent = "failed: " + e.message;
+  }
+}
+document.getElementById("dir-save").addEventListener("click", () => directoryCall("/api/directory", directoryBody(), "saving"));
+document.getElementById("dir-test").addEventListener("click", () => directoryCall("/api/directory/test", directoryBody(), "testing"));
+document.getElementById("dir-sync").addEventListener("click", async () => {
+  await directoryCall("/api/directory", directoryBody(), "saving");
+  directoryCall("/api/directory/sync", {}, "syncing");
+});
+
+// --- Message buffer ---
+
+function renderStreamSettings(s) {
+  setupDuration("stream-retention", {
+    minSecs: (s.stream_min_hours || 1) * 3600,
+    maxSecs: (s.stream_max_hours || 168) * 3600,
+  });
+  setDuration("stream-retention", (s.stream_retention_hours || 4) * 3600);
+
+  const mb = (s.stream_bytes || 0) / 1e6;
+  const size = mb >= 1000 ? (mb / 1000).toFixed(1) + " GB" : mb.toFixed(0) + " MB";
+  const sizeField = document.getElementById("stream-size");
+  sizeField.value = `${size} · ${(s.stream_messages || 0).toLocaleString()} messages`;
+  // Stashed so the save handler can tell a shortening from a lengthening
+  // and warn only for the one that throws data away.
+  sizeField.dataset.hours = String(s.stream_retention_hours || 0);
+
+  // The rate is what makes a different window's cost predictable, so it is
+  // derived rather than left as an exercise.
+  const hours = s.stream_retention_hours || 4;
+  const perHour = hours > 0 ? mb / hours : 0;
+  document.getElementById("stream-hint").textContent = perHour > 0
+    ? `Roughly ${perHour.toFixed(0)} MB per hour at this fleet's current rate, so each extra hour costs about that much disk. `
+      + `Between ${s.stream_min_hours || 1} and ${s.stream_max_hours || 168} hours; a shorter window discards anything already past it, immediately.`
+    : `Between ${s.stream_min_hours || 1} and ${s.stream_max_hours || 168} hours. A shorter window discards anything already past it, immediately.`;
+}
+
+document.getElementById("stream-save").addEventListener("click", () => {
+  // The API takes hours, and only whole ones — so a duration that is not a
+  // whole number of hours is refused here rather than silently rounded into
+  // something the operator did not choose.
+  const secs = totalSeconds("stream-retention");
+  if (!Number.isFinite(secs) || secs <= 0) {
+    document.getElementById("stream-save-status").textContent = "enter a duration";
+    return;
+  }
+  if (secs % 3600 !== 0) {
+    document.getElementById("stream-save-status").textContent =
+      "the buffer is kept in whole hours — try " + Math.max(1, Math.round(secs / 3600)) + " hours";
+    return;
+  }
+  const hours = secs / 3600;
+  const current = parseInt(document.getElementById("stream-size").dataset.hours || "0", 10);
+  if (hours < current && !confirm(
+      `Shorten the buffer to ${hours} hours?\n\n`
+      + `Anything already older than that is discarded straight away — including patch results and security events `
+      + `the server has not read yet, if it is currently behind.`)) {
+    return;
+  }
+  saveSettings({ stream_retention_hours: hours }, "stream-save-status");
+});
+
+// --- Admin (users/groups/roles) ---
+
+let users = [], groups = [], roles = [], availablePermissions = [];
+// Management rights and content sets live next to permissions in the roles
+// editor: they are the other two halves of what a role means.
+let roleContentSets = {}, computerGroups = [];
+
+function usernameFor(id) { const u = users.find(x => x.id === id); return u ? u.username : id; }
+function roleNameFor(id) { const r = roles.find(x => x.id === id); return r ? r.name : id; }
+
+async function loadAll() {
+  const [usersResp, groupsResp, rolesResp] = await Promise.all([
+    fetch("/api/admin/users"), fetch("/api/admin/groups"), fetch("/api/admin/roles"),
+  ]);
+  if (usersResp.status === 401) { window.location.href = "/login"; return; }
+  if (!usersResp.ok) return;
+  users = (await usersResp.json()).users || [];
+  groups = (await groupsResp.json()).groups || [];
+  const rolesData = await rolesResp.json();
+  roles = rolesData.roles || [];
+  availablePermissions = rolesData.available_permissions || [];
+  roleContentSets = rolesData.role_content_sets || {};
+  roleSetList.setItems((rolesData.content_sets || []).map(c => ({ value: c.id, label: c.name, hint: c.description || "" })));
+  fetch("/api/groups").then(r => r.ok ? r.json() : { groups: [] }).then(d => {
+    computerGroups = d.groups || [];
+    roleGroupList.setItems(computerGroups.map(g => ({ value: g.id, label: g.name, hint: g.description || "" })));
+  }).catch(() => {});
+  renderPermChecks();
+  renderUsers();
+  renderGroups();
+  renderRoles();
+}
+
+// Durations as a number and a unit, rather than a box of seconds.
+//
+// "3600" is not a readable way to say an hour, and "604800" is not a
+// readable way to say a week — which is roughly when somebody stops
+// adjusting a setting because working out the number is more effort than
+// living with the default. The API keeps taking seconds; only the console
+// does the arithmetic.
+//
+// A month is 30 days here, and says so, because calendar months are not a
+// fixed length and a retention window that silently meant 28 days in
+// February would be worse than one that never offered months at all.
+const DURATION_UNITS = [
+  { unit: "seconds", secs: 1 },
+  { unit: "minutes", secs: 60 },
+  { unit: "hours",   secs: 3600 },
+  { unit: "days",    secs: 86400 },
+  { unit: "weeks",   secs: 604800 },
+  { unit: "months",  secs: 2592000, label: "months (30d)" },
+];
+
+function durationUnitOptions() {
+  return DURATION_UNITS.map(u =>
+    `<option value="${escapeHtml(u.secs)}">${escapeHtml(u.label || u.unit)}</option>`).join("");
+}
+
+// Pick the largest unit the value divides into evenly, so a stored 3600
+// comes back as "1 hour" rather than "60 minutes" or "3600 seconds".
+function secondsToParts(secs) {
+  secs = Math.max(0, Math.round(Number(secs) || 0));
+  for (let i = DURATION_UNITS.length - 1; i >= 0; i--) {
+    const u = DURATION_UNITS[i];
+    if (secs >= u.secs && secs % u.secs === 0) return { value: secs / u.secs, secs: u.secs };
+  }
+  return { value: secs, secs: 1 };
+}
+
+// Wires one number+unit pair. minSecs/maxSecs are enforced here so the
+// console refuses what the API would refuse, with the limits phrased in the
+// same units the person is typing in.
+function setupDuration(id, opts) {
+  const input = document.getElementById(id);
+  const unit = document.getElementById(id + "-unit");
+  const note = document.getElementById(id + "-note");
+  if (!input || !unit) return;
+  if (!unit.options.length) unit.innerHTML = durationUnitOptions();
+
+  const describe = () => {
+    const total = totalSeconds(id);
+    if (!Number.isFinite(total) || total <= 0) { note.textContent = ""; return; }
+    let msg = humanDuration(total);
+    if (opts.minSecs && total < opts.minSecs) msg += ` — minimum is ${humanDuration(opts.minSecs)}`;
+    if (opts.maxSecs && total > opts.maxSecs) msg += ` — maximum is ${humanDuration(opts.maxSecs)}`;
+    note.textContent = msg;
+    const bad = (opts.minSecs && total < opts.minSecs) || (opts.maxSecs && total > opts.maxSecs);
+    note.style.color = bad ? "var(--off)" : "var(--text-muted)";
+  };
+  input.addEventListener("input", describe);
+  unit.addEventListener("change", describe);
+  input.dataset.min = opts.minSecs || 0;
+  input.dataset.max = opts.maxSecs || 0;
+}
+
+function setDuration(id, secs) {
+  const parts = secondsToParts(secs);
+  document.getElementById(id).value = parts.value;
+  const unit = document.getElementById(id + "-unit");
+  if (!unit.options.length) unit.innerHTML = durationUnitOptions();
+  unit.value = String(parts.secs);
+  const note = document.getElementById(id + "-note");
+  if (note) note.textContent = humanDuration(secs);
+}
+
+function totalSeconds(id) {
+  const n = parseFloat(document.getElementById(id).value);
+  const mult = parseInt(document.getElementById(id + "-unit").value, 10) || 1;
+  if (!Number.isFinite(n)) return NaN;
+  return Math.round(n * mult);
+}
+
+// Reads a duration back in whatever units suit it, for the hint line.
+function humanDuration(secs) {
+  const parts = secondsToParts(secs);
+  const u = DURATION_UNITS.find(x => x.secs === parts.secs) || DURATION_UNITS[0];
+  const name = parts.value === 1 ? u.unit.replace(/s$/, "") : u.unit;
+  return `${parts.value} ${name}`;
+}
+
+// What each permission lets somebody do, in words, grouped the way the
+// console's modules are. The key stays visible beside the label: it is what
+// the API, the audit log and an error message will call it. A permission
+// this list does not know (a newer server) still appears, under "Other",
+// labelled by its key.
+const PERMISSION_INFO = {
+  "fleet.read":              { group: "Viewing", label: "See the fleet", hint: "Endpoints, inventory, findings, deployments and reports, and read-only questions to endpoints. Without it an account sees only its own preferences and Help. Every other permission is used from pages that need this too." },
+  "audit.read":              { group: "Viewing", label: "Read the audit log", hint: "Who did what, to which endpoint, from where. The built-in roles hold it so everyone with access knows the record is kept." },
+  "settings.manage":         { group: "Administration", label: "Manage settings", hint: "Server configuration and API tokens. Allowlists, agent trust, sign-in, integrations and restoring outside backups each also need their own permission below." },
+  "users.manage":            { group: "Administration", label: "Manage users and roles", hint: "Create users and groups, and decide who holds which role." },
+  "groups.manage":           { group: "Endpoints", label: "Manage computer groups", hint: "Create and edit the fleet slices that deployments target. Reading them needs See the fleet." },
+  "patches.manage":          { group: "Deploy & Patch", label: "Manage patches", hint: "Approve, schedule and deploy operating system and application patches." },
+  "deploy.manage":           { group: "Deploy & Patch", label: "Deploy software and run actions", hint: "Packages, action scripts and custom sensors: everything that runs operator code on endpoints." },
+  "deploy.override_windows": { group: "Deploy & Patch", label: "Override maintenance windows", hint: "Run a deployment outside an endpoint's maintenance window." },
+  "approvals.decide":        { group: "Oversight", label: "Decide approvals", hint: "Approve or deny somebody else's parked operation." },
+  "jump.approve":            { group: "Oversight", label: "Approve endpoint access", hint: "Grant somebody else time-boxed Jump Gate access to an endpoint." },
+  "sessions.audit":          { group: "Oversight", label: "Audit remote sessions", hint: "Read Direct Connect transcripts without being able to open a session." },
+  "alerts.triage":           { group: "Oversight", label: "Triage alerts", hint: "Dismiss Guide alerts and acknowledge integrity changes for everyone." },
+  "enforce.recovery_keys":   { group: "Security", label: "Read BitLocker recovery keys", hint: "Unlocks a disk; every read is audited." },
+  "network.allowlists":      { group: "Server-wide", label: "Change network allowlists", hint: "Which internal hosts the server may reach (webhooks, syslog, LDAP, Prometheus remote_write) and import from. With Manage settings." },
+  "agents.trust":            { group: "Server-wide", label: "Change agent trust", hint: "The public URL agents download installers and updates from, the address they connect to, and the legacy shared credential. With Manage settings." },
+  "identity.manage":         { group: "Server-wide", label: "Manage sign-in", hint: "Identity providers, the SSO allowlist and the SCIM token. Whoever controls sign-in can sign in as anyone a provider vouches for. With Manage settings." },
+  "integrations.manage":     { group: "Server-wide", label: "Manage integrations", hint: "Connect and disconnect outside systems and their credentials: event streaming, Entra ID, the macOS MDM, certificate authorities, remote desktop. With Manage settings." },
+  "backups.restore":         { group: "Server-wide", label: "Restore outside backups", hint: "Restore a backup made elsewhere, which replaces every account, role and token. With Manage settings." },
+  "tokens.manage":           { group: "Server-wide", label: "API tokens make tokens", hint: "Lets an API token create and change tokens, never wider than itself; they stop working when it is revoked. People need only Manage settings." },
+};
+
+function permissionItems(keys) {
+  return keys.map(k => {
+    const info = PERMISSION_INFO[k];
+    return info ? { value: k, key: k, label: info.label, hint: info.hint, group: info.group }
+                : { value: k, key: k, label: k, group: "Other" };
+  });
+}
+
+document.getElementById("mfa-required").addEventListener("change", async e => {
+  const status = document.getElementById("mfa-required-status");
+  const on = e.target.checked;
+  if (on && !confirm("Require two-step sign-in for every local account?\n\nEach one, the break-glass account too, has to set up an authenticator app at its next sign-in.")) { e.target.checked = false; return; }
+  status.textContent = "saving…";
+  const r = await fetch("/api/admin/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ local_mfa_required: on }) });
+  if (!r.ok) { status.textContent = (await r.text()).trim(); e.target.checked = !on; return; }
+  status.textContent = on ? "Required" : "Optional";
+});
+
+const rolePermList = mountChecklist(document.getElementById("role-perm-checks"), {
+  label: "Permissions", searchPlaceholder: "Search permissions", noneText: "read-only role",
+});
+const roleGroupList = mountChecklist(document.getElementById("role-groups"), {
+  label: "Management rights", searchPlaceholder: "Search computer groups", noneText: "the whole fleet",
+  emptyHTML: 'No computer groups yet, so this role covers the whole fleet. <a href="/groups">Create a group</a>.',
+});
+const roleSetList = mountChecklist(document.getElementById("role-content-sets"), {
+  label: "Content sets", searchPlaceholder: "Search content sets", noneText: "all content",
+  emptyHTML: 'No content sets yet, so this role may use all content. <a href="/access#content">Create one</a>.',
+});
+const tokenPermList = mountChecklist(document.getElementById("token-perms"), {
+  label: "Token permissions", searchPlaceholder: "Search permissions", noneText: "read-only token",
+});
+
+function renderPermChecks() {
+  rolePermList.setItems(permissionItems(availablePermissions));
+}
+
+function roleOptionsHtml() {
+  return roles.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`).join("");
+}
+
+function groupOptionsHtml() {
+  return groups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.display_name)}</option>`).join("");
+}
+
+function renderUsers() {
+  const body = document.getElementById("users-body");
+  if (users.length === 0) { body.innerHTML = '<tr><td class="empty" colspan="8">no users</td></tr>'; return; }
+  body.innerHTML = users.map(u => `
+    <tr>
+      <td>${escapeHtml(u.username)}${u.mfa_enabled ? ' <span class="badge-flag on" title="Signs in with an authenticator code as well as a password">2-step</span>' : ""}</td>
+      <td>${escapeHtml(u.display_name)}</td>
+      <td>${escapeHtml(u.source)}</td>
+      <td><span class="badge-flag ${u.is_admin ? "on" : "off"} u-cur-pointer" data-role="admin-toggle" data-id="${escapeHtml(u.id)}">${u.is_admin ? "yes" : "no"}</span></td>
+      <td><span class="badge-flag ${u.active ? "on" : "off"} u-cur-pointer" data-role="active-toggle" data-id="${escapeHtml(u.id)}">${u.active ? "active" : "inactive"}</span></td>
+      <td><div class="chip-row">${u.role_ids.map(rid => `<span class="chip">${escapeHtml(roleNameFor(rid))}<button data-user="${escapeHtml(u.id)}" data-role="${escapeHtml(rid)}" class="remove-user-role">×</button></span>`).join("")}</div></td>
+      <td><div class="chip-row">${u.group_ids.map(gid => `<span class="chip">${escapeHtml((groups.find(g=>g.id===gid)||{}).display_name || gid)}</span>`).join("")}</div></td>
+      <td>
+        <div class="inline-actions">
+          <select class="assign-role-select" aria-label="Role to assign">${roleOptionsHtml()}</select>
+          <button class="tiny" data-assign-user="${escapeHtml(u.id)}">+ role</button>
+${u.mfa_enabled ? `<button class="tiny" data-reset-mfa="${escapeHtml(u.id)}" title="For someone who lost their phone and recovery codes">reset 2-step</button>` : ""}
+          <button class="tiny danger" data-delete-user="${escapeHtml(u.id)}">delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+
+  body.querySelectorAll('[data-role="admin-toggle"]').forEach(el => el.addEventListener("click", async () => {
+    const u = users.find(x => x.id === el.dataset.id);
+    await fetch(`/api/admin/users/${el.dataset.id}/admin`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_admin: !u.is_admin }) });
+    loadAll();
+  }));
+  body.querySelectorAll('[data-role="active-toggle"]').forEach(el => el.addEventListener("click", async () => {
+    const u = users.find(x => x.id === el.dataset.id);
+    await fetch(`/api/admin/users/${el.dataset.id}/active`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !u.active }) });
+    loadAll();
+  }));
+  body.querySelectorAll(".remove-user-role").forEach(btn => btn.addEventListener("click", async () => {
+    await fetch(`/api/admin/users/${btn.dataset.user}/roles/${btn.dataset.role}`, { method: "DELETE" });
+    loadAll();
+  }));
+  body.querySelectorAll("[data-assign-user]").forEach(btn => btn.addEventListener("click", async () => {
+    const select = btn.closest("tr").querySelector(".assign-role-select");
+    if (!select || !select.value) return;
+    await fetch(`/api/admin/users/${btn.dataset.assignUser}/roles`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role_id: select.value }) });
+    loadAll();
+  }));
+  body.querySelectorAll("[data-reset-mfa]").forEach(btn => btn.addEventListener("click", async () => {
+    const u = users.find(x => x.id === btn.dataset.resetMfa);
+    if (!confirm(`Reset two-step sign-in for ${u.username}?\n\nTheir authenticator and recovery codes stop working and they are signed out. Do this only once you have confirmed who is asking.`)) return;
+    const r = await fetch(`/api/admin/users/${encodeURIComponent(u.id)}/mfa/reset`, { method: "POST" });
+    if (!r.ok) alert(await r.text());
+    loadAll();
+  }));
+  body.querySelectorAll("[data-delete-user]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this user?")) return;
+    await fetch(`/api/admin/users/${btn.dataset.deleteUser}`, { method: "DELETE" });
+    loadAll();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "admin-users" });
+  if (dt) dt.refresh();
+}
+
+function userOptionsHtml() {
+  return users.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.username)}</option>`).join("");
+}
+
+function renderGroups() {
+  const body = document.getElementById("groups-body");
+  if (groups.length === 0) { body.innerHTML = '<tr><td class="empty" colspan="5">no groups</td></tr>'; return; }
+  body.innerHTML = groups.map(g => `
+    <tr>
+      <td>${escapeHtml(g.display_name)}</td>
+      <td>${g.external_id ? "SCIM" : "local"}</td>
+      <td><div class="chip-row">${g.member_ids.map(uid => `<span class="chip">${escapeHtml(usernameFor(uid))}<button data-group="${escapeHtml(g.id)}" data-user="${escapeHtml(uid)}" class="remove-group-member">×</button></span>`).join("") || "—"}</div></td>
+      <td><div class="chip-row">${g.role_ids.map(rid => `<span class="chip">${escapeHtml(roleNameFor(rid))}<button data-group="${escapeHtml(g.id)}" data-role="${escapeHtml(rid)}" class="remove-group-role">×</button></span>`).join("")}</div></td>
+      <td>
+        <div class="inline-actions">
+          <select class="add-member-select">${userOptionsHtml()}</select>
+          <button class="tiny" data-add-member="${escapeHtml(g.id)}">+ member</button>
+          <select class="assign-grouprole-select">${roleOptionsHtml()}</select>
+          <button class="tiny" data-assign-grouprole="${escapeHtml(g.id)}">+ role</button>
+          <button class="tiny danger" data-delete-group="${escapeHtml(g.id)}">delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+
+  body.querySelectorAll(".remove-group-member").forEach(btn => btn.addEventListener("click", async () => {
+    await fetch(`/api/admin/groups/${btn.dataset.group}/members/${btn.dataset.user}`, { method: "DELETE" });
+    loadAll();
+  }));
+  body.querySelectorAll(".remove-group-role").forEach(btn => btn.addEventListener("click", async () => {
+    await fetch(`/api/admin/groups/${btn.dataset.group}/roles/${btn.dataset.role}`, { method: "DELETE" });
+    loadAll();
+  }));
+  body.querySelectorAll("[data-add-member]").forEach(btn => btn.addEventListener("click", async () => {
+    const select = btn.closest("tr").querySelector(".add-member-select");
+    if (!select || !select.value) return;
+    await fetch(`/api/admin/groups/${btn.dataset.addMember}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: select.value }) });
+    loadAll();
+  }));
+  body.querySelectorAll("[data-assign-grouprole]").forEach(btn => btn.addEventListener("click", async () => {
+    const select = btn.closest("tr").querySelector(".assign-grouprole-select");
+    if (!select || !select.value) return;
+    await fetch(`/api/admin/groups/${btn.dataset.assignGrouprole}/roles`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role_id: select.value }) });
+    loadAll();
+  }));
+  body.querySelectorAll("[data-delete-group]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this group?")) return;
+    await fetch(`/api/admin/groups/${btn.dataset.deleteGroup}`, { method: "DELETE" });
+    loadAll();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "admin-groups" });
+  if (dt) dt.refresh();
+}
+
+// Who actually holds this role. Shown on the role itself because "what does
+// this grant, and to whom" is one question — answering half of it here and
+// half on another tab is what made it look like roles could not be tied to
+// anything.
+function roleHolders(roleID) {
+  // Ids as well as names: the Roles table lets you attach a group, so it has
+  // to let you detach one from the same place. Offering only the add was an
+  // asymmetry that sent people to the Groups table to undo what they had
+  // just done here — if they worked out that was where it lived.
+  const us = users.filter(u => (u.role_ids || []).includes(roleID))
+                  .map(u => ({ id: u.id, name: u.username }));
+  const gs = groups.filter(g => (g.role_ids || []).includes(roleID))
+                   .map(g => ({ id: g.id, name: g.display_name }));
+  return { users: us, groups: gs };
+}
+
+function renderRoles() {
+  const body = document.getElementById("roles-body");
+  if (roles.length === 0) { body.innerHTML = '<tr><td class="empty" colspan="5">no roles</td></tr>'; return; }
+  body.innerHTML = roles.map(r => {
+    const held = roleHolders(r.id);
+    const holders = [
+      ...held.groups.map(g => `<span class="chip">group: ${escapeHtml(g.name)}` +
+        `<button class="remove-role-group" data-group="${escapeHtml(g.id)}" ` +
+        `data-role="${escapeHtml(r.id)}" title="Remove this group from the role">×</button></span>`),
+      ...held.users.map(u => `<span class="chip">${escapeHtml(u.name)}` +
+        `<button class="remove-role-user" data-user="${escapeHtml(u.id)}" ` +
+        `data-role="${escapeHtml(r.id)}" title="Remove this role from the user">×</button></span>`),
+    ].join("") || '<span class="u-c-text-muted">not assigned to anyone</span>';
+    return `
+    <tr>
+      <td><strong>${escapeHtml(r.name)}</strong>${r.is_builtin ? ' <span class="chip builtin">builtin</span>' : ""}</td>
+      <td>${escapeHtml(r.description || "—")}</td>
+      <td><div class="chip-row">${(r.permissions || []).map(p => `<span class="chip ${r.is_builtin ? "builtin" : ""}">${escapeHtml(p)}</span>`).join("")
+          || '<span class="chip" title="Every signed-in user can read the console — endpoints, sensor data, deployments, findings. Permissions only gate the actions that change something, so a role holding none of them is read-only.">read-only</span>'}</div></td>
+      <td><div class="chip-row">${holders}</div></td>
+      <td>
+        <div class="inline-actions">
+          ${r.is_builtin
+            ? `<button class="tiny" data-duplicate-role="${escapeHtml(r.id)}" title="Builtin roles are rewritten on every server start, so edits to them would not survive a restart. This makes an editable copy.">duplicate to edit</button>`
+            : `<button class="tiny" data-edit-role="${escapeHtml(r.id)}">edit</button>`}
+          <select class="assign-role-group-select">${groupOptionsHtml()}</select>
+          <button class="tiny" data-assign-role-group="${escapeHtml(r.id)}">+ group</button>
+          ${r.is_builtin ? "" : `<button class="tiny danger" data-delete-role="${escapeHtml(r.id)}">delete</button>`}
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+
+  body.querySelectorAll("[data-edit-role]").forEach(btn =>
+    btn.addEventListener("click", () => editRole(btn.dataset.editRole)));
+
+  body.querySelectorAll("[data-duplicate-role]").forEach(btn =>
+    btn.addEventListener("click", () => duplicateRole(btn.dataset.duplicateRole)));
+
+  body.querySelectorAll(".remove-role-group").forEach(btn => btn.addEventListener("click", async () => {
+    await fetch(`/api/admin/groups/${btn.dataset.group}/roles/${btn.dataset.role}`, { method: "DELETE" });
+    loadAll();
+  }));
+  body.querySelectorAll(".remove-role-user").forEach(btn => btn.addEventListener("click", async () => {
+    await fetch(`/api/admin/users/${btn.dataset.user}/roles/${btn.dataset.role}`, { method: "DELETE" });
+    loadAll();
+  }));
+
+  // Assigning from the role's own row, since that is where someone is
+  // standing when they ask "who should have this".
+  body.querySelectorAll("[data-assign-role-group]").forEach(btn => btn.addEventListener("click", async () => {
+    const sel = btn.closest(".inline-actions").querySelector(".assign-role-group-select");
+    if (!sel.value) return;
+    await fetch(`/api/admin/groups/${sel.value}/roles`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role_id: btn.dataset.assignRoleGroup }),
+    });
+    loadAll();
+  }));
+
+  body.querySelectorAll("[data-delete-role]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Delete this role? Any user/group holding it loses those permissions.")) return;
+    await fetch(`/api/admin/roles/${btn.dataset.deleteRole}`, { method: "DELETE" });
+    loadAll();
+  }));
+  const dt = initDataTable(body.closest("table"), { storageKey: "admin-roles" });
+  if (dt) dt.refresh();
+}
+
+// duplicateRole opens the create form pre-filled from a builtin.
+//
+// Builtin roles are re-upserted by SeedBuiltinRoles on every server start,
+// so an edit to one would be silently reverted by the next restart — which
+// is why they have no edit button. That is a good reason and a bad
+// explanation when the button is simply absent, so this offers the thing
+// somebody actually wants: the same permissions, in a role they own.
+function duplicateRole(id) {
+  const r = roles.find(x => x.id === id);
+  if (!r) return;
+  editingRoleID = null;
+  document.getElementById("role-editor-title").textContent = `New role, copied from ${r.name}`;
+  document.getElementById("role-name").value = `${r.name}-copy`;
+  document.getElementById("role-description").value =
+    r.description || `Copied from the builtin ${r.name} role.`;
+  rolePermList.setValues(r.permissions || []);
+  roleGroupList.setValues(r.computer_group_ids || []);
+  roleSetList.setValues(roleContentSets[r.id] || []);
+  // Create mode, not edit mode: this is a new role that happens to start
+  // with somebody else's permissions.
+  document.getElementById("role-add").textContent = "Create role";
+  document.getElementById("role-cancel").hidden = false;
+  document.getElementById("role-name").scrollIntoView({ behavior: "smooth", block: "center" });
+  document.getElementById("role-name").focus();
+}
+
+// --- editing a role ---
+
+let editingRoleID = null;
+
+function editRole(id) {
+  const r = roles.find(x => x.id === id);
+  if (!r) return;
+  editingRoleID = id;
+  document.getElementById("role-editor-title").textContent = `Editing ${r.name}`;
+  document.getElementById("role-name").value = r.name || "";
+  document.getElementById("role-description").value = r.description || "";
+  rolePermList.setValues(r.permissions || []);
+  // The scope has to load with the permissions: saving sends all three, so
+  // an editor that showed only permissions cleared the role's management
+  // rights and content sets on every save.
+  roleGroupList.setValues(r.computer_group_ids || []);
+  roleSetList.setValues(roleContentSets[id] || []);
+  document.getElementById("role-add").textContent = "Save changes";
+  document.getElementById("role-cancel").hidden = false;
+  document.getElementById("role-name").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function resetRoleEditor() {
+  editingRoleID = null;
+  document.getElementById("role-editor-title").textContent = "Create role";
+  document.getElementById("role-name").value = "";
+  document.getElementById("role-description").value = "";
+  rolePermList.setValues([]);
+  roleGroupList.setValues([]);
+  roleSetList.setValues([]);
+  document.getElementById("role-add").textContent = "Create role";
+  document.getElementById("role-cancel").hidden = true;
+  document.getElementById("role-status").textContent = "";
+}
+
+document.getElementById("user-add").addEventListener("click", async () => {
+  const username = document.getElementById("user-username").value.trim();
+  const password = document.getElementById("user-password").value;
+  const display_name = document.getElementById("user-displayname").value.trim();
+  if (!username || !password) { alert("username and password are required"); return; }
+  const resp = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, display_name }) });
+  if (!resp.ok) { alert("failed: " + await resp.text()); return; }
+  document.getElementById("user-username").value = "";
+  document.getElementById("user-password").value = "";
+  document.getElementById("user-displayname").value = "";
+  loadAll();
+});
+
+document.getElementById("group-add").addEventListener("click", async () => {
+  const display_name = document.getElementById("group-name").value.trim();
+  if (!display_name) { alert("display name is required"); return; }
+  const resp = await fetch("/api/admin/groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ display_name }) });
+  if (!resp.ok) { alert("failed: " + await resp.text()); return; }
+  document.getElementById("group-name").value = "";
+  loadAll();
+});
+
+// One button for both, because "create" and "save" are the same act with a
+// different id — two forms would drift apart the moment a field is added.
+document.getElementById("role-add").addEventListener("click", async () => {
+  const status = document.getElementById("role-status");
+  const name = document.getElementById("role-name").value.trim();
+  const description = document.getElementById("role-description").value.trim();
+  const permissions = rolePermList.values();
+  const computer_group_ids = roleGroupList.values();
+  const content_set_ids = roleSetList.values();
+  if (!name) { status.textContent = "a name is required"; return; }
+
+  status.textContent = "saving…";
+  const resp = await fetch(editingRoleID ? `/api/admin/roles/${editingRoleID}` : "/api/admin/roles", {
+    method: editingRoleID ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, description, permissions, computer_group_ids, content_set_ids }),
+  });
+  if (!resp.ok) {
+    status.innerHTML = `<span class="u-c-off">${escapeHtml(await resp.text())}</span>`;
+    return;
+  }
+  resetRoleEditor();
+  loadAll();
+});
+
+document.getElementById("role-cancel").addEventListener("click", resetRoleEditor);
+
+// --- Integrations (integrations.go) ---
+const INT_HELP = {
+  webhook: ["Secret (optional)", "Each event is POSTed as JSON. With a secret, X-Mustra-Signature carries sha256=HMAC of the body."],
+  slack: ["", "A Slack incoming webhook URL (Apps → Incoming Webhooks)."],
+  teams: ["", "A Microsoft Teams Workflows webhook: in the channel, Workflows → \"Post to a channel when a webhook request is received\"."],
+  discord: ["", "A Discord channel webhook URL (Channel settings → Integrations → Webhooks)."],
+  splunk_hec: ["HEC token", "Splunk's HTTP Event Collector base URL, e.g. https://splunk.example.com:8088. Events arrive as sourcetype mustra:alert / mustra:audit."],
+  loki: ["Credentials (optional: user:password or a bearer token)", "Loki's base URL, e.g. http://loki:3100. Streams carry job=\"mustra\", type and severity labels."],
+  servicenow: ["user:password", "Your instance, e.g. https://example.service-now.com. Each event opens an incident (urgency from severity) through the Table API; the account needs the itil role. Expiry incidents carry correlation_id mustra:<item>:<expiry>; take only one threshold (e.g. 60) for one incident per item."],
+  prometheus: ["Scrape token", "Prometheus scrapes /metrics on this server with Authorization: Bearer <token>. Pick a long random token, e.g. openssl rand -hex 24."],
+};
+let integrations = [], intEditing = null, intKinds = {};
+async function loadEntra() {
+  const r = await fetch("/api/admin/entra"); if (!r.ok) return;
+  const d = await r.json();
+  document.getElementById("entra-tenant").value = d.tenant_id || "";
+  document.getElementById("entra-client").value = d.client_id || "";
+  document.getElementById("entra-secret").placeholder = d.secret_set ? "a secret is set — enter one to replace it" : "";
+  const st = document.getElementById("entra-status");
+  st.textContent = !d.secret_set ? "not connected" : d.last_error ? "error" : d.last_sync ? "synced " + fmtAgo(d.last_sync) : "connected";
+  st.title = d.last_error || "";
+}
+async function saveEntra(body) {
+  const st = document.getElementById("entra-save-status"); st.textContent = "saving…";
+  const r = await fetch("/api/admin/entra", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  st.textContent = r.ok ? "saved" : "failed: " + await r.text();
+  document.getElementById("entra-secret").value = "";
+  loadEntra();
+}
+document.getElementById("entra-save").addEventListener("click", () => {
+  const body = { tenant_id: document.getElementById("entra-tenant").value, client_id: document.getElementById("entra-client").value };
+  const secret = document.getElementById("entra-secret").value.trim();
+  if (secret) body.client_secret = secret;
+  saveEntra(body);
+});
+document.getElementById("entra-clear").addEventListener("click", () => {
+  if (confirm("Disconnect Entra ID? Synced devices stay until the next sync.")) saveEntra({ tenant_id: "", client_id: "", client_secret: "" });
+});
+document.getElementById("entra-sync").addEventListener("click", async () => {
+  const st = document.getElementById("entra-save-status"); st.textContent = "syncing…";
+  const r = await fetch("/api/admin/entra/sync", { method: "POST" });
+  if (r.ok) { const c = await r.json(); st.textContent = `${c.devices || 0} device(s), ${c.intune || 0} in Intune, ${c.matched || 0} matched to endpoints`; }
+  else st.textContent = "failed: " + await r.text();
+  loadEntra();
+});
+
+async function loadIntegrations() {
+  loadEntra();
+  const r = await fetch("/api/admin/integrations"); if (!r.ok) return;
+  const d = await r.json();
+  integrations = d.integrations || []; intKinds = d.kinds || {};
+  document.getElementById("int-kind").innerHTML = Object.entries(intKinds).map(([k, v]) => `<option value="${escapeHtml(k)}">${escapeHtml(v)}</option>`).join("");
+  const o = d.overview || {};
+  const card = (title, items) => `<div class="int-card"><h3>${escapeHtml(title)}</h3>${items.map(([on, label, href]) =>
+    `<div class="int-row"><span class="int-dot ${on ? "on" : ""}"></span>${href ? `<a href="${escapeHtml(safeUrl(href))}">${escapeHtml(label)}</a>` : escapeHtml(label)}</div>`).join("")}</div>`;
+  const kinds = new Set(integrations.filter(i => i.enabled).map(i => i.kind));
+  document.getElementById("int-cards").innerHTML = [
+    card("Identity", [[o.oidc, "Single sign-on (OIDC: Entra ID, Okta, Authentik…)", "/settings#sso"], [o.scim, "SCIM provisioning", "/settings#scim"], [false, "Active Directory (LDAP) for Impact", "/settings#directory"]]),
+    card("MDM", [[o.fleet_mdm, "Fleet — macOS updates and device commands", "/settings#macos-mdm"], [o.mdm_enroll_url, "MDM enrollment offered to Macs", "/settings#macos-mdm"],
+      [o.entra, "Microsoft Entra ID and Intune — devices, compliance, actions", "/settings#integrations"]]),
+    card("Remote access", [[o.remote && o.remote.enabled, "Remote desktop" + (o.remote && o.remote.provider ? " (" + o.remote.provider + ")" : ""), "/access#jump"]]),
+    card("Certificates", [[o.private_ca, "Mustra Private CA", "/certificates#authorities"], [o.cloudflare, "Cloudflare (Let's Encrypt DNS, Origin CA)", "/certificates#authorities"]]),
+    card("Exports and logs", [[o.connect > 0, `Connect scheduled exports (${o.connect || 0})`, "/connect"], [o.syslog, "Audit log to syslog / SIEM", "/logs#settings"],
+      [kinds.has("splunk_hec"), "Splunk HEC (events)", ""], [kinds.has("loki"), "Grafana Loki (events)", ""]]),
+    card("Metrics", [[kinds.has("prometheus"), "Prometheus /metrics (Grafana)", ""]]),
+    card("Alerts and ITSM", [[kinds.has("slack"), "Slack", ""], [kinds.has("teams"), "Microsoft Teams", ""], [kinds.has("discord"), "Discord", ""], [kinds.has("servicenow"), "ServiceNow incidents", ""], [kinds.has("webhook"), "Webhooks", ""]]),
+  ].join("");
+  document.getElementById("int-count").innerHTML = `<strong>${escapeHtml(integrations.length)}</strong> integration(s)` + (d.dropped ? ` · ${escapeHtml(d.dropped)} event(s) dropped` : "");
+  const body = document.getElementById("int-body");
+  body.innerHTML = integrations.length === 0 ? '<tr><td class="empty" colspan="6">none yet — Add integration</td></tr>' : integrations.map(i => `<tr>
+    <td><strong>${escapeHtml(i.name)}</strong>${i.enabled ? "" : ' <span class="sev-pill none">off</span>'}</td>
+    <td>${escapeHtml(intKinds[i.kind] || i.kind)}</td>
+    <td>${i.kind === "prometheus" ? "serves /metrics" : escapeHtml((i.events || []).join(" + ") + " ≥ " + i.min_severity)}</td>
+    <td title="${escapeHtml(i.last_error || "")}">${i.last_error_at && (!i.last_ok_at || i.last_error_at > i.last_ok_at) ? `<span class="sev-pill high">failing</span> ${escapeHtml(safeShort(i.last_error))}` : i.last_ok_at ? `<span class="sev-pill u-bg-ok-bg u-c-ok">ok</span> ${fmtAgo(i.last_ok_at)}` : "—"}</td>
+    <td>${escapeHtml(i.sent)}</td>
+    <td class="row-actions"><button class="tiny" data-int-test="${escapeHtml(i.id)}">Test</button><button class="tiny" data-int-edit="${escapeHtml(i.id)}">Edit</button><button class="tiny danger" data-int-del="${escapeHtml(i.id)}">Delete</button></td></tr>`).join("");
+  body.querySelectorAll("[data-int-test]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "sending…";
+    const r = await fetch(`/api/admin/integrations/${encodeURIComponent(b.dataset.intTest)}/test`, { method: "POST" });
+    alert(r.ok ? (await r.json()).result : "Failed: " + await r.text()); loadIntegrations();
+  }));
+  body.querySelectorAll("[data-int-edit]").forEach(b => b.addEventListener("click", () => intOpen(integrations.find(i => i.id === b.dataset.intEdit))));
+  body.querySelectorAll("[data-int-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Delete this integration?")) return;
+    await fetch(`/api/admin/integrations/${encodeURIComponent(b.dataset.intDel)}`, { method: "DELETE" }); loadIntegrations();
+  }));
+}
+function safeShort(s) { s = String(s || ""); return s.length > 60 ? s.slice(0, 60) + "…" : s; }
+function intShowFields() {
+  const k = document.getElementById("int-kind").value;
+  document.querySelectorAll("#int-form [data-int-only]").forEach(el => { el.hidden = el.dataset.intOnly !== k; });
+  document.querySelectorAll("#int-form [data-int-hide]").forEach(el => { el.hidden = el.dataset.intHide === k; });
+  const [secretLabel, help] = INT_HELP[k] || ["Secret", ""];
+  document.getElementById("int-secret-label").textContent = secretLabel || "Secret (not used)";
+  document.getElementById("int-secret").disabled = !secretLabel;
+  document.getElementById("int-help").textContent = help;
+}
+function intOpen(i) {
+  intEditing = i ? i.id : null;
+  document.getElementById("int-form-title").textContent = i ? `Edit ${i.name}` : "Add integration";
+  document.getElementById("int-kind").value = i ? i.kind : "slack";
+  document.getElementById("int-kind").disabled = !!i;
+  document.getElementById("int-name").value = i ? i.name : "";
+  document.getElementById("int-url").value = i ? (i.config.url || "") : "";
+  document.getElementById("int-index").value = i ? (i.config.index || "") : "";
+  document.getElementById("int-group").value = i ? (i.config.assignment_group || "") : "";
+  document.getElementById("int-secret").value = "";
+  document.getElementById("int-secret").placeholder = i && i.secret_set ? "set — enter one to replace it" : "";
+  document.getElementById("int-ev-alert").checked = i ? (i.events || []).includes("alert") : true;
+  document.getElementById("int-ev-audit").checked = i ? (i.events || []).includes("audit") : false;
+  document.getElementById("int-ev-expiry").checked = i ? (i.events || []).includes("expiry") : false;
+  document.getElementById("int-expiry-days").value = i ? (i.config.expiry_days || "") : "";
+  intExpiryField();
+  document.getElementById("int-sev").value = i ? i.min_severity : "warning";
+  document.getElementById("int-enabled").checked = i ? i.enabled : true;
+  intShowFields();
+  document.getElementById("int-form").hidden = false;
+  document.getElementById("int-form").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+document.getElementById("int-kind").addEventListener("change", intShowFields);
+// Expiry events come at Cert Manager's thresholds; an integration can take only some.
+function intExpiryField() { document.getElementById("int-expiry-field").hidden = !document.getElementById("int-ev-expiry").checked; }
+document.getElementById("int-ev-expiry").addEventListener("change", intExpiryField);
+document.getElementById("int-new").addEventListener("click", () => intOpen(null));
+document.getElementById("int-cancel").addEventListener("click", () => { document.getElementById("int-form").hidden = true; });
+document.getElementById("int-save").addEventListener("click", async () => {
+  const st = document.getElementById("int-save-status"); st.textContent = "saving…";
+  const kind = document.getElementById("int-kind").value;
+  const body = { kind, name: document.getElementById("int-name").value, enabled: document.getElementById("int-enabled").checked,
+    config: { url: document.getElementById("int-url").value.trim(), index: document.getElementById("int-index").value.trim(), assignment_group: document.getElementById("int-group").value.trim(),
+      expiry_days: document.getElementById("int-expiry-days").value.trim() },
+    events: ["alert", "audit", "expiry"].filter(e => document.getElementById("int-ev-" + e).checked), min_severity: document.getElementById("int-sev").value };
+  const secret = document.getElementById("int-secret").value;
+  if (secret) body.secret = secret;
+  const r = await fetch(intEditing ? `/api/admin/integrations/${encodeURIComponent(intEditing)}` : "/api/admin/integrations",
+    { method: intEditing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  st.textContent = r.ok ? "" : "failed: " + await r.text();
+  if (r.ok) { document.getElementById("int-form").hidden = true; loadIntegrations(); }
+});
+
+// --- Wire up the module subnav once permissions are known, then load only
+// the data the viewer is actually allowed to see. ---
+document.addEventListener("mustra:user", (e) => {
+  const u = e.detail;
+  const items = [];
+  if (hasPermission(u, "settings.manage")) {
+    items.push(
+      { hash: "integrations", label: "Integrations" },
+      { hash: "sso", label: "Single Sign-On" },
+      { hash: "backdoor", label: "Break-glass Account" },
+      { hash: "scim", label: "SCIM" },
+      { hash: "agent-behavior", label: "Agent Behavior" },
+      { hash: "agent-identity", label: "Agent Identity" },
+      { hash: "uninstall-password", label: "Uninstall Password" },
+      { hash: "macos-mdm", label: "macOS MDM" },
+      { hash: "network-allowlists", label: "Network Allowlists" },
+      { hash: "message-buffer", label: "Message Buffer" },
+      { hash: "telemetry", label: "Telemetry" },
+      { hash: "directory", label: "Directory" },
+      { hash: "environment", label: "Branding" },
+      { hash: "tokens", label: "API Tokens" },
+      { hash: "about", label: "About" },
+    );
+    loadSettings();
+    loadDirectory();
+    loadIdps();
+    loadTokens();
+    loadIntegrations();
+    loadAbout();
+    syncIdpDefaults();
+    renderScimGuide();
+  }
+  if (hasPermission(u, "users.manage")) {
+    items.push(
+      { hash: "users", label: "Users" },
+      { hash: "groups", label: "Groups" },
+      { hash: "roles", label: "Roles" },
+    );
+    loadAll();
+  }
+  // The shared Administration subnav rather than a hash-only one: its
+  // sections span /settings, /admin, /groups and /logs, and a subnav that
+  // only knows this page leaves the other three looking like dead ends.
+  renderModuleSubnav("/settings", u);
+});
+</script>
+</body>
+</html>

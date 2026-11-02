@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .setup-card { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 32px 28px; }
+  .setup-card .brand { justify-content: center; margin-bottom: 6px; font-size: 18px; }
+  .setup-card .tagline { text-align: center; color: var(--text-muted); font-size: 13px; margin: 0 0 4px; }
+  .setup-once { text-align: center; font-size: var(--fs-meta); color: var(--text-muted); margin: 0 0 22px; line-height: 1.5; }
+  .setup-field { margin-bottom: 14px; }
+  .setup-field label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 5px; }
+  .setup-field input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: var(--radius-md);
+    border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 14px; }
+  .setup-field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .setup-hint { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 5px; line-height: 1.45; }
+  .setup-submit { width: 100%; margin-top: 6px; }
+  .form-error { background: var(--off-bg); color: var(--off); border-radius: var(--radius-md); padding: 9px 12px;
+    font-size: 12.5px; margin-bottom: 16px; line-height: 1.45; }
+  .setup-note { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+    font-size: var(--fs-meta); color: var(--text-muted); line-height: 1.55; }
+</style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="setup-card">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 100 100" fill="none" role="img" aria-label="mustra"><path d="M20 76V24l30 36 30-36v52" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg> mustra
+      </div>
+      <p class="tagline">create the first administrator</p>
+      <p class="setup-once">
+        This deployment has no accounts yet. Whoever fills this in owns it — the page closes for good
+        once you do.
+      </p>
+
+      <div class="form-error" id="error" hidden></div>
+
+      <form id="setup-form" autocomplete="off">
+        <div class="setup-field">
+          <label for="username">Username</label>
+          <input id="username" name="username" value="admin" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <div class="setup-field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required>
+          <div class="setup-hint">
+            At least 12 characters. This is the account that gets you in when single sign-on is not
+            available, so it is worth making a good one.
+          </div>
+        </div>
+        <div class="setup-field">
+          <label for="confirm">Confirm password</label>
+          <input id="confirm" name="confirm" type="password" autocomplete="new-password" required>
+        </div>
+        <button class="primary setup-submit" type="submit" id="submit">Create account</button>
+      </form>
+
+      <p class="setup-note">
+        You can add single sign-on, your own logo and everything else from Administration once you are in.
+        This account stays as the way back when an identity provider is unreachable.
+      </p>
+    </div>
+  </div>
+
+<script>
+const form = document.getElementById("setup-form");
+const errorBox = document.getElementById("error");
+const submit = document.getElementById("submit");
+
+function showError(message) {
+  errorBox.textContent = message;
+  errorBox.hidden = false;
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errorBox.hidden = true;
+
+  const password = document.getElementById("password").value;
+  const confirm = document.getElementById("confirm").value;
+  // Checked here so the two most common mistakes do not cost a round trip;
+  // the server checks both again, because this is the only thing standing
+  // between a fresh deployment and whoever reaches it first.
+  if (password.length < 12) { showError("Use at least 12 characters."); return; }
+  if (password !== confirm) { showError("The two passwords do not match."); return; }
+
+  submit.disabled = true;
+  submit.textContent = "Creating…";
+  try {
+    const resp = await fetch("/setup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password, confirm,
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Setup failed.");
+    // Straight to the login the account was just made for, with the
+    // username already filled in.
+    window.location.href = "/login?created=" + encodeURIComponent(data.username || "");
+  } catch (err) {
+    showError(String(err.message || err));
+    submit.disabled = false;
+    submit.textContent = "Create account";
+  }
+});
+</script>
+</body>
+</html>

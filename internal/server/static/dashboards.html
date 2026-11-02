@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboards — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: var(--fs-meta); color: var(--text-muted); margin: -4px 0 12px; line-height: 1.5; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .form-grid label { display: block; font-size: var(--fs-meta); color: var(--text-muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  button.tiny { font-size: var(--fs-meta); padding: 5px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+                background: var(--surface-2); color: var(--text); cursor: pointer; }
+  button.tiny:hover { border-color: var(--accent); }
+  button.tiny.danger { color: var(--off); }
+  button.tiny.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .pcard { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+  .pcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .pcard-num { width: 22px; height: 22px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); font-size: var(--fs-meta); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .pcard-head .spacer { margin-left: auto; }
+  .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--text-muted); }
+  .filters select { padding: 6px 8px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--input-bg); color: var(--text); font: inherit; font-size: 12.5px; }
+  .state-pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; background: var(--surface-2); color: var(--text-muted); }
+  .state-triggered { background: color-mix(in srgb, var(--off) 15%, transparent); color: var(--off); }
+  .state-ok { background: var(--ok-bg); color: var(--ok); }
+  .preview-box { border: 1px dashed var(--border); border-radius: var(--radius); padding: 10px; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <aside class="module-subnav" id="module-subnav"></aside>
+    <main>
+    <div id="db-page-head"></div>
+    <div id="db-quick-links"></div>
+
+    <div class="module-section" id="section-list" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Dashboards</h2><div class="u-d-flex u-gap-8"><button class="tiny go" id="db-new">New dashboard</button></div></div>
+        <p class="hint">
+          Panels over the same sources Reports and Connect read — a saved query, or a module's export — drawn as a number,
+          a donut, bars, a stacked bar, an area over time, a table, or text with links. A dashboard is shared unless you keep it
+          private; anyone can clone one. Pick which dashboards Home shows from the view.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Panels</th><th>By</th><th>Visibility</th><th>Updated</th><th>Action</th></tr></thead>
+            <tbody id="db-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-view" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2 id="view-title">Dashboard</h2>
+          <div class="u-d-flex u-gap-8 u-ai-center u-fw-wrap">
+            <button class="tiny" id="view-home">Show on Home</button>
+            <button class="tiny" id="view-list">Add to Home list</button>
+            <button class="tiny" id="view-clone">Clone</button>
+            <button class="tiny" id="view-edit" hidden>Edit</button>
+            <button class="tiny" id="view-refresh">Refresh</button>
+          </div>
+        </div>
+        <p class="hint" id="view-desc"></p>
+        <div class="filters">
+          <label>Computer group <select id="view-group"><option value="">every endpoint</option></select></label>
+          <label>Timeframe <select id="view-range"><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d" selected>30 days</option><option value="90d">90 days</option></select></label>
+          <label><input type="checkbox" id="view-hl"> highlights only</label>
+          <span class="scan-status" id="view-status"></span>
+        </div>
+        <div class="pnl-grid" id="view-grid"></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-edit" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2 id="edit-title">New dashboard</h2>
+          <div class="u-d-flex u-gap-8"><button class="tiny" id="edit-cancel">Cancel</button><button class="tiny go" id="edit-save">Save dashboard</button></div></div>
+        <div class="form-grid">
+          <div class="field"><label for="e-name">Name</label><input id="e-name" placeholder="Patch posture"></div>
+          <div class="field"><label for="e-desc">Description</label><input id="e-desc" placeholder="What this dashboard is for"></div>
+          <div class="field"><label for="e-shared">Visibility</label><select id="e-shared"><option value="true">shared with everyone</option><option value="false">only me (and administrators)</option></select></div>
+        </div>
+        <div id="e-panels"></div>
+        <button class="tiny" id="e-add">Add a panel</button>
+        <div class="hint u-mt-10" id="e-error"></div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-alerts" hidden>
+      <div class="panel">
+        <div class="panel-header"><h2>Custom alerts</h2><div class="u-d-flex u-gap-8"><button class="tiny" id="al-eval">Evaluate now</button></div></div>
+        <p class="hint">
+          A threshold on a panel — its count, or one slice's count or share — that appears in the Guide tray while it holds and
+          clears itself when it stops. Alerts are evaluated with the Guide, every two minutes. Managing them takes settings.manage.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Alert</th><th>Panel</th><th>Condition</th><th>Severity</th><th>State</th><th>Last value</th><th>Action</th></tr></thead>
+            <tbody id="al-body"><tr><td class="empty" colspan="7">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel" id="al-editor" hidden>
+        <h2 id="al-editor-title">New alert</h2>
+        <div class="form-grid">
+          <div class="field"><label for="a-name">Name</label><input id="a-name" placeholder="Offline endpoints"></div>
+          <div class="field"><label for="a-dash">Dashboard</label><select id="a-dash"></select></div>
+          <div class="field"><label for="a-panel">Panel</label><select id="a-panel"></select></div>
+          <div class="field"><label for="a-sev">Severity</label><select id="a-sev"><option value="critical">critical</option><option value="high">high</option><option value="medium" selected>medium</option><option value="low">low</option></select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="a-measure">Measure</label><select id="a-measure"><option value="count">the panel's count</option><option value="label">one slice's count</option><option value="percent">one slice's share (%)</option></select></div>
+          <div class="field"><label for="a-label">Slice label (for slice measures)</label><input id="a-label" placeholder="fail"></div>
+          <div class="field"><label for="a-op">Condition</label><select id="a-op"><option value="gt">is greater than</option><option value="gte">is at least</option><option value="lt">is less than</option><option value="lte">is at most</option><option value="eq">equals</option><option value="zero">is zero</option><option value="nonzero">is not zero</option></select></div>
+          <div class="field"><label for="a-value">Value</label><input id="a-value" type="number" step="any" value="0"></div>
+          <div class="field"><label for="a-enabled">Enabled</label><select id="a-enabled"><option value="true">yes</option><option value="false">no</option></select></div>
+        </div>
+        <div class="u-d-flex u-gap-8"><button class="tiny go" id="a-save">Save alert</button><button class="tiny" id="a-cancel">Cancel</button></div>
+        <div class="hint u-mt-8" id="a-error"></div>
+      </div>
+    </div>
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script src="/static/charts.js"></script>
+<script>
+let dashboards = [], sources = [], questions = [], groups = [], canAlerts = false, me = null;
+let editing = null, editPanels = [], viewing = null, columnsCache = {};
+let alerts = [], editingAlert = null;
+const CHARTS = [["number", "Number"], ["donut", "Donut"], ["bar", "Bars"], ["stacked", "Stacked bar"], ["area", "Area over time"], ["table", "Table"], ["text", "Text & links"]];
+
+document.addEventListener("mustra:user", (e) => {
+  me = e.detail;
+  canAlerts = !!(e.detail && (e.detail.is_admin || (e.detail.permissions || []).includes("settings.manage")));
+  initModuleSections([
+    { hash: "list", label: "Dashboards" },
+    { hash: "view", label: "View" },
+    { hash: "edit", label: "Editor" },
+    { hash: "alerts", label: "Alerts" },
+  ]);
+  renderPageHead("db-page-head", "/dashboards", { title: "Dashboards", sub: "Panels over saved queries and module data; thresholds that reach the Guide." });
+  renderQuickLinks("db-quick-links", "/dashboards", e.detail, [
+    { label: "Reports", href: "/reports", icon: "book" }, { label: "Interact", href: "/interact", icon: "interact" }, { label: "Guide", href: "/guide", icon: "alert" },
+  ]);
+  wire();
+  load().then(route);
+  window.addEventListener("hashchange", route);
+});
+
+async function load() {
+  const [dr, gr] = await Promise.all([fetch("/api/dashboards"), fetch("/api/groups")]);
+  if (dr.ok) { const d = await dr.json(); dashboards = d.dashboards || []; sources = d.sources || []; questions = d.questions || []; canAlerts = canAlerts || !!d.can_manage_alerts; }
+  if (gr.ok) groups = (await gr.json()).groups || [];
+  const gs = document.getElementById("view-group");
+  gs.innerHTML = '<option value="">every endpoint</option>' + groups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join("");
+  renderList();
+  if (canAlerts) loadAlerts(); else document.getElementById("al-body").innerHTML = '<tr><td class="empty" colspan="7">alerts are managed by administrators</td></tr>';
+}
+
+function route() {
+  const h = window.location.hash.replace("#", "");
+  if (h.startsWith("view/")) { window.location.hash = "view"; openView(h.slice(5)); }
+  else if (h === "new") { window.location.hash = "edit"; openEditor(null); }
+  else if (h.startsWith("edit/")) { window.location.hash = "edit"; const d = dashboards.find(x => x.id === h.slice(5)); if (d) openEditor(d.id); }
+}
+
+function renderList() {
+  const body = document.getElementById("db-body");
+  if (!dashboards.length) { body.innerHTML = '<tr><td class="empty" colspan="6">No dashboards yet. Create one, or wait a minute for the starter dashboards to be seeded.</td></tr>'; return; }
+  body.innerHTML = dashboards.map(d => `<tr>
+    <td><a href="#view/${escapeHtml(d.id)}"><b>${escapeHtml(d.name)}</b></a>${d.description ? `<div class="hint u-m-2-0-0">${escapeHtml(d.description)}</div>` : ""}</td>
+    <td>${escapeHtml(d.panel_count)}</td><td>${escapeHtml(d.created_by)}</td><td>${d.shared ? "shared" : "private"}</td><td>${escapeHtml(fmtAgo(d.updated_at))}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-view="${escapeHtml(d.id)}">Open</button> <button class="tiny" data-clone="${escapeHtml(d.id)}">Clone</button>
+      ${d.editable ? `<button class="tiny" data-edit="${escapeHtml(d.id)}">Edit</button> <button class="tiny danger" data-del="${escapeHtml(d.id)}">Delete</button>` : ""}</td></tr>`).join("");
+  body.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => { window.location.hash = "view"; openView(b.dataset.view); }));
+  body.querySelectorAll("[data-clone]").forEach(b => b.addEventListener("click", () => cloneDashboard(b.dataset.clone)));
+  body.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => { window.location.hash = "edit"; openEditor(b.dataset.edit); }));
+  body.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    const d = dashboards.find(x => x.id === b.dataset.del);
+    if (!confirm(`Delete "${d.name}"? Its samples and alerts go with it.`)) return;
+    const r = await fetch(`/api/dashboards/${encodeURIComponent(d.id)}`, { method: "DELETE" });
+    if (!r.ok) { alert(await r.text()); return; }
+    await load();
+  }));
+}
+
+async function cloneDashboard(id) {
+  const r = await fetch(`/api/dashboards/${encodeURIComponent(id)}/clone`, { method: "POST" });
+  if (!r.ok) { alert(await r.text()); return; }
+  const d = await r.json();
+  await load();
+  window.location.hash = "edit"; openEditor(d.id);
+}
+
+// ---- view -------------------------------------------------------------
+async function openView(id) {
+  viewing = id;
+  await refreshView();
+}
+async function refreshView() {
+  if (!viewing) return;
+  const g = document.getElementById("view-group").value, rg = document.getElementById("view-range").value, hl = document.getElementById("view-hl").checked;
+  document.getElementById("view-status").textContent = "loading…";
+  const r = await fetch(`/api/dashboards/${encodeURIComponent(viewing)}/data?groups=${encodeURIComponent(g)}&range=${encodeURIComponent(rg)}&highlights=${hl ? 1 : 0}`);
+  if (!r.ok) { document.getElementById("view-status").textContent = await r.text(); return; }
+  const d = await r.json();
+  document.getElementById("view-title").textContent = d.name;
+  document.getElementById("view-desc").textContent = d.description || "";
+  document.getElementById("view-edit").hidden = !d.editable;
+  document.getElementById("view-status").textContent = `${d.panels.length} panel(s)${d.highlighted ? ` · ${d.highlighted} highlighted` : ""} · ${fmtTime(d.generated_at)}`;
+  const grid = document.getElementById("view-grid");
+  grid.innerHTML = d.panels.length ? d.panels.map(p => renderPanel(p, false)).join("") : '<div class="hint">nothing to show' + (hl ? " — no panel is highlighted" : "") + '</div>';
+  wirePanels(grid);
+  paintIcons && paintIcons();
+}
+async function setHomePref(mutate) {
+  const r = await fetch("/api/preferences"); if (!r.ok) return;
+  const p = await r.json(); mutate(p);
+  const s = await fetch("/api/preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
+  if (!s.ok) alert(await s.text()); else document.getElementById("view-status").textContent = "Home updated";
+}
+
+// ---- editor -----------------------------------------------------------
+function blankPanel() { return { title: "", chart: "number", source: "endpoints", saved_question_id: "", group_by: "", series_by: "", columns: [], limit: 25, filter_column: "", filter_value: "", group_ids: [], text: "", width: 1, highlight: null }; }
+function openEditor(id) {
+  editing = id || null;
+  document.getElementById("e-error").textContent = "";
+  if (id) {
+    fetch(`/api/dashboards/${encodeURIComponent(id)}`).then(r => r.json()).then(d => {
+      const db = d.dashboard;
+      document.getElementById("edit-title").textContent = `Edit ${db.name}`;
+      document.getElementById("e-name").value = db.name; document.getElementById("e-desc").value = db.description || "";
+      document.getElementById("e-shared").value = String(!!db.shared);
+      editPanels = (db.panels || []).map(p => Object.assign(blankPanel(), p));
+      renderEditPanels();
+    });
+  } else {
+    document.getElementById("edit-title").textContent = "New dashboard";
+    document.getElementById("e-name").value = ""; document.getElementById("e-desc").value = ""; document.getElementById("e-shared").value = "true";
+    editPanels = [blankPanel()];
+    renderEditPanels();
+  }
+}
+async function columnsFor(source, q) {
+  const key = source + "|" + q;
+  if (columnsCache[key]) return columnsCache[key];
+  const r = await fetch(`/api/dashboards/columns?source=${encodeURIComponent(source)}&question=${encodeURIComponent(q || "")}`);
+  const cols = r.ok ? (await r.json()).columns || [] : [];
+  columnsCache[key] = cols;
+  return cols;
+}
+function renderEditPanels() {
+  const wrap = document.getElementById("e-panels");
+  wrap.innerHTML = editPanels.map((p, i) => `<div class="pcard" data-i="${i}">
+    <div class="pcard-head"><span class="pcard-num">${i + 1}</span><b>${escapeHtml(p.title || "untitled panel")}</b><span class="spacer"></span>
+      <button class="tiny" data-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button class="tiny" data-down="${i}" ${i === editPanels.length - 1 ? "disabled" : ""}>↓</button>
+      <button class="tiny" data-preview="${i}">Preview</button><button class="tiny danger" data-remove="${i}">Remove</button></div>
+    <div class="form-grid">
+      <div class="field"><label>Title</label><input data-f="title" value="${escapeHtml(p.title)}"></div>
+      <div class="field"><label>Chart</label><select data-f="chart">${CHARTS.map(([v, l]) => `<option value="${escapeHtml(v)}" ${p.chart === v ? "selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select></div>
+      <div class="field"><label>Width</label><select data-f="width"><option value="1" ${p.width == 1 ? "selected" : ""}>a third</option><option value="2" ${p.width == 2 ? "selected" : ""}>two thirds</option><option value="3" ${p.width == 3 ? "selected" : ""}>full</option></select></div>
+    </div>
+    <div class="form-grid" data-data ${p.chart === "text" ? "hidden" : ""}>
+      <div class="field"><label>Source</label><select data-f="source">${sources.map(s => `<option value="${escapeHtml(s.id)}" ${p.source === s.id ? "selected" : ""}>${escapeHtml(s.label)}</option>`).join("")}</select></div>
+      <div class="field" ${p.source === "question" ? "" : "hidden"} data-qwrap><label>Saved query</label><select data-f="saved_question_id"><option value="">pick one</option>${questions.map(q => `<option value="${escapeHtml(q.id)}" ${p.saved_question_id === q.id ? "selected" : ""}>${escapeHtml(q.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Group by (donut, bars, stacked)</label><input data-f="group_by" list="cols-${i}" value="${escapeHtml(p.group_by || "")}" placeholder="os"><datalist id="cols-${i}"></datalist></div>
+      <div class="field"><label>Series by (stacked)</label><input data-f="series_by" list="cols-${i}" value="${escapeHtml(p.series_by || "")}" placeholder="platform"></div>
+      <div class="field"><label>Filter column</label><input data-f="filter_column" list="cols-${i}" value="${escapeHtml(p.filter_column || "")}"></div>
+      <div class="field"><label>Filter value (prefix ! to negate)</label><input data-f="filter_value" value="${escapeHtml(p.filter_value || "")}"></div>
+      <div class="field"><label>Table columns (comma-separated)</label><input data-f="columns" value="${escapeHtml((p.columns || []).join(", "))}"></div>
+      <div class="field"><label>Row limit (table)</label><input data-f="limit" type="number" min="1" max="500" value="${escapeHtml(p.limit || 25)}"></div>
+      <div class="field"><label>Only endpoints in group</label><select data-f="group_ids"><option value="">any</option>${groups.map(g => `<option value="${escapeHtml(g.id)}" ${(p.group_ids || [])[0] === g.id ? "selected" : ""}>${escapeHtml(g.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Highlight when count…</label><select data-f="hl_op"><option value="">never</option><option value="gt" ${p.highlight && p.highlight.op === "gt" ? "selected" : ""}>is greater than</option><option value="lt" ${p.highlight && p.highlight.op === "lt" ? "selected" : ""}>is less than</option><option value="zero" ${p.highlight && p.highlight.op === "zero" ? "selected" : ""}>is zero</option><option value="nonzero" ${p.highlight && p.highlight.op === "nonzero" ? "selected" : ""}>is not zero</option></select></div>
+      <div class="field"><label>…this value</label><input data-f="hl_value" type="number" step="any" value="${escapeHtml(p.highlight ? p.highlight.value : 0)}"></div>
+    </div>
+    <div class="form-grid" data-text ${p.chart === "text" ? "" : "hidden"}>
+      <div class="field u-gc-full"><label>Text — one paragraph per line; a line that is a console path (e.g. /interact or /playbooks) becomes a link, optionally followed by its label</label>
+        <textarea data-f="text" rows="4">${escapeHtml(p.text || "")}</textarea></div>
+    </div>
+    <div class="preview-box" data-previewbox hidden></div>
+  </div>`).join("");
+  wrap.querySelectorAll(".pcard").forEach(card => {
+    const i = +card.dataset.i;
+    card.querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", () => readPanel(card, i)));
+    card.querySelector("[data-f=chart]").addEventListener("change", () => { readPanel(card, i); renderEditPanels(); });
+    card.querySelector("[data-f=source]").addEventListener("change", () => { readPanel(card, i); renderEditPanels(); });
+    card.querySelector("[data-f=title]").addEventListener("change", () => { readPanel(card, i); card.querySelector(".pcard-head b").textContent = editPanels[i].title || "untitled panel"; });
+    const p = editPanels[i];
+    if (p.chart !== "text") columnsFor(p.source, p.saved_question_id).then(cols => { const dl = card.querySelector(`#cols-${i}`); if (dl) dl.innerHTML = cols.map(c => `<option value="${escapeHtml(c)}">`).join(""); });
+  });
+  wrap.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => { const i = +b.dataset.up; [editPanels[i - 1], editPanels[i]] = [editPanels[i], editPanels[i - 1]]; renderEditPanels(); }));
+  wrap.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => { const i = +b.dataset.down; [editPanels[i + 1], editPanels[i]] = [editPanels[i], editPanels[i + 1]]; renderEditPanels(); }));
+  wrap.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => { editPanels.splice(+b.dataset.remove, 1); renderEditPanels(); }));
+  wrap.querySelectorAll("[data-preview]").forEach(b => b.addEventListener("click", async () => {
+    const i = +b.dataset.preview, card = wrap.querySelector(`.pcard[data-i="${i}"]`), box = card.querySelector("[data-previewbox]");
+    box.hidden = false; box.innerHTML = '<span class="hint">evaluating…</span>';
+    const r = await fetch("/api/dashboards/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editPanels[i]) });
+    if (!r.ok) { box.innerHTML = `<span class="u-c-off u-fs-12">${escapeHtml(await r.text())}</span>`; return; }
+    box.innerHTML = renderPanel(await r.json(), false); wirePanels(box);
+  }));
+}
+function readPanel(card, i) {
+  const v = f => { const el = card.querySelector(`[data-f="${f}"]`); return el ? el.value : ""; };
+  const p = editPanels[i];
+  p.title = v("title"); p.chart = v("chart"); p.width = +v("width") || 1; p.source = v("source"); p.saved_question_id = v("saved_question_id");
+  p.group_by = v("group_by").trim(); p.series_by = v("series_by").trim(); p.filter_column = v("filter_column").trim(); p.filter_value = v("filter_value");
+  p.columns = v("columns").split(",").map(x => x.trim()).filter(Boolean); p.limit = +v("limit") || 25;
+  p.group_ids = v("group_ids") ? [v("group_ids")] : []; p.text = v("text");
+  p.highlight = v("hl_op") ? { op: v("hl_op"), value: parseFloat(v("hl_value") || "0") } : null;
+}
+async function saveDashboard() {
+  const body = { name: document.getElementById("e-name").value, description: document.getElementById("e-desc").value, shared: document.getElementById("e-shared").value === "true", panels: editPanels };
+  const r = await fetch(editing ? `/api/dashboards/${encodeURIComponent(editing)}` : "/api/dashboards", { method: editing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { document.getElementById("e-error").textContent = await r.text(); return; }
+  const d = await r.json();
+  await load();
+  window.location.hash = "view"; openView(d.id);
+}
+
+// ---- alerts -------------------------------------------------------------
+async function loadAlerts() {
+  const r = await fetch("/api/dashboard-alerts"); if (!r.ok) return;
+  alerts = (await r.json()).alerts || [];
+  const body = document.getElementById("al-body");
+  const panelName = a => { const d = dashboards.find(x => x.id === a.dashboard_id); return (d ? d.name : "?") + " · " + (a._panel || a.panel_id); };
+  body.innerHTML = (alerts.length ? alerts.map(a => `<tr${sx(a.enabled ? "" : "opacity:.55")}>
+    <td><b>${escapeHtml(a.name)}</b></td><td>${escapeHtml(panelName(a))}</td><td>${escapeHtml(condLabel(a.condition))}</td><td>${escapeHtml(a.severity)}</td>
+    <td><span class="state-pill state-${escapeHtml(a.last_state || "")}">${escapeHtml(a.last_state || "not yet evaluated")}</span>${a.last_detail ? `<div class="hint u-m-2-0-0">${escapeHtml(a.last_detail)}</div>` : ""}</td>
+    <td>${a.last_value == null ? "—" : Number(a.last_value).toLocaleString()}</td>
+    <td class="u-ws-nowrap"><button class="tiny" data-aedit="${escapeHtml(a.id)}">Edit</button> <button class="tiny danger" data-adel="${escapeHtml(a.id)}">Delete</button></td></tr>`).join("") : '<tr><td class="empty" colspan="7">No alerts yet.</td></tr>')
+    + `<tr><td colspan="7"><button class="tiny go" id="al-new">New alert</button></td></tr>`;
+  document.getElementById("al-new").addEventListener("click", () => openAlertEditor(null));
+  body.querySelectorAll("[data-aedit]").forEach(b => b.addEventListener("click", () => openAlertEditor(alerts.find(x => x.id === b.dataset.aedit))));
+  body.querySelectorAll("[data-adel]").forEach(b => b.addEventListener("click", () => {
+    const a = alerts.find(x => x.id === b.dataset.adel), row = b.closest("tr");
+    undoable({ text: `Alert "${a.name}" deleted`, hide: () => row.classList.add("is-undoable"), restore: () => row.classList.remove("is-undoable"),
+      commit: async () => { await fetch(`/api/dashboard-alerts/${encodeURIComponent(a.id)}`, { method: "DELETE", keepalive: true }); loadAlerts(); } });
+  }));
+}
+function condLabel(c) {
+  c = c || {};
+  const what = c.label ? `"${c.label}"${c.percent ? " share" : ""}` : "count";
+  const ops = { gt: ">", gte: "≥", lt: "<", lte: "≤", eq: "=" };
+  if (c.op === "zero") return `${what} is zero`; if (c.op === "nonzero") return `${what} is not zero`;
+  return `${what} ${ops[c.op] || c.op} ${c.value}${c.percent ? "%" : ""}`;
+}
+async function fillAlertPanels() {
+  const id = document.getElementById("a-dash").value, sel = document.getElementById("a-panel");
+  if (!id) { sel.innerHTML = ""; return; }
+  const r = await fetch(`/api/dashboards/${encodeURIComponent(id)}`); if (!r.ok) return;
+  const panels = ((await r.json()).dashboard.panels || []).filter(p => p.chart !== "text");
+  sel.innerHTML = panels.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.title)}</option>`).join("");
+}
+async function openAlertEditor(a) {
+  editingAlert = a ? a.id : null;
+  document.getElementById("al-editor").hidden = false;
+  document.getElementById("al-editor-title").textContent = a ? `Edit ${a.name}` : "New alert";
+  document.getElementById("a-error").textContent = "";
+  const ds = document.getElementById("a-dash");
+  ds.innerHTML = dashboards.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join("");
+  ds.value = a ? a.dashboard_id : (dashboards[0] || {}).id || "";
+  await fillAlertPanels();
+  const c = (a && a.condition) || {};
+  document.getElementById("a-name").value = a ? a.name : "";
+  if (a) document.getElementById("a-panel").value = a.panel_id;
+  document.getElementById("a-sev").value = a ? a.severity : "medium";
+  document.getElementById("a-measure").value = c.label ? (c.percent ? "percent" : "label") : "count";
+  document.getElementById("a-label").value = c.label || "";
+  document.getElementById("a-op").value = c.op || "gt";
+  document.getElementById("a-value").value = c.value == null ? 0 : c.value;
+  document.getElementById("a-enabled").value = a ? String(!!a.enabled) : "true";
+  document.getElementById("al-editor").scrollIntoView({ behavior: "smooth" });
+}
+async function saveAlert() {
+  const measure = document.getElementById("a-measure").value;
+  const body = {
+    name: document.getElementById("a-name").value, dashboard_id: document.getElementById("a-dash").value, panel_id: document.getElementById("a-panel").value,
+    severity: document.getElementById("a-sev").value, enabled: document.getElementById("a-enabled").value === "true",
+    condition: { op: document.getElementById("a-op").value, value: parseFloat(document.getElementById("a-value").value || "0"),
+      label: measure === "count" ? "" : document.getElementById("a-label").value.trim(), percent: measure === "percent" },
+  };
+  const r = await fetch(editingAlert ? `/api/dashboard-alerts/${encodeURIComponent(editingAlert)}` : "/api/dashboard-alerts", { method: editingAlert ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { document.getElementById("a-error").textContent = await r.text(); return; }
+  document.getElementById("al-editor").hidden = true; loadAlerts();
+}
+
+function wire() {
+  document.getElementById("db-new").addEventListener("click", () => { window.location.hash = "edit"; openEditor(null); });
+  document.getElementById("view-refresh").addEventListener("click", refreshView);
+  ["view-group", "view-range", "view-hl"].forEach(id => document.getElementById(id).addEventListener("change", refreshView));
+  document.getElementById("view-edit").addEventListener("click", () => { window.location.hash = "edit"; openEditor(viewing); });
+  document.getElementById("view-clone").addEventListener("click", () => cloneDashboard(viewing));
+  document.getElementById("view-home").addEventListener("click", () => setHomePref(p => { p.home_dashboard_id = viewing; }));
+  document.getElementById("view-list").addEventListener("click", () => setHomePref(p => { p.home_dashboard_list = (p.home_dashboard_list || []).filter(x => x !== viewing).concat([viewing]).slice(-5); }));
+  document.getElementById("e-add").addEventListener("click", () => { editPanels.push(blankPanel()); renderEditPanels(); });
+  document.getElementById("edit-save").addEventListener("click", saveDashboard);
+  document.getElementById("edit-cancel").addEventListener("click", () => { window.location.hash = "list"; });
+  document.getElementById("a-dash").addEventListener("change", fillAlertPanels);
+  document.getElementById("a-save").addEventListener("click", saveAlert);
+  document.getElementById("a-cancel").addEventListener("click", () => { document.getElementById("al-editor").hidden = true; });
+  document.getElementById("al-eval").addEventListener("click", async () => { await fetch("/api/dashboard-alerts/evaluate", { method: "POST" }); loadAlerts(); });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>No access — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .na-wrap { max-width: 620px; margin: 48px auto; padding: 32px 36px; }
+  .na-wrap h1 { font-size: 22px; margin: 0 0 8px; letter-spacing: -.01em; }
+  .na-wrap p { color: var(--text-muted); line-height: 1.6; margin: 0 0 14px; font-size: 14px; }
+  .na-wrap code { font-family: var(--mono); font-size: 13px; background: var(--surface-2); border-radius: 6px; padding: 2px 8px; color: var(--text); }
+  .na-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+  .na-actions button { width: auto; flex: 0 0 auto; }
+</style>
+</head>
+<!-- The server fills data-missing with the permissions this page needs. -->
+<body data-missing="">
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div class="panel na-wrap">
+        <div id="na-norole" hidden>
+          <h1>Your account has no access yet</h1>
+          <p>You are signed in as <code class="na-who">…</code>, but no role has been given to this account, so there is nothing here for you to see yet.</p>
+          <p>Ask a mustra administrator to give you a role under <strong>Administration → Users</strong>. The built-in <strong>user</strong> role can see the fleet without changing anything. Reload this page once they have.</p>
+          <p>Meanwhile you can set up two-step sign-in under <strong>Preferences</strong> (the cog at the bottom of the left rail), and read <a href="/help">Help</a> to learn what mustra does.</p>
+        </div>
+        <div id="na-perm" hidden>
+          <h1>This page needs a permission you do not have</h1>
+          <p>You are signed in as <code class="na-who">…</code>. Opening this page needs <span id="na-perms"></span>.</p>
+          <p>Ask a mustra administrator to add it to one of your roles under <strong>Administration → Users</strong>, then reload this page.</p>
+        </div>
+        <form class="na-actions" method="POST" action="/logout">
+          <button type="button" class="primary" id="na-back">Go to Home</button>
+          <button type="button" class="secondary" id="na-help">Open Help</button>
+          <button type="submit" class="secondary">Sign out</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+const missing = (document.body.dataset.missing || "fleet.read").split(" ").filter(Boolean);
+document.getElementById("na-perms").innerHTML = missing.map(p => `<code>${escapeHtml(p)}</code>`).join(" or ");
+document.getElementById("na-back").addEventListener("click", () => { location.href = "/"; });
+document.getElementById("na-help").addEventListener("click", () => { location.href = "/help"; });
+document.addEventListener("mustra:user", e => {
+  const u = (e && e.detail) || {};
+  // An account that cannot read the fleet at all is told that, whichever
+  // page it opened: naming one page's permission would send it to ask for
+  // the wrong thing.
+  const noRole = !hasPermission(u, "fleet.read");
+  document.getElementById(noRole ? "na-norole" : "na-perm").hidden = false;
+  document.getElementById("na-back").hidden = noRole;
+  document.querySelectorAll(".na-who").forEach(el => { el.textContent = u.username || "this account"; });
+});
+</script>
+</body>
+</html>

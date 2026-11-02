@@ -1,0 +1,1454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endpoint — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .ep-crumb { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .ep-crumb a { color: var(--text-muted); text-decoration: none; }
+  .ep-crumb a:hover { color: var(--accent); }
+  .ep-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .ep-title { font-size: 22px; font-weight: 700; margin: 0; }
+  .ep-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  /* The Jump and Deploy menus (menuHTML). The menu is a sibling of the
+     button, as the DataTable columns popover is, so the button keeps its
+     own semantics. */
+  .menu-wrap { position: relative; }
+  .menu-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 250px; padding: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); }
+  .menu-item { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: var(--radius-sm);
+    padding: 7px 10px; font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
+  .menu-item:hover, .menu-item:focus-visible { background: var(--surface-2); outline: none; }
+  .menu-item small { display: block; color: var(--text-muted); font-size: var(--fs-meta); margin-top: 1px; }
+  .menu-item[disabled] { cursor: not-allowed; opacity: .6; }
+  .menu-item[disabled]:hover { background: none; }
+  .menu-sep { height: 1px; background: var(--border); margin: 5px 4px; }
+  .fact-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; margin-bottom: 18px; }
+  .fact { padding: 12px 14px; border-right: 1px solid var(--border); min-width: 0; }
+  .fact:last-child { border-right: none; }
+  .fact-value { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+  .fact-label { font-size: var(--fs-meta); color: var(--text-muted); margin-top: 2px; }
+  .priv-banner { padding: 11px 14px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+  .priv-banner.ok { background: var(--ok-bg); color: var(--ok); }
+  .priv-banner.bad { background: var(--off-bg); color: var(--off); }
+  .priv-limits { display: grid; gap: 8px; margin-bottom: 16px; }
+  .priv-limit { border: 1px solid var(--border); border-left: 3px solid var(--off); border-radius: var(--radius-md); padding: 10px 12px; }
+  .priv-limit-what { font-size: 13px; }
+  .priv-limit-fix { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .priv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .priv-chip { font-family: var(--mono); font-size: var(--fs-meta); padding: 2px 8px; border-radius: var(--radius-sm); }
+  .priv-chip.on { background: var(--ok-bg); color: var(--ok); }
+  .priv-chip.off { background: var(--off-bg); color: var(--off); }
+  .ep-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+  .ep-tab { padding: 9px 14px; font-size: 13px; font-weight: 600; color: var(--text-muted); background: none; border: none;
+    border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+  .ep-tab:hover { color: var(--text); }
+  .ep-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
+  /* A section below the detail groups (agent version history): its own heading and a table, set off by a rule. */
+  .ep-section { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .ep-section .panel-header h2 { font-size: 15px; }
+  .detail-group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 0 0 10px; }
+  .detail-row { display: flex; gap: 12px; padding: 5px 0; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-row .k { color: var(--text-muted); flex: 0 0 44%; }
+  .detail-row .v { font-weight: 600; overflow-wrap: anywhere; }
+  .sev-pill { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .sev-pill.critical, .sev-pill.high { background: var(--off-bg); color: var(--off); }
+  .sev-pill.medium { background: var(--ok-bg); color: var(--accent); }
+  .sev-pill.low, .sev-pill.unknown, .sev-pill.none { background: var(--surface-2); color: var(--text-muted); }
+  .sev-pill.security { background: var(--off-bg); color: var(--off); }
+  .stale-note { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; }
+  .proc-name { white-space: nowrap; }
+  .proc-twist { display: inline-block; width: 15px; text-align: center; cursor: pointer;
+    color: var(--text-muted); user-select: none; font-size: var(--fs-meta); }
+  .proc-twist.leaf { cursor: default; opacity: .35; }
+  .proc-cmd { font-family: var(--mono); font-size: var(--fs-meta); color: var(--text-muted);
+    max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proc-kill { width: auto; font-size: var(--fs-meta); font-weight: 700; padding: 2px 9px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface); color: var(--off); cursor: pointer; }
+  .proc-kill:hover:not([disabled]) { background: var(--off-bg); border-color: var(--off); }
+  .proc-kill[disabled] { opacity: .45; cursor: default; }
+  .proc-note { font-size: 12px; margin: -6px 0 12px; }
+  .proc-note.ok { color: var(--ok); }
+  .proc-note.bad { color: var(--off); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+    <div class="ep-crumb"><a href="/">Endpoints</a> › <span id="crumb-host">…</span></div>
+
+    <div class="ep-head">
+      <h1 class="ep-title" id="ep-hostname">Loading…</h1>
+      <span class="badge-pill" id="ep-status">—</span>
+      <div class="ep-actions" id="ep-actions"></div>
+    </div>
+
+    <div class="fact-strip" id="fact-strip"></div>
+    <div id="ep-stalled" hidden></div>
+
+    <div class="ep-tabs" id="ep-tabs"></div>
+    <div class="panel" id="ep-panel">
+      <div id="ep-content">loading…</div>
+    </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+const agentId = decodeURIComponent(window.location.pathname.split("/").pop());
+let agent = null;
+let canPatch = false;
+let remoteCfg = { enabled: false };
+// The security posture sensor's remote_shadow (agent 0.57.44+): whether
+// shadowing can work here. null until known, or for older agents.
+let shadowReadiness = null;
+let canKill = false;
+
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "attributes", label: "Attributes" },
+  { id: "activity", label: "Activity" },
+  { id: "hardware", label: "Hardware" },
+  { id: "privileges", label: "Privileges" },
+  { id: "disks", label: "Disks" },
+  { id: "network", label: "Network" },
+  { id: "users", label: "Logged-in Users" },
+  { id: "local_admins", label: "Administrators" },
+  { id: "directory", label: "Directory" },
+  { id: "security_posture", label: "Security posture" },
+  { id: "installed_apps", label: "Installed Applications" },
+  { id: "processes", label: "Processes" },
+  { id: "services", label: "Services" },
+  { id: "patches", label: "Patches" },
+  { id: "risk", label: "Risk & Compliance" },
+];
+
+document.addEventListener("mustra:user", (e) => {
+  const perms = (e.detail && e.detail.permissions) || [];
+  const admin = !!(e.detail && e.detail.is_admin);
+  canPatch = admin || perms.includes("patches.manage");
+  canKill = admin || perms.includes("deploy.manage");
+  renderActions();
+  fetch("/api/remote/config").then(r => r.ok ? r.json() : null).then(c => { if (c) { remoteCfg = c; renderActions(); } });
+  if (canKill) loadShadowReadiness();
+  // The user arrives after the first paint, so a Processes tab drawn before
+  // then has no kill column. Redraw it rather than leave the operator
+  // wondering why the button is missing.
+  if (currentTab() === "processes") renderProcessTree(document.getElementById("ep-content"));
+});
+
+async function loadAgent() {
+  const resp = await fetch("/api/agents");
+  if (resp.status === 401) { window.location.href = "/login"; return; }
+  if (!resp.ok) return;
+  const data = await resp.json();
+  agent = (data.agents || []).find(a => a.agent_id === agentId);
+  if (!agent) {
+    document.getElementById("ep-hostname").textContent = "Endpoint not found";
+    document.getElementById("ep-content").innerHTML =
+      '<div class="empty">This endpoint is no longer in inventory — it may have been offline long enough to be dropped.</div>';
+    return;
+  }
+  document.title = agent.hostname + " — mustra";
+  document.getElementById("crumb-host").textContent = agent.hostname;
+  document.getElementById("ep-hostname").textContent = agent.hostname;
+  const status = document.getElementById("ep-status");
+  status.textContent = agent.online ? "online" : "offline";
+  status.className = "badge-pill " + (agent.online ? "online" : "offline");
+
+  renderFactStrip();
+  renderActions();
+  renderTabs();
+  renderStalledWork();
+  if (canKill) loadShadowReadiness();
+}
+
+// An offline endpoint that was in the middle of something is a different
+// situation from one that is merely off, and the page used to show both the
+// same way. The case this exists for is an agent update that took the agent
+// with it: the job never reports, the endpoint goes quiet, and nothing
+// connected the two.
+async function renderStalledWork() {
+  const box = document.getElementById("ep-stalled");
+  if (!box || agent.online) { if (box) box.hidden = true; return; }
+  let jobs = [];
+  try {
+    // Deploy jobs need their own permission. A reader who cannot see them
+    // just does not get this banner.
+    const resp = await fetch("/api/deploy/jobs");
+    if (!resp.ok) return;
+    jobs = ((await resp.json()).jobs || []).filter(j => j.agent_id === agentId && j.stalled);
+  } catch (e) { return; }
+  if (!jobs.length) { box.hidden = true; return; }
+  const rows = jobs.map(j => `<li>${escapeHtml(j.operation === "remove" ? "uninstall" : j.operation)} ·
+    <a href="/software?job=${encodeURIComponent(j.id)}#deployments">${escapeHtml(j.id)}</a> ·
+    dispatched ${escapeHtml(fmtAgo(j.created_at))}, still ${escapeHtml(j.status)}</li>`).join("");
+  box.innerHTML = `<div class="empty u-c-off u-ta-left">
+    <strong>This endpoint went quiet with work outstanding.</strong>
+    <ul class="u-m-6-0-0-18">${rows}</ul>
+    <p class="u-m-6-0-0">If one of those was an agent update, it may have taken the agent down with it;
+    reinstalling the agent on the endpoint is the way back.</p></div>`;
+  box.hidden = false;
+}
+
+function renderFactStrip() {
+  const facts = [
+    [(agent.ips || [])[0] || "—", "IP address"],
+    [osDisplay(agent) + " / " + archLabel(agent.arch), "OS / arch"],
+    [osLabel(agent.os), "Kernel family"],
+    [agent.site || "—", "Site"],
+    [agent.cpu_count ? agent.cpu_count + " vCPU" : "—", "Processors"],
+    [agent.mem_total_mb ? Math.round(agent.mem_total_mb / 1024) + " GB" : "—", "Memory"],
+    [fmtAgo(agent.last_heartbeat), "Last seen"],
+    [agent.agent_version || "—", "Agent version"],
+  ];
+  document.getElementById("fact-strip").innerHTML = facts.map(([v, k]) => `
+    <div class="fact">
+      <div class="fact-value">${escapeHtml(String(v))}</div>
+      <div class="fact-label">${escapeHtml(k)}</div>
+    </div>
+  `).join("");
+}
+
+function renderActions() {
+  if (!agent) return;
+  const btnClass = "u-w-auto u-p-7-14 u-fs-12_5";
+  // Offered to anyone who can act on endpoints, because the row is
+  // bookkeeping: this removes the entry, never the agent.
+  const forget = (canPatch
+    ? `<button id="ep-forget" class="${btnClass}">Remove from inventory</button>`
+    : "")
+    // Cutting off a machine that may be compromised: same permission as
+    // the route (deploy.manage).
+    + (canKill ? ` <button id="ep-revoke" class="danger ${btnClass}">Revoke credential</button>` : "");
+  // Jump: every way into the endpoint in one menu — remote desktop by the
+  // endpoint's OS when it is set up (Access → Jump Gate), and the agent's
+  // own recorded shell. Both go through the same checks and Jump Gate
+  // policies. A temporary account (remote_jit.go): "always" signs every
+  // remote desktop session in with one; "offer" adds an entry for it.
+  const jitAlways = remoteCfg.jit === "always", jitOffer = remoteCfg.jit === "offer";
+  const jump = [];
+  if (canKill && remoteCfg.enabled) {
+    for (const p of remoteProtocolsFor(agent)) {
+      jump.push({ label: p.toUpperCase(), hint: remoteTitle(p) + (jitAlways ? ", as a temporary administrator" : ""), run: () => openRemote(p, "") });
+      if (jitOffer) jump.push({ label: p.toUpperCase() + " (temporary admin)", hint: "An administrator account made for this session and removed after it", run: () => openRemote(p, "", null, false, true) });
+    }
+  }
+  // Shadowing (remote_shadow.go) needs no provider: Windows' own Remote
+  // Desktop client attaches to the signed-in user's session, and Windows
+  // asks them first. Mustra applies the same checks and gives the command.
+  if (canKill && agent.os === "windows" && agent.platform !== "haos") {
+    if (jump.length) jump.push({ sep: true });
+    // Said up front when the endpoint's posture shows it cannot work,
+    // rather than discovered when the Remote Desktop client fails.
+    const off = shadowReadiness && !shadowReadiness.ready ? "Not available here: " + shadowReadiness.reason : "";
+    jump.push({ label: "Shadow session (view)", hint: off || "Watch the signed-in user's own session; Windows asks them first", disabled: !!off, run: () => openShadow(false, "", 0) });
+    jump.push({ label: "Shadow session (control)", hint: off || "Share control of the signed-in user's session; Windows asks them first", disabled: !!off, run: () => openShadow(true, "", 0) });
+  }
+  if (canKill && agent.platform !== "haos") {
+    if (jump.length) jump.push({ sep: true });
+    jump.push({ label: agent.os === "windows" ? "PowerShell" : "Shell", hint: "A recorded shell session through the agent",
+      run: () => { window.location.href = "/shell?agent=" + encodeURIComponent(agentId); } });
+  }
+  // Deploy: everything that changes what is on the endpoint. Patches open
+  // their dialog here; a package hands this endpoint to the Deploy page
+  // (the same handoff Interact uses), where its parameters, review and
+  // rollout live, so there is one place a deployment is set up.
+  const deploy = [];
+  if (canPatch) deploy.push({ label: "Apply patches…", hint: "Install this endpoint's pending updates", run: applyPatchesHere });
+  if (canKill && agent.platform !== "haos") {
+    if (deploy.length) deploy.push({ sep: true });
+    deploy.push({ label: "Action package…", hint: "Run a command or script package on this endpoint", run: () => pickPackage("action") });
+    deploy.push({ label: "Software package…", hint: "Install, update or remove software here", run: () => pickPackage("software") });
+  }
+  document.getElementById("ep-actions").innerHTML =
+    menuHTML("ep-jump", "Jump", jump) + menuHTML("ep-deploy", "Deploy", deploy) + forget;
+  wireMenu("ep-jump", jump);
+  wireMenu("ep-deploy", deploy);
+  // RDP to a domain-joined machine pre-fills its domain; "RDP (local
+  // account)" signs in with one of the machine's own accounts instead. Not
+  // offered when every session uses a temporary account, which is local.
+  const rdpItem = document.querySelector('#ep-jump-pop [data-item="0"]');
+  if (rdpItem && jump[0].label === "RDP" && !jitAlways) loadDirectoryInfo().then(d => {
+    if (!isADJoined(d) || document.getElementById("ep-rdp-local")) return;
+    rdpItem.querySelector("small").textContent = `Remote Desktop, signing in to ${d.domain}`;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "menu-item"; b.id = "ep-rdp-local"; b.setAttribute("role", "menuitem");
+    b.innerHTML = 'RDP (local account)<small>With one of this machine\'s own accounts, no domain</small>';
+    b.addEventListener("click", () => { closeMenus(); openRemote("rdp", "", null, true); });
+    rdpItem.after(b);
+  });
+  const forgetBtn = document.getElementById("ep-forget");
+  if (forgetBtn) forgetBtn.addEventListener("click", forgetThisEndpoint);
+  const revokeBtn = document.getElementById("ep-revoke");
+  if (revokeBtn) revokeBtn.addEventListener("click", revokeThisCredential);
+}
+
+// A button that opens a menu of entries ({label, hint, run} or {sep}).
+// The menu is a sibling of the button, as the DataTable columns popover
+// is, so the button keeps its own semantics. Nothing is drawn for no entries.
+function menuHTML(id, label, items) {
+  if (!items.some(it => !it.sep)) return "";
+  const eid = escapeHtml(id);
+  return `<div class="menu-wrap" id="${eid}">
+      <button class="primary u-w-auto u-p-7-14 u-fs-12_5" id="${eid}-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="${eid}-pop">${escapeHtml(label)} ▾</button>
+      <div class="menu-pop" id="${eid}-pop" role="menu" aria-labelledby="${eid}-btn" hidden>${items.map((it, i) => it.sep
+        ? '<div class="menu-sep" role="separator"></div>'
+        : `<button type="button" class="menu-item" role="menuitem" data-item="${i}"${it.disabled ? ' aria-disabled="true" disabled' : ""}>${escapeHtml(it.label)}<small>${escapeHtml(it.hint)}</small></button>`).join("")}</div>
+    </div>`;
+}
+
+// Opened by its button, closed by Escape, a click outside, opening the
+// other menu or choosing an entry; the arrow keys move between entries.
+function wireMenu(id, items) {
+  const btn = document.getElementById(id + "-btn"), pop = document.getElementById(id + "-pop");
+  if (!btn) return;
+  const entries = () => [...pop.querySelectorAll(".menu-item:not([disabled])")];
+  const open = () => { closeMenus(); pop.hidden = false; btn.setAttribute("aria-expanded", "true"); (entries()[0] || pop).focus(); };
+  btn.addEventListener("click", () => (pop.hidden ? open() : closeMenus()));
+  btn.addEventListener("keydown", e => { if (e.key === "ArrowDown") { e.preventDefault(); open(); } });
+  pop.addEventListener("keydown", e => {
+    const list = entries(), i = list.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); closeMenus(); btn.focus(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); list[(i + 1) % list.length].focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+  });
+  pop.querySelectorAll("[data-item]").forEach(b => b.addEventListener("click", () => {
+    closeMenus();
+    items[b.dataset.item].run();
+  }));
+}
+// loadShadowReadiness reads the posture sensor once, for a Windows
+// endpoint, so the Jump menu can say shadowing is off before anyone tries.
+async function loadShadowReadiness() {
+  if (!agent || agent.os !== "windows") return;
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/security_posture`);
+    if (!resp.ok) return;
+    const p = ((await resp.json()).data || [])[0];
+    if (p && p.remote_shadow) { shadowReadiness = p.remote_shadow; renderActions(); }
+  } catch (e) { /* the menu keeps offering shadowing, as before */ }
+}
+function closeMenus() {
+  document.querySelectorAll(".menu-pop").forEach(pop => {
+    if (pop.hidden) return;
+    pop.hidden = true;
+    document.getElementById(pop.id.replace(/-pop$/, "-btn"))?.setAttribute("aria-expanded", "false");
+  });
+}
+document.addEventListener("click", e => { if (!e.target.closest(".menu-wrap")) closeMenus(); });
+
+// packageOSes is what a package can run on: its Deploy variants' OS, or
+// for an older package the OSes its commands are written for. Empty means
+// it does not say, and it is offered everywhere.
+function packageOSes(p) {
+  const variants = ((p.deploy_definition || {}).variants || []).map(v => v.os).filter(Boolean);
+  return variants.length ? variants : Object.keys(p.commands || {});
+}
+
+// pickPackage lists the enabled packages of one kind that can run on this
+// endpoint, and hands the chosen one to the Deploy page with this endpoint
+// as its only target.
+let packageCache = null;
+async function pickPackage(kind) {
+  const title = kind === "action" ? "Deploy an action package" : "Deploy a software package";
+  openModal(`${title} to ${agent.hostname}`, `
+    <input id="pp-filter" class="search-input u-w-100p u-mb-10" placeholder="filter packages" autocomplete="off" aria-label="Filter packages">
+    <div id="pp-list" class="u-maxh-55vh u-ov-auto"><p class="hint">loading…</p></div>
+    <p class="hint u-mt-10">Choosing one opens it on the Deploy page with ${escapeHtml(agent.hostname)} as the target, to set its parameters and start it.</p>`,
+    async wrap => {
+      const list = wrap.querySelector("#pp-list"), filter = wrap.querySelector("#pp-filter");
+      if (!packageCache) {
+        const resp = await fetch("/api/software");
+        if (!resp.ok) { list.innerHTML = `<p class="empty">${escapeHtml(await resp.text())}</p>`; return; }
+        packageCache = (await resp.json()).packages || [];
+      }
+      const fits = packageCache.filter(p => p.enabled !== false
+        && (kind === "action") === (p.kind === "action")
+        && (packageOSes(p).length === 0 || packageOSes(p).includes(agent.os)));
+      const draw = () => {
+        const q = filter.value.trim().toLowerCase();
+        const shown = fits.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.vendor || "").toLowerCase().includes(q));
+        list.innerHTML = shown.length === 0
+          ? `<p class="empty">${fits.length ? "no packages match" : `no enabled ${escapeHtml(kind)} packages for ${escapeHtml(osLabel(agent.os))}`}</p>`
+          : shown.map(p => `<button type="button" class="menu-item" data-pkg="${escapeHtml(p.id)}">${escapeHtml(p.name)}<small>${escapeHtml([p.vendor, p.version, p.description].filter(Boolean).join(" · ").slice(0, 140) || (kind === "action" ? "action package" : "software package"))}</small></button>`).join("");
+        list.querySelectorAll("[data-pkg]").forEach(b => b.addEventListener("click", () => {
+          // deploy=1 opens the Deploy window itself, this endpoint ticked,
+          // rather than the package's editor with a Deploy… button to find.
+          const params = new URLSearchParams({ package: b.dataset.pkg, agents: agentId, deploy: "1" });
+          window.location.href = `/software?${params}${kind === "action" ? "#actions" : "#catalog"}`;
+        }));
+      };
+      filter.addEventListener("input", draw);
+      draw();
+      filter.focus();
+    });
+}
+
+// remoteProtocolsFor is what the Jump menu offers: the server's choice
+// (remote_api.go), except that SSH is offered for Linux alone; a Mac is
+// reached by Screen Sharing, or the agent's shell for a command line.
+function remoteProtocolsFor(a) {
+  if (a.platform === "haos") return [];
+  return { windows: ["rdp"], darwin: ["vnc"], linux: ["ssh"] }[a.os] || [];
+}
+
+
+function remoteTitle(p) {
+  return { rdp: "Remote Desktop to this Windows endpoint", vnc: "Screen Sharing (VNC) to this Mac", ssh: "SSH terminal" }[p] || p;
+}
+
+// openRemote asks the server for a connection, which applies Jump Gate
+// (a reason, an approval) as a shell session does, and opens it in a new
+// tab. The tab is opened before the request: Safari on an iPhone or iPad
+// blocks one opened after it.
+async function openRemote(protocol, reason, win, localAccount, jit) {
+  win = win || window.open("about:blank", "_blank");
+  const resp = await fetch("/api/remote/sessions", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id: agentId, protocol, reason: reason || "", local_account: !!localAccount, jit: !!jit }),
+  });
+  if (resp.ok) {
+    const out = await resp.json();
+    if (win) win.location.href = out.url; else window.location.href = out.url;
+    return;
+  }
+  if (await handleRemoteGate(resp, reason, why => openRemote(protocol, why, win, localAccount, jit))) return;
+  if (win) win.close();
+}
+
+// handleRemoteGate reads a refused /api/remote/sessions answer. A Jump
+// Gate refusal is structured: it asks for a reason, or offers to request
+// access. When there is then a reason to try again with, retry(reason) is
+// awaited and true returned; otherwise the refusal is shown and false
+// returned.
+async function handleRemoteGate(resp, reason, retry) {
+  const text = await resp.text();
+  let gate = null;
+  try { gate = JSON.parse(text); } catch (e) { /* plain error */ }
+  if (gate && gate.require_reason && !reason) {
+    const why = prompt(`${gate.policy}: this endpoint needs a reason for access.`, "");
+    if (why) { await retry(why); return true; }
+  } else if (gate && gate.request_access) {
+    const why = reason || prompt(`${gate.policy}: ${gate.error}\n\nReason for the request:`, "");
+    if (why !== null) {
+      const rr = await fetch("/api/jump/requests", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, reason: why }) });
+      const rj = rr.ok ? await rr.json() : null;
+      if (rj && rj.already_granted) { await retry(why); return true; }
+      alert(rr.ok ? "Access requested. It opens once somebody with jump.approve agrees; try again after that." : await rr.text());
+    }
+  } else {
+    alert((gate && gate.error) || text);
+  }
+  return false;
+}
+
+// openShadow asks the server for the shadow command (after the same
+// checks as any other connection) and shows it: the Remote Desktop
+// client on the operator's own computer runs it, and Windows asks the
+// person in the session before anything is shown. sessionID 0 lets the
+// server pick the active session the endpoint last reported.
+async function openShadow(control, reason, sessionID) {
+  const resp = await fetch("/api/remote/sessions", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id: agentId, protocol: "shadow", reason: reason || "", control: !!control, session_id: sessionID || 0 }),
+  });
+  if (!resp.ok) { await handleRemoteGate(resp, reason, why => openShadow(control, why, sessionID)); return; }
+  showShadow(await resp.json(), control, reason);
+}
+
+function showShadow(out, control, reason) {
+  const others = (out.sessions || []).map(x => `<li>session ${escapeHtml(x.session_id)}: ${escapeHtml(x.user || "?")}`
+    + `${x.terminal && x.terminal !== "disconnected" ? " on " + escapeHtml(x.terminal) : ""}${x.state ? " (" + escapeHtml(x.state.toLowerCase()) + ")" : ""}`
+    + ` <button class="tiny" type="button" data-shadow="${escapeHtml(x.session_id)}">shadow this one</button></li>`).join("");
+  openModal(`Shadow ${agent.hostname}`, `
+    <p>This ${control ? "shares control of" : "shows"} session <b>${escapeHtml(out.session_id)}</b>${out.session_user ? `, where <b>${escapeHtml(out.session_user)}</b> is signed in` : ""}${out.reported_at ? ` (as reported ${escapeHtml(fmtAgo(out.reported_at))})` : ""}.
+      Windows asks that person to allow it before anything is shown; nobody is signed out.</p>
+    <p>Run this on your Windows computer (the Remote Desktop client asks for your credentials for <code>${escapeHtml(out.address)}</code>):</p>
+    <pre class="u-ws-pre u-wb-all u-ff-mono u-fs-12_5 u-p-10-12 u-b-1-solid-border u-br-radius-md u-bg-bg">${escapeHtml(out.command)}</pre>
+    <div class="u-d-flex u-gap-8 u-fw-wrap u-mb-10">
+      <button class="tiny go" type="button" id="shadow-copy">Copy command</button>
+      <a class="tiny" id="shadow-dl" download="shadow-${escapeHtml(agent.hostname)}.cmd">Download launcher (.cmd)</a>
+    </div>
+    <p class="hint">The endpoint must allow shadowing (the <i>Set rules for remote control of Remote Desktop Services user sessions</i> policy, with the user's permission)
+      and its Remote Desktop firewall rules must be on; you need administrator rights on it. See docs/REMOTE-ACCESS.md.${out.expires_at ? ` Your access ends ${escapeHtml(fmtTime(out.expires_at))}.` : ""}</p>
+    ${others ? `<p class="hint">Other sessions on this endpoint:</p><ul class="hint">${others}</ul>` : ""}
+  `, wrap => {
+    wrap.querySelector("#shadow-copy").addEventListener("click", () => {
+      navigator.clipboard.writeText(out.command).then(() => showToast("Command copied", "ok"), () => showToast("Could not copy; select the command and copy it", "error"));
+    });
+    const dl = wrap.querySelector("#shadow-dl");
+    dl.href = URL.createObjectURL(new Blob(["@echo off\r\n" + out.command + "\r\n"], { type: "text/plain" }));
+    wrap.querySelectorAll("[data-shadow]").forEach(b => b.addEventListener("click", () => {
+      wrap.remove();
+      openShadow(control, reason, Number(b.dataset.shadow));
+    }));
+  });
+}
+
+// Deleting the row and its history. Says plainly that it does nothing to the
+// machine, because "remove" invites the opposite assumption -- and an agent
+// that is still installed will simply register again on its next heartbeat.
+async function forgetThisEndpoint() {
+  const stillReporting = agent.online
+    ? "\n\nThis endpoint is ONLINE. The agent is still installed, so it will register again within a minute and reappear. To actually remove it, uninstall the agent first."
+    : "";
+  if (!confirm(`Remove ${agent.hostname} from inventory?\n\nThis deletes the entry and its collected history. It does not change the machine.${stillReporting}`)) return;
+  const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
+  if (!r.ok && r.status !== 204) { alert(await r.text() || "could not remove that endpoint"); return; }
+  window.location.href = "/agents";
+}
+
+// revokeThisCredential cuts the agent off the bus: its own credential is
+// deleted and its live connection closed, so it is refused until it is
+// enrolled again with a token. For a machine that may be compromised, or
+// one that has left.
+async function revokeThisCredential() {
+  if (!confirm(`Revoke ${agent.hostname}'s credential?\n\nThe agent is disconnected and refused until it is enrolled again with a new token. Nothing on the machine changes.`)) return;
+  const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}/revoke-credential`, { method: "POST" });
+  if (!r.ok) { alert((await r.text()).trim() || "could not revoke that credential"); return; }
+  const out = await r.json();
+  alert(out.pending
+    ? `Credential revoked. The agent is refused when its current authorization expires (within an hour): ${out.pending}`
+    : `Credential revoked; ${out.disconnected} live connection(s) closed. The agent is refused until it is enrolled again.`);
+}
+
+async function applyPatchesHere() {
+  const choice = await askPatchApply([agent.hostname]);
+  if (!choice) return;
+  // Held while the request is out, so a second click cannot start a
+  // second job.
+  const btn = document.getElementById("ep-deploy-btn");
+  if (btn) btn.disabled = true;
+  try {
+    alert(await applyPatchesTo(agentId, choice));
+  } catch (e) {
+    alert("Not started: " + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function currentTab() {
+  const h = window.location.hash.replace("#", "");
+  return TABS.some(t => t.id === h) ? h : TABS[0].id;
+}
+
+function renderTabs() {
+  const active = currentTab();
+  document.getElementById("ep-tabs").innerHTML = TABS.map(t =>
+    `<button class="ep-tab ${t.id === active ? "active" : ""}" data-tab="${escapeHtml(t.id)}">${escapeHtml(t.label)}</button>`
+  ).join("");
+  document.querySelectorAll(".ep-tab").forEach(btn => btn.addEventListener("click", () => {
+    window.location.hash = btn.dataset.tab;
+  }));
+  renderTabContent(active);
+}
+
+window.addEventListener("hashchange", renderTabs);
+
+async function renderTabContent(tab) {
+  const el = document.getElementById("ep-content");
+  el.innerHTML = "loading…";
+  if (tab !== "processes" && procLiveStream) { procLiveStream.close(); procLiveStream = null; }
+  if (tab === "overview") return renderOverview(el);
+  if (tab === "risk") return renderRisk(el);
+  if (tab === "hardware") return renderHardware(el);
+  if (tab === "security_posture") return renderPosture(el);
+  if (tab === "privileges") return renderPrivileges(el);
+  if (tab === "attributes") return renderAttributes(el);
+  if (tab === "activity") return renderActivity(el);
+  if (tab === "processes") return renderProcessTree(el);
+  if (tab === "directory") return renderDirectory(el);
+  return renderSensorTab(el, tab);
+}
+
+function detailRows(rows) {
+  return rows.map(([k, v]) => `
+    <div class="detail-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(String(v ?? "—"))}</span></div>
+  `).join("");
+}
+
+// The Directory sensor's machine entry, loaded once: the Overview's Domain
+// section and the local-account remote button both read it. null when the
+// endpoint hasn't reported one.
+let directoryInfo;
+async function loadDirectoryInfo() {
+  if (directoryInfo !== undefined) return directoryInfo;
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/directory`);
+    directoryInfo = resp.ok ? (((await resp.json()).data || [])[0] || null) : null;
+  } catch (e) { directoryInfo = null; }
+  return directoryInfo;
+}
+const directoryKinds = { ad: "Active Directory", entra: "Entra ID", hybrid: "Active Directory + Entra ID (hybrid)", workgroup: "Not joined (workgroup)" };
+const isADJoined = d => !!(d && d.joined && (d.kind === "ad" || d.kind === "hybrid") && d.domain);
+
+// fmtUptime is how long the endpoint has been up, from its boot time. An
+// offline endpoint's uptime is unknown (it may have been shut down), so
+// that is said rather than a number that keeps growing.
+function fmtUptime(bootISO, online) {
+  if (!bootISO) return "—";
+  if (!online) return "unknown (offline)";
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(bootISO).getTime()) / 1000));
+  const d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600), m = Math.floor(secs % 3600 / 60);
+  if (d) return `${d} day${d === 1 ? "" : "s"}, ${h} h`;
+  if (h) return `${h} h ${m} min`;
+  return `${m} min`;
+}
+
+async function renderOverview(el) {
+  let history = [];
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/versions`);
+    if (resp.ok) history = (await resp.json()).history || [];
+  } catch (e) { /* history is supplementary — never block the overview on it */ }
+  // A virtual machine's backups, when a Proxmox node reports this endpoint
+  // as one of its guests.
+  let backups = [];
+  try {
+    const resp = await fetch(`/api/backup-status?agent_id=${encodeURIComponent(agentId)}`);
+    if (resp.ok) backups = (await resp.json()).guests || [];
+  } catch (e) { /* supplementary too */ }
+  const dir = await loadDirectoryInfo();
+  // Boot time from the hardware sensor; uptime is counted from it rather
+  // than taken from the sensor's uptime_hours, which is only as fresh as
+  // the last report.
+  let bootTime = "";
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/hardware`);
+    if (resp.ok) bootTime = (((await resp.json()).data || [])[0] || {}).boot_time || "";
+  } catch (e) { /* supplementary */ }
+  const bkState = { ok: "ok", overdue: "OVERDUE", never: "never backed up", not_covered: "not in a backup job" };
+  // Hardening score against this endpoint's benchmark.
+  let hardening = null;
+  try {
+    const resp = await fetch(`/api/compliance/scores?agent_id=${encodeURIComponent(agentId)}`);
+    if (resp.ok) hardening = ((await resp.json()).endpoints || [])[0] || null;
+  } catch (e) { /* supplementary */ }
+  const hardeningGroup = hardening && hardening.benchmark ? `
+      <div class="detail-group">
+        <h3>Hardening (<a href="/compliance#scores">Comply</a>)</h3>
+        ${detailRows([
+          ["Benchmark", (hardening.exact ? "" : "≈ ") + hardening.benchmark],
+          ["Score", hardening.score != null ? hardening.score + "%" : "not scanned yet"],
+          ["Checks", hardening.score != null ? `${hardening.pass} passed, ${hardening.fail} failed, ${hardening.unknown} unknown` : "—"],
+          ["Scanned", hardening.score != null ? fmtAgo(hardening.checked_at) : "—"],
+        ])}
+        ${hardening.score != null ? `<div class="u-mt-8"><a href="/api/compliance/report.csv?agent_id=${encodeURIComponent(agentId)}&policy_id=${encodeURIComponent(hardening.policy_id)}">Download report (CSV)</a></div>` : ""}
+      </div>` : "";
+  // Entra ID and Intune's view of this endpoint, when the integration is on.
+  let entra = [];
+  try {
+    const resp = await fetch(`/api/entra/devices?agent_id=${encodeURIComponent(agentId)}`);
+    if (resp.ok) entra = (await resp.json()).devices || [];
+  } catch (e) { /* supplementary */ }
+  const yesNo = v => v === true ? "yes" : v === false ? "no" : "—";
+  const entraGroup = entra.map(d => `
+      <div class="detail-group">
+        <h3>Entra ID${d.intune_id ? " and Intune" : ""}</h3>
+        ${detailRows([
+          ["Join type", { AzureAd: "Entra joined", ServerAd: "Hybrid joined", Workplace: "Registered" }[d.trust_type] || d.trust_type || "—"],
+          ["Compliant (Entra)", yesNo(d.entra_compliant)],
+          ["Intune compliance", d.compliance_state || "—"],
+          ["Intune last check-in", d.last_sync ? fmtAgo(d.last_sync) : "—"],
+          ["Primary user", d.user_upn || "—"],
+          ["Last sign-in", d.last_sign_in ? fmtAgo(d.last_sign_in) : "—"],
+        ])}
+        ${d.intune_id ? `<div class="row-actions u-mt-8">
+          <button class="secondary u-w-auto" data-intune="sync">Intune sync</button>
+          <button class="secondary u-w-auto" data-intune="restart">Restart via Intune</button></div>` : ""}
+      </div>`).join("");
+  const backupGroup = backups.map(b => `
+      <div class="detail-group">
+        <h3>Backup (<a href="/backup-status">Proxmox</a>)</h3>
+        ${detailRows([
+          ["State", bkState[b.state] || b.state],
+          ["Last backup", b.last_backup ? `${fmtTime(b.last_backup)} (${fmtAgo(b.last_backup)})` : "—"],
+          ["Backups kept", b.backups || 0],
+          ["Storages", (b.storages || []).join(", ") || "—"],
+          ["Guest", `${b.type === "lxc" ? "CT" : "VM"} ${b.vmid} on ${b.node}`],
+          ["Backup jobs", (b.jobs || []).join(", ") || "none"],
+        ])}
+      </div>`).join("");
+
+  el.innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-group">
+        <h3>Operating system</h3>
+        ${detailRows([
+          ["Operating system", osDisplay(agent)],
+          ["Kernel family", osLabel(agent.os)],
+          ["Platform", agent.platform || "—"],
+          ["Platform version", agent.platform_version || "—"],
+          ["Kernel", agent.kernel_version || "—"],
+          ["Architecture", archLabel(agent.arch)],
+          ["Uptime", fmtUptime(bootTime, agent.online)],
+          ["Last boot", bootTime ? fmtTime(bootTime) : "—"],
+        ])}
+      </div>
+      ${dir ? `<div class="detail-group">
+        <h3>Domain</h3>
+        ${detailRows([
+          ["Membership", directoryKinds[dir.kind] || dir.kind || "—"],
+          ...(dir.domain ? [["Domain", dir.domain]] : []),
+          ...(dir.computer_ou ? [["Organizational unit", dir.computer_ou]] : []),
+          ...(dir.entra_tenant ? [["Entra tenant", dir.entra_tenant]] : []),
+        ])}
+      </div>` : ""}
+      <div class="detail-group">
+        <h3>Hardware</h3>
+        ${detailRows([
+          ["Processors", agent.cpu_count || "—"],
+          ["Memory", agent.mem_total_mb ? agent.mem_total_mb + " MB" : "—"],
+          ["IP addresses", (agent.ips || []).join(", ") || "—"],
+        ])}
+      </div>
+      <div class="detail-group">
+        <h3>Agent</h3>
+        ${detailRows([
+          ["Agent version", agent.agent_version || "—"],
+          ["Agent ID", agent.agent_id],
+          ["Site", agent.site || "—"],
+          ["First seen", agent.first_seen ? fmtTime(agent.first_seen) : "—"],
+          ["Last heartbeat", fmtAgo(agent.last_heartbeat)],
+          ["Last facts", fmtAgo(agent.last_facts)],
+        ])}
+      </div>
+      ${/* safe-html: built from detailRows, which escapes every value */ backupGroup}
+      ${/* safe-html: built from detailRows and fixed markup */ entraGroup}
+      ${/* safe-html: built from detailRows and encoded links */ hardeningGroup}
+    </div>
+    <section class="ep-section" aria-labelledby="ep-history-title">
+      <div class="panel-header"><h2 id="ep-history-title">Agent version history</h2><span class="scan-status">${escapeHtml(history.length + (history.length === 1 ? " version" : " versions"))}</span></div>
+      <div class="table-scroll table-scroll-y rows-10">
+        <table id="ep-history">
+          <thead><tr><th>Version</th><th>Installed</th><th>Ran for</th></tr></thead>
+          <tbody>${history.length === 0
+            ? `<tr><td class="empty" colspan="3">No transitions recorded yet</td></tr>`
+            : versionRows(history)}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+  if (history.length) initDataTable(document.getElementById("ep-history"), { storageKey: "endpoint-version-history" });
+  el.querySelectorAll("[data-intune]").forEach(b => b.addEventListener("click", async () => {
+    const what = b.dataset.intune;
+    if (what === "restart" && !confirm(`Ask Intune to restart ${agent.hostname} now?`)) return;
+    b.disabled = true;
+    const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}/intune/${what}`, { method: "POST" });
+    alert(r.ok ? (await r.json()).message : "Failed: " + await r.text());
+    b.disabled = false;
+  }));
+}
+
+// Newest first, each with how long it ran: the next version's arrival, or
+// "current" for the one running now.
+function versionRows(history) {
+  const rows = [...history].sort((a, b) => new Date(b.first_seen) - new Date(a.first_seen));
+  return rows.map((h, i) => {
+    const until = i === 0 ? null : new Date(rows[i - 1].first_seen);
+    const ran = until ? fmtDuration(until - new Date(h.first_seen)) : "current";
+    return `<tr>
+      <td>${escapeHtml(h.version)}</td>
+      <td data-sort="${escapeHtml(h.first_seen)}">${escapeHtml(fmtTime(h.first_seen))}</td>
+      <td>${escapeHtml(ran)}</td>
+    </tr>`;
+  }).join("");
+}
+
+function fmtDuration(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h`;
+  return `${Math.round(h / 24)} days`;
+}
+
+// Sensor tabs read the server's cached snapshot for this agent — the same
+// data the fleet-wide views aggregate, no live query needed.
+const SENSOR_COLUMNS = {
+  installed_apps: [["name", "Name"], ["version", "Version"], ["publisher", "Publisher"]],
+  services: [["name", "Name"], ["display_name", "Display name"], ["status", "Status"], ["start_type", "Start type"]],
+  patches: [["name", "Patch"], ["current_version", "Installed"], ["new_version", "Available"], ["severity", "Severity"]],
+  disks: [["mountpoint", "Mount point"], ["device", "Device"], ["fstype", "Filesystem"], ["total_gb", "Size (GB)"], ["free_gb", "Free (GB)"], ["used_percent", "Used %"]],
+  network: [["name", "Interface"], ["mac", "MAC"], ["addresses", "Addresses"], ["mtu", "MTU"], ["up", "Up"]],
+  users: [["user", "User"], ["terminal", "Terminal"], ["host", "From"], ["started", "Since"]],
+  local_admins: [["name", "Name"], ["domain", "Domain"], ["kind", "Kind"], ["source", "Source"], ["via", "Via"], ["sid", "SID"]],
+};
+
+// Hardware is a single row of properties rather than a list, so it reads
+// better as label/value pairs than as a one-row table.
+const HARDWARE_FIELDS = [
+  ["cpu_model", "CPU"], ["cpu_vendor", "CPU vendor"],
+  ["cpu_cores_physical", "Physical cores"], ["cpu_cores_logical", "Logical cores"],
+  ["cpu_mhz", "CPU MHz"], ["mem_total_mb", "Memory (MB)"],
+  ["mem_available_mb", "Memory available (MB)"], ["mem_used_percent", "Memory used %"],
+  ["swap_total_mb", "Swap (MB)"], ["virtualization_system", "Virtualization"],
+  ["virtualization_role", "Virtualization role"], ["os_family", "OS family"],
+  ["kernel_arch", "Kernel architecture"], ["boot_time", "Boot time"],
+  ["uptime_hours", "Uptime (hours)"], ["load_avg_1", "Load average (1 min)"],
+  ["load_avg_5", "Load average (5 min)"], ["load_avg_15", "Load average (15 min)"],
+  ["temp_max_c", "Hottest sensor (°C)"], ["host_id", "Machine ID"],
+];
+
+// Directory: domain membership and the signed-in users' accounts (the
+// directory sensor), one panel for the machine and one per user.
+async function renderDirectory(el) {
+  const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/directory`);
+  if (resp.status === 404) {
+    el.innerHTML = `<div class="empty">This endpoint hasn't reported its directory yet (agent 0.57.22 or newer, every 15 minutes).</div>`;
+    return;
+  }
+  if (!resp.ok) { el.innerHTML = `<div class="empty">couldn't load that: ${escapeHtml(await resp.text())}</div>`; return; }
+  const payload = await resp.json();
+  const d = (payload.data || [])[0] || {};
+  const kinds = { ad: "Active Directory", entra: "Entra ID", hybrid: "Active Directory + Entra ID (hybrid)", workgroup: "Not joined (workgroup)" };
+  const when = v => v ? `${fmtTime(v)} (${fmtAgo(v)})` : "—";
+  const machine = detailRows([
+    ["Membership", kinds[d.kind] || d.kind || "—"],
+    ["Domain", d.domain || "—"],
+    ["AD site", d.site || "—"],
+    ["Domain controller", d.dc || "—"],
+    ["Organizational unit", d.computer_ou || "—"],
+    ["Computer object", d.computer_dn || "—"],
+    ["Machine password set", when(d.machine_password_last_set)],
+    ...(d.entra_tenant ? [["Entra tenant", d.entra_tenant], ["Entra device ID", d.entra_device_id || "—"]] : []),
+  ]);
+  const users = (d.users || []).map(u => `
+    <div class="detail-group">
+      <h3>${escapeHtml(u.display_name || u.name)} <span class="u-tt-none u-ls-0">(${escapeHtml(u.name)}${u.source ? ", " + escapeHtml(u.source === "ad" ? "domain account" : "local account") : ""})</span></h3>
+      ${detailRows([
+        ["UPN", u.upn || "—"], ["Email", u.email || "—"], ["Title", u.title || "—"], ["Department", u.department || "—"],
+        ["Manager", u.manager || "—"],
+        ["Account", u.enabled === false ? "DISABLED" : u.locked ? "LOCKED OUT" : (u.enabled ? "enabled" : "—")],
+        ["Password last set", when(u.password_last_set) + (u.password_never_expires ? " · never expires" : "")],
+        ["Last logon", when(u.last_logon)], ["SID", u.sid || "—"],
+      ])}
+      <div class="sec-head u-mt-10 u-fs-12 u-c-text-muted">Groups (${escapeHtml((u.groups || []).length)})</div>
+      <div>${(u.groups || []).map(g => `<span class="os-pill u-m-2">${escapeHtml(g)}</span>`).join("") || "—"}</div>
+    </div>`).join("");
+  el.innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-group"><h3>This endpoint</h3>${machine}</div>
+      ${users || `<div class="detail-group"><h3>Signed-in users</h3><div class="empty">nobody is signed in</div></div>`}
+    </div>
+    <p class="hint u-mt-12">Collected ${escapeHtml(payload.collected_at ? fmtAgo(payload.collected_at) : "—")}.
+      On Windows the agent reads Active Directory as the computer account, so this needs no credentials.</p>`;
+}
+
+async function renderSensorTab(el, kind) {
+  let payload;
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/${kind}`);
+    if (resp.status === 404) {
+      el.innerHTML = `<div class="empty">This endpoint hasn't reported ${escapeHtml(kind.replace("_", " "))} yet — sensors publish on their own interval after an agent registers.</div>`;
+      return;
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+    payload = await resp.json();
+  } catch (e) {
+    el.innerHTML = `<div class="empty">couldn't load that: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+
+  const rows = payload.data || [];
+  const collected = payload.collected_at ? fmtAgo(payload.collected_at) : null;
+  const cols = SENSOR_COLUMNS[kind] || [];
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="empty">nothing reported${collected ? " as of " + escapeHtml(collected) : ""}</div>`;
+    return;
+  }
+  el.innerHTML = `
+    ${collected ? `<p class="stale-note">Cached snapshot, collected ${escapeHtml(collected)}.</p>` : ""}
+    <input class="search-input u-mb-10 u-w-100p u-maxw-320" id="sensor-search" type="search" aria-label="Filter rows" placeholder="Filter ${escapeHtml(kind.replace("_", " "))}…">
+    <div class="table-scroll table-scroll-y">
+      <table>
+        <thead><tr>${cols.map(c => `<th>${escapeHtml(c[1])}</th>`).join("")}</tr></thead>
+        <tbody id="sensor-body"></tbody>
+      </table>
+    </div>
+  `;
+
+  function draw() {
+    const q = (document.getElementById("sensor-search").value || "").toLowerCase().trim();
+    const shown = !q ? rows : rows.filter(r => cols.some(c => String(r[c[0]] ?? "").toLowerCase().includes(q)));
+    document.getElementById("sensor-body").innerHTML = shown.length === 0
+      ? `<tr><td class="empty" colspan="${escapeHtml(cols.length)}">no matches</td></tr>`
+      : shown.map(r => `<tr>${cols.map(c => {
+          const v = r[c[0]];
+          if (c[0] === "severity") {
+            return `<td><span class="sev-pill ${v === "security" ? "security" : "none"}">${escapeHtml(v || "unspecified")}</span></td>`;
+          }
+          return `<td>${escapeHtml(String(v ?? "—"))}</td>`;
+        }).join("")}</tr>`).join("");
+    const dt = initDataTable(document.querySelector("#ep-content table"), { storageKey: "endpoint-" + kind });
+    if (dt) dt.refresh();
+  }
+  document.getElementById("sensor-search").addEventListener("input", draw);
+  draw();
+}
+
+// The Processes tab is a tree rather than a flat list. Parentage is what
+// makes a process list mean anything during an incident: a row saying
+// "powershell.exe" tells you nothing, while winword.exe → cmd.exe →
+// powershell.exe tells you how it got there. The agent reports ppid and
+// the command line for exactly this, and the kill button is the point of
+// going to look — seeing the thing and being unable to stop it is not an
+// incident tool.
+//
+// It opens on the cached snapshot, like every other sensor tab, and
+// "Refresh live" asks this one endpoint right now. During an incident the
+// difference matters: a process that started four minutes ago is not in
+// the cache yet, and it is exactly the one you came to find.
+const collapsedPids = new Set();
+let procFilter = "";
+let procLiveStream = null;
+
+async function renderProcessTree(el, note) {
+  let payload;
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/processes`);
+    if (resp.status === 404) {
+      el.innerHTML = '<div class="empty">This endpoint hasn\'t reported processes yet — sensors publish on their own interval after an agent registers. Try <b>Refresh live</b>.</div>';
+      return;
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+    payload = await resp.json();
+  } catch (e) {
+    el.innerHTML = `<div class="empty">couldn't load that: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const collected = payload.collected_at ? fmtAgo(payload.collected_at) : null;
+  paintProcessTree(el, payload.data || [], {
+    source: collected ? `Cached snapshot, collected ${collected}.` : "Cached snapshot.",
+  }, note);
+}
+
+// Ask this one endpoint for its process list right now. Same fixed query
+// kind Interact uses — nothing arbitrary runs on the endpoint.
+async function liveProcessRefresh(el) {
+  const status = document.getElementById("proc-source");
+  if (status) status.textContent = "Asking the endpoint…";
+  if (procLiveStream) { procLiveStream.close(); procLiveStream = null; }
+  let queryID;
+  try {
+    const resp = await fetch("/api/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "processes", agent_id: agentId }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    queryID = (await resp.json()).query_id;
+  } catch (e) {
+    renderProcessTree(el, { tone: "bad", text: `Live refresh failed: ${e.message}` });
+    return;
+  }
+
+  const stream = new EventSource(`/api/query/${encodeURIComponent(queryID)}/stream`);
+  procLiveStream = stream;
+  // An offline endpoint never answers, and a stream left open forever looks
+  // identical to one still working. Give up out loud instead.
+  const giveUp = setTimeout(() => {
+    stream.close();
+    if (procLiveStream === stream) procLiveStream = null;
+    if (currentTab() !== "processes") return;
+    renderProcessTree(el, { tone: "bad", text: "The endpoint didn't answer in 30 seconds — showing the cached snapshot." });
+  }, 30000);
+
+  stream.onmessage = (ev) => {
+    let snap;
+    try { snap = JSON.parse(ev.data); } catch (_) { return; }
+    const r = (snap.results || []).find(x => x.agent_id === agentId) || (snap.results || [])[0];
+    if (!r) return;
+    clearTimeout(giveUp);
+    stream.close();
+    if (procLiveStream === stream) procLiveStream = null;
+    if (currentTab() !== "processes") return;
+    if (r.error) {
+      renderProcessTree(el, { tone: "bad", text: `The endpoint answered with an error: ${r.error}` });
+      return;
+    }
+    paintProcessTree(el, r.processes || [], { source: "Live, asked just now.", live: true });
+  };
+  stream.onerror = () => {
+    clearTimeout(giveUp);
+    stream.close();
+    if (procLiveStream === stream) procLiveStream = null;
+  };
+}
+
+function paintProcessTree(el, rows, meta, note) {
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="empty">${escapeHtml(meta.source)} Nothing reported.</div>`;
+    return;
+  }
+  const { roots, children } = buildProcessTree(rows);
+  // Agents older than 0.26.0 don't send ppid, so every process looks like a
+  // root. Say so, rather than let a flat list read as "this machine really
+  // has 300 orphans".
+  const hasParents = rows.some(p => p.ppid > 0);
+
+  el.innerHTML = `
+    <p class="stale-note" id="proc-source">${escapeHtml(meta.source)}</p>
+    ${hasParents ? "" : `<p class="stale-note">This agent doesn't report parent PIDs, so the list is flat. Update it to 0.26.0 or newer to see the tree.</p>`}
+    ${note ? `<p class="proc-note ${escapeHtml(note.tone)}">${escapeHtml(note.text)}</p>` : ""}
+    <div class="u-d-flex u-gap-8 u-ai-center u-mb-10 u-fw-wrap">
+      <input class="search-input u-w-100p u-maxw-320" id="proc-search" type="search" aria-label="Filter processes" placeholder="Filter by name, user, command line or PID…" value="${escapeHtml(procFilter)}">
+      <button id="proc-expand" class="u-w-auto u-p-6-12 u-fs-12">Expand all</button>
+      <button id="proc-collapse" class="u-w-auto u-p-6-12 u-fs-12">Collapse all</button>
+      <button id="proc-live" class="primary u-w-auto u-p-6-12 u-fs-12">Refresh live</button>
+      <span class="u-fs-12 u-c-text-muted">${escapeHtml(rows.length)} processes</span>
+    </div>
+    <div class="table-scroll table-scroll-y">
+      <table>
+        <thead><tr>
+          <th>Process</th><th>PID</th><th>User</th><th>CPU %</th><th>Memory (MB)</th><th>Command line</th>
+          ${canKill ? "<th>Action</th>" : ""}
+        </tr></thead>
+        <tbody id="proc-body"></tbody>
+      </table>
+    </div>
+  `;
+
+  function draw() {
+    const q = procFilter.toLowerCase().trim();
+    // A match on its own is useless without knowing whose child it is, so
+    // every ancestor of a match comes along even when it doesn't match.
+    let keep = null;
+    if (q) {
+      keep = new Set();
+      const parentOf = new Map();
+      for (const [pid, kids] of children) for (const k of kids) parentOf.set(k.pid, pid);
+      for (const p of rows) {
+        const hay = [p.name, p.username, p.cmdline, p.pid].map(v => String(v ?? "").toLowerCase());
+        if (!hay.some(h => h.includes(q))) continue;
+        let cur = p.pid, hops = 0;
+        while (cur !== undefined && !keep.has(cur) && hops++ < 200) {
+          keep.add(cur);
+          cur = parentOf.get(cur);
+        }
+      }
+    }
+
+    const flat = [];
+    const walk = (list, depth) => {
+      for (const p of list) {
+        if (keep && !keep.has(p.pid)) continue;
+        const kids = children.get(p.pid) || [];
+        const visibleKids = keep ? kids.filter(k => keep.has(k.pid)) : kids;
+        // A filter is a request to see what matched; honouring a collapse on
+        // top of it would hide the very row somebody searched for.
+        const collapsed = !keep && collapsedPids.has(p.pid);
+        flat.push({ p, depth, kids: visibleKids.length, collapsed });
+        if (!collapsed) walk(visibleKids, depth + 1);
+      }
+    };
+    walk(roots, 0);
+
+    const cols = canKill ? 7 : 6;
+    document.getElementById("proc-body").innerHTML = flat.length === 0
+      ? `<tr><td class="empty" colspan="${cols}">no matches</td></tr>`
+      : flat.map(({ p, depth, kids, collapsed }) => {
+          const twist = kids > 0
+            ? `<span class="proc-twist" data-toggle="${escapeHtml(p.pid)}">${collapsed ? "▶" : "▼"}</span>`
+            : `<span class="proc-twist leaf">·</span>`;
+          const num = (v, dp) => (v == null ? "—" : Number(v).toFixed(dp));
+          return `<tr>
+            <td class="proc-name"${sx(`padding-left:${8 + depth * 16}px`)}>${twist} ${escapeHtml(p.name || "—")}${kids > 0 && collapsed ? ` <span class="u-c-text-muted u-fs-meta">(${escapeHtml(kids)})</span>` : ""}</td>
+            <td>${escapeHtml(String(p.pid))}</td>
+            <td>${escapeHtml(p.username || "—")}</td>
+            <td>${num(p.cpu_percent, 1)}</td>
+            <td>${num(p.mem_rss_mb, 0)}</td>
+            <td class="proc-cmd" title="${escapeHtml(p.cmdline || "")}">${escapeHtml(p.cmdline || "—")}</td>
+            ${canKill ? `<td><button class="proc-kill" data-kill="${escapeHtml(p.pid)}" data-name="${escapeHtml(p.name || "")}">Kill</button></td>` : ""}
+          </tr>`;
+        }).join("");
+
+    el.querySelectorAll("[data-toggle]").forEach(t => t.addEventListener("click", () => {
+      const pid = Number(t.dataset.toggle);
+      if (collapsedPids.has(pid)) collapsedPids.delete(pid); else collapsedPids.add(pid);
+      draw();
+    }));
+    el.querySelectorAll("[data-kill]").forEach(b => b.addEventListener("click", () => {
+      killProcessHere(el, Number(b.dataset.kill), b.dataset.name, b);
+    }));
+  }
+
+  document.getElementById("proc-search").addEventListener("input", (ev) => {
+    procFilter = ev.target.value;
+    draw();
+  });
+  document.getElementById("proc-expand").addEventListener("click", () => { collapsedPids.clear(); draw(); });
+  document.getElementById("proc-collapse").addEventListener("click", () => {
+    for (const pid of children.keys()) collapsedPids.add(pid);
+    draw();
+  });
+  document.getElementById("proc-live").addEventListener("click", () => liveProcessRefresh(el));
+  draw();
+}
+
+// buildProcessTree turns a flat snapshot into parents and children.
+//
+// Two things have to be survivable, because both happen on real machines:
+// a ppid naming a process that isn't in the snapshot (the parent exited, or
+// it's pid 0 on Windows), and a parent cycle. Anything unreachable from a
+// root is promoted to a root at the end, so a cycle costs you the nesting
+// for those rows and nothing else — no process ever disappears from the
+// list because of how it was parented.
+function buildProcessTree(rows) {
+  const byPid = new Map();
+  for (const p of rows) if (!byPid.has(p.pid)) byPid.set(p.pid, p);
+
+  const children = new Map();
+  const roots = [];
+  for (const p of rows) {
+    const parent = p.ppid && p.ppid !== p.pid ? byPid.get(p.ppid) : null;
+    if (!parent) { roots.push(p); continue; }
+    if (!children.has(p.ppid)) children.set(p.ppid, []);
+    children.get(p.ppid).push(p);
+  }
+
+  const byLoad = (a, b) => (b.cpu_percent || 0) - (a.cpu_percent || 0) ||
+    String(a.name || "").localeCompare(String(b.name || "")) || a.pid - b.pid;
+  roots.sort(byLoad);
+  for (const kids of children.values()) kids.sort(byLoad);
+
+  const seen = new Set();
+  const mark = (list) => {
+    for (const p of list) {
+      if (seen.has(p.pid)) continue;
+      seen.add(p.pid);
+      mark(children.get(p.pid) || []);
+    }
+  };
+  mark(roots);
+  const orphaned = rows.filter(p => !seen.has(p.pid));
+  if (orphaned.length > 0) {
+    orphaned.sort(byLoad);
+    for (const p of orphaned) {
+      // Detach it so the cycle can't be walked into from here.
+      const kids = children.get(p.ppid);
+      if (kids) children.set(p.ppid, kids.filter(k => k.pid !== p.pid));
+      roots.push(p);
+    }
+    mark(orphaned);
+  }
+  return { roots, children };
+}
+
+async function killProcessHere(el, pid, name, btn) {
+  const what = name ? `${name} (pid ${pid})` : `pid ${pid}`;
+  if (!confirm(`Kill ${what} on ${agent.hostname}?\n\nThis ends the process immediately — anything it hasn't saved is lost.`)) return;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/kill-process`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pid, name }),
+    });
+    const body = await resp.text();
+    if (!resp.ok) {
+      renderProcessTree(el, { tone: "bad", text: `Couldn't kill ${what}: ${body.trim()}` });
+      return;
+    }
+    let msg = "";
+    try { msg = (JSON.parse(body).message || "").trim(); } catch (_) {}
+    // The agent republishes the process list right after a kill; give that a
+    // moment to land so the redraw shows the process actually gone rather
+    // than the same snapshot with a scary-looking row still in it.
+    setTimeout(() => renderProcessTree(el, { tone: "ok", text: msg || `Killed ${what}.` }), 1500);
+  } catch (e) {
+    renderProcessTree(el, { tone: "bad", text: `Request failed: ${e.message}` });
+  }
+}
+
+// Every action mustra has taken against this device, whoever started it.
+async function renderActivity(el) {
+  let actions = [];
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/actions`);
+    if (!resp.ok) throw new Error(await resp.text());
+    actions = (await resp.json()).actions || [];
+  } catch (e) {
+    el.innerHTML = `<div class="empty">couldn't load activity: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  if (actions.length === 0) {
+    el.innerHTML = '<div class="empty">nothing has been run against this device yet</div>';
+    return;
+  }
+  const KIND = { patch_apply: "Patch job", catalog_install: "Software install", agent_deploy: "Agent deployment" };
+  const TONE = { succeeded: ["var(--ok-bg)", "var(--ok)"], failed: ["var(--off-bg)", "var(--off)"] };
+  el.innerHTML = `
+    <div class="table-scroll table-scroll-y">
+      <table>
+        <thead><tr><th>When</th><th>Action</th><th>Summary</th><th>Status</th><th>Started by</th><th>Detail</th></tr></thead>
+        <tbody>
+          ${actions.map(a => {
+            const [bg, fg] = TONE[a.status] || ["var(--surface-2)", "var(--text-muted)"];
+            return `<tr>
+              <td data-sort="${escapeHtml(a.started_at)}">${escapeHtml(fmtAgo(a.started_at))}</td>
+              <td>${escapeHtml(KIND[a.kind] || a.kind)}</td>
+              <td>${escapeHtml(a.summary)}</td>
+              <td><span class="sev-pill"${sx(`background:${bg};color:${fg}`)}>${escapeHtml(a.status)}</span></td>
+              <td>${escapeHtml(a.requested_by || "—")}</td>
+              <td class="u-ws-normal u-maxw-340 u-c-text-muted">${escapeHtml(a.detail || "")}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>`;
+  const dt = initDataTable(el.querySelector("table"), { storageKey: "endpoint-activity" });
+  if (dt) dt.refresh();
+}
+
+async function renderHardware(el) {
+  let payload;
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/hardware`);
+    if (resp.status === 404) {
+      el.innerHTML = '<div class="empty">This endpoint hasn\'t reported hardware yet — sensors publish on their own interval after an agent registers.</div>';
+      return;
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+    payload = await resp.json();
+  } catch (e) {
+    el.innerHTML = `<div class="empty">couldn't load that: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const hw = (payload.data || [])[0];
+  if (!hw) { el.innerHTML = '<div class="empty">nothing reported</div>'; return; }
+  const rows = HARDWARE_FIELDS
+    .filter(([k]) => hw[k] !== undefined && hw[k] !== "" && hw[k] !== 0)
+    .map(([k, label]) => [label, hw[k]]);
+  el.innerHTML = `
+    ${payload.collected_at ? `<p class="stale-note">Cached snapshot, collected ${escapeHtml(fmtAgo(payload.collected_at))}.</p>` : ""}
+    <div class="detail-grid"><div class="detail-group">${detailRows(rows)}</div></div>`;
+}
+
+// The Privileges tab answers "can mustra actually manage this machine?".
+// Running as root or LocalSystem is necessary but not sufficient — macOS
+// gates whole categories of access behind TCC, and a Windows token holds
+// privileges that stay disabled until enabled — so the agent measures what
+// it can do and this shows the gaps with the fix for each.
+async function renderPrivileges(el) {
+  let payload;
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/privileges`);
+    if (resp.status === 404) {
+      el.innerHTML = '<div class="empty">This endpoint hasn\'t reported its privileges yet — it\'s probably running an agent older than 0.5.0.</div>';
+      return;
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+    payload = await resp.json();
+  } catch (e) {
+    el.innerHTML = `<div class="empty">couldn't load that: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  // Tolerate both shapes for the same reason the server does: an agent
+  // predating the array fix publishes a bare object here.
+  const raw = payload.data;
+  const p = Array.isArray(raw) ? raw[0] : raw;
+  if (!p) { el.innerHTML = '<div class="empty">nothing reported</div>'; return; }
+
+  const banner = p.full_rights
+    ? `<div class="priv-banner ok">mustra has full administrative rights on this endpoint.</div>`
+    : `<div class="priv-banner bad">Something is limiting what mustra can do here.</div>`;
+
+  const limits = (p.limitations || []).map((lim, i) => `
+    <div class="priv-limit">
+      <div class="priv-limit-what">${escapeHtml(lim)}</div>
+      ${(p.remedy || [])[i] ? `<div class="priv-limit-fix">Fix: ${escapeHtml(p.remedy[i])}</div>` : ""}
+    </div>`).join("");
+
+  const rows = [
+    ["Runs as", p.account || "—"],
+    ["Elevated", p.elevated ? "yes" : "no"],
+    ["Service manager", p.service || "—"],
+  ];
+  if (p.integrity_level) rows.push(["Integrity level", p.integrity_level]);
+  if (p.full_disk_access !== undefined && agent.os === "darwin") {
+    rows.push(["Full Disk Access", p.full_disk_access ? "granted" : "not granted"]);
+    rows.push(["System Integrity Protection", p.sip_enabled ? "enabled" : "disabled"]);
+    rows.push(["MDM enrolled", p.mdm_enrolled ? "yes" : "no"]);
+  }
+  if (p.cap_effective) rows.push(["Effective capabilities", p.cap_effective]);
+
+  el.innerHTML = `
+    ${payload.collected_at ? `<p class="stale-note">Cached snapshot, collected ${escapeHtml(fmtAgo(payload.collected_at))}.</p>` : ""}
+    ${banner}
+    ${limits ? `<div class="priv-limits">${limits}</div>` : ""}
+    <div class="detail-grid"><div class="detail-group">${detailRows(rows)}</div></div>
+    ${(p.enabled_privileges || []).length ? `
+      <div class="detail-group u-mt-16">
+        <h3>Windows privileges enabled</h3>
+        <div class="priv-chips">${p.enabled_privileges.map(x => `<span class="priv-chip on">${escapeHtml(x)}</span>`).join("")}</div>
+      </div>` : ""}
+    ${(p.missing_privileges || []).length ? `
+      <div class="detail-group u-mt-12">
+        <h3>Not held by this token</h3>
+        <div class="priv-chips">${p.missing_privileges.map(x => `<span class="priv-chip off">${escapeHtml(x)}</span>`).join("")}</div>
+      </div>` : ""}`;
+}
+
+async function renderRisk(el) {
+  let data;
+  try {
+    const resp = await fetch("/api/risk");
+    if (!resp.ok) throw new Error(await resp.text());
+    data = await resp.json();
+  } catch (e) {
+    el.innerHTML = `<div class="empty">couldn't load risk data: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const rows = (data.vulnerabilities || []).filter(v => v.agent_id === agentId);
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="empty">no known vulnerabilities for this endpoint in the last scan${data.last_scan_at ? " (" + escapeHtml(fmtAgo(data.last_scan_at)) + ")" : ""}</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <p class="stale-note">${escapeHtml(rows.length)} match(es) from the last scan${data.last_scan_at ? ", " + escapeHtml(fmtAgo(data.last_scan_at)) : ""}. Full detail and remediation live on the <a href="/risk">Risk &amp; Compliance</a> page.</p>
+    <div class="table-scroll table-scroll-y">
+      <table>
+        <thead><tr><th>Severity</th><th>Package</th><th>Installed</th><th>Fixed in</th><th>CVE</th></tr></thead>
+        <tbody>
+          ${rows.map(v => `
+            <tr>
+              <td><span class="sev-pill ${escapeHtml(v.severity || "unknown")}">${escapeHtml(v.severity || "unknown")}</span></td>
+              <td>${escapeHtml(v.package_name)}</td>
+              <td>${escapeHtml(v.package_version)}</td>
+              <td>${escapeHtml(v.fixed_version || "—")}</td>
+              <td>${escapeHtml((v.cve_ids && v.cve_ids.length ? v.cve_ids : [v.vuln_id]).join(", "))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+  const dt = initDataTable(document.querySelector("#ep-content table"), { storageKey: "endpoint-risk" });
+  if (dt) dt.refresh();
+}
+
+loadAgent();
+
+// Security posture: the endpoint's own protective controls, and the
+// BitLocker recovery keys escrowed from it. Reading a key is gated and
+// audited server-side; the button only appears when the viewer may.
+async function renderPosture(el) {
+  let payload;
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sensor/security_posture`);
+    if (resp.status === 404) { el.innerHTML = '<div class="empty">This endpoint hasn\'t reported its security posture yet — the sensor arrived with agent 0.45.1 and publishes on the sensor interval.</div>'; return; }
+    if (!resp.ok) throw new Error(await resp.text());
+    payload = await resp.json();
+  } catch (e) { el.innerHTML = `<div class="empty">couldn't load that: ${escapeHtml(e.message)}</div>`; return; }
+  const p = (payload.data || [])[0];
+  if (!p) { el.innerHTML = '<div class="empty">nothing reported</div>'; return; }
+  const on = v => v ? "yes" : "no";
+  const groups = [
+    ["Firewall", [["Engine", p.firewall_engine], ["Enabled", on(p.firewall_enabled)],
+      ...(p.firewall_profiles || []).map(f => [f.name + " profile", `${f.enabled ? "on" : "off"} · inbound ${f.default_inbound || "?"} · outbound ${f.default_outbound || "?"} · log dropped ${on(f.log_blocked)}`])]],
+    ["Disk encryption", [["Engine", p.encryption_engine], ["OS volume encrypted", on(p.os_volume_encrypted)],
+      ...(p.volumes || []).map(v => [v.mount + (v.type ? " (" + v.type + ")" : ""), `${v.status}${v.protection_on ? ", protection on" : ", protection off"}${v.method ? " · " + v.method : ""}${v.percent ? " · " + v.percent + "%" : ""}${(v.protectors || []).length ? " · protectors: " + v.protectors.join(", ") : ""}`])]],
+    ["Antimalware", [["Engine", p.antivirus_engine], ["Service", on(p.antivirus_enabled)], ["Real-time protection", on(p.antivirus_realtime)],
+      ["Signature age", p.antivirus_signature_age_hours >= 0 ? p.antivirus_signature_age_hours + " h" : "unknown"], ["Cloud protection", p.antivirus_cloud_level || "—"],
+      ["Tamper protection", on(p.antivirus_tamper_protected)], ["Last quick scan", p.antivirus_last_quick_scan ? fmtAgo(p.antivirus_last_quick_scan) : "—"]]],
+    ["Application control", [["Engine", p.app_control_engine], ["Mode", p.app_control_mode],
+      ...(p.app_control_collections || []).map(c => [c.type + " rules", `${c.mode} · ${c.rules} rule(s)`])]],
+  ];
+  const sh = p.remote_shadow;
+  if (sh) groups.push(["Remote shadowing", [["Ready", sh.ready ? "yes" : "no — " + sh.reason],
+    ["Rule", `${(sh.mode || "").replaceAll("_", " ")} (${sh.source === "policy" ? "set by policy" : "Windows default"})`],
+    ["Shadow firewall rule", on(sh.firewall_rule)], ["Remote Desktop service", sh.service ? "running" : "stopped"]]]);
+  let html = `${payload.collected_at ? `<p class="stale-note">Cached snapshot, collected ${escapeHtml(fmtAgo(payload.collected_at))}.</p>` : ""}
+    <div class="detail-grid">${groups.map(([title, rows]) => `<div class="detail-group"><h4 class="u-m-0-0-6 u-fs-12 u-c-text-muted u-tt-upper u-ls-005em">${escapeHtml(title)}</h4>${detailRows(rows)}</div>`).join("")}</div>
+    ${(p.errors || []).length ? `<p class="stale-note">Probe errors: ${escapeHtml(p.errors.join("; "))}</p>` : ""}
+    <div id="ep-keys" class="u-mt-14"></div>`;
+  el.innerHTML = html;
+  try {
+    const kr = await fetch(`/api/enforce/recovery-keys?agent=${encodeURIComponent(agentId)}`);
+    if (!kr.ok) return;
+    const kd = await kr.json();
+    const keys = kd.keys || [];
+    const host = document.getElementById("ep-keys");
+    if (!keys.length) { host.innerHTML = kd.escrow_available ? '<p class="stale-note">No BitLocker recovery key escrowed for this endpoint.</p>' : '<p class="stale-note">Recovery-key escrow is off: the server has no credential encryption key configured.</p>'; return; }
+    host.innerHTML = `<h4 class="u-m-0-0-6 u-fs-12 u-c-text-muted u-tt-upper u-ls-005em">Escrowed BitLocker recovery keys</h4>` +
+      keys.map(k => `<div class="detail-row"><span class="k">${escapeHtml(k.mount)} · ${escapeHtml(k.key_id)}</span><span class="v">escrowed ${escapeHtml(fmtAgo(k.first_escrowed))}, last confirmed ${escapeHtml(fmtAgo(k.last_seen))} ${kd.can_reveal ? `<button class="tiny" data-reveal="${escapeHtml(k.key_id)}">Reveal</button> <code data-pw="${escapeHtml(k.key_id)}"></code>` : '<span class="u-c-text-muted">(reveal needs enforce.recovery_keys)</span>'}</span></div>`).join("");
+    host.querySelectorAll("[data-reveal]").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("Reveal this recovery password? The read is recorded in the audit log with your name.")) return;
+      const r = await fetch(`/api/enforce/recovery-keys/${encodeURIComponent(agentId)}/${encodeURIComponent(b.dataset.reveal)}/reveal`, { method: "POST" });
+      const t = await r.text();
+      if (!r.ok) { alert(t); return; }
+      host.querySelector(`[data-pw="${CSS.escape(b.dataset.reveal)}"]`).textContent = JSON.parse(t).password;
+      b.remove();
+    }));
+  } catch (e) {}
+}
+
+
+// ---- attributes ----------------------------------------------------------
+// What an operator knows about this endpoint that no sensor reports. Each
+// attribute is also a targeting key, so what is set here is what a
+// computer group can match on with attr.<name>.
+async function renderAttributes(el) {
+  const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}/attributes`);
+  if (!r.ok) { el.innerHTML = `<p class="hint">${escapeHtml(await r.text())}</p>`; return; }
+  const d = await r.json();
+  const attrs = d.attributes || [], values = d.values || {};
+  if (!attrs.length) {
+    el.innerHTML = `<div class="panel"><p class="hint">No attributes are defined yet. Create them under
+      <a href="/agents#assets">Client Management → Assets</a>; each one becomes a targeting key like <code>attr.owner</code>
+      and a report column like <code>attr_owner</code>.</p></div>`;
+    return;
+  }
+  const field = a => {
+    const v = values[a.id] || "";
+    if (a.kind === "select") {
+      return `<select data-attr="${escapeHtml(a.id)}"><option value=""></option>${(a.options || [])
+        .map(o => `<option value="${escapeHtml(o)}" ${o === v ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select>`;
+    }
+    if (a.kind === "boolean") {
+      return `<select data-attr="${escapeHtml(a.id)}"><option value=""></option>
+        <option value="true" ${v === "true" ? "selected" : ""}>true</option>
+        <option value="false" ${v === "false" ? "selected" : ""}>false</option></select>`;
+    }
+    const type = a.kind === "number" ? "number" : a.kind === "date" ? "date" : "text";
+    return `<input type="${type}" data-attr="${escapeHtml(a.id)}" value="${escapeHtml(v)}">`;
+  };
+  el.innerHTML = `<div class="panel">
+    <div class="panel-header"><h2>Attributes</h2><span class="scan-status" id="at-status"></span></div>
+    <p class="hint">Set here, matched in a computer group as <code>attr.&lt;name&gt;</code>, exported and grouped in reports as <code>attr_&lt;name&gt;</code>. Clearing a field removes it rather than storing a blank.</p>
+    <div class="form-grid">
+      ${attrs.map(a => `<div class="field"><label>${escapeHtml(a.label)} <code class="u-fs-meta">attr.${escapeHtml(a.name)}</code></label>
+        ${field(a)}${a.description ? `<span class="hint u-m-3-0-0 u-d-block">${escapeHtml(a.description)}</span>` : ""}</div>`).join("")}
+    </div>
+    <button class="tiny go" id="at-save">Save attributes</button>
+  </div>`;
+  document.getElementById("at-save").addEventListener("click", async () => {
+    const body = {};
+    el.querySelectorAll("[data-attr]").forEach(f => { body[f.dataset.attr] = f.value; });
+    const status = document.getElementById("at-status");
+    status.textContent = "saving…";
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/attributes`,
+      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    status.textContent = res.ok ? "saved" : await res.text();
+  });
+}
+</script>
+</body>
+</html>

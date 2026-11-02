@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API reference — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+  .api-in { padding: 7px 10px; min-height: 34px; border-radius: var(--radius-md); border: 1px solid var(--border-input);
+    background: var(--input-bg); color: var(--text); font: inherit; font-size: 13px; }
+  .api-in:focus { border-color: var(--focus); outline: none; }
+  .api-in.mono, textarea.api-in { font-family: var(--mono); font-size: 12.5px; }
+  .api-in.bad { border-color: var(--off); }
+  .head-btn { width: auto; padding: 7px 14px; font-size: 12.5px; min-height: 0; }
+
+  /* The spec card: the OpenAPI document as its own thing to grab, not a
+     link buried in a sentence. */
+  .spec-card { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 14px; background: var(--surface-2); }
+  .spec-card .spec-meta { flex: 1 1 260px; min-width: 0; }
+  .spec-card .spec-title { font-weight: 600; font-size: 13.5px; }
+  .spec-card .spec-url { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+  .spec-card .spec-url code { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+  .spec-card .spec-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .spec-card .seg button { padding: 4px 10px; font-size: 12px; }
+
+  .api-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 4px 0 14px; }
+  .api-bar #api-q { flex: 1 1 280px; }
+  .api-bar label { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--text-muted); }
+  .api-bar #api-base { width: 260px; }
+  .api-tag { margin-top: 18px; }
+  .api-tag h2 { font-size: 14px; text-transform: none; margin: 0 0 6px; }
+  .op { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: var(--surface-1, transparent); }
+  .op summary { display: flex; gap: 10px; align-items: baseline; padding: 7px 10px; cursor: pointer; list-style: none; }
+  .op summary::-webkit-details-marker { display: none; }
+  .op[open] summary { border-bottom: 1px solid var(--border); }
+  .m { font-family: var(--mono); font-size: 11.5px; font-weight: 700; min-width: 54px; text-align: center; border-radius: 5px; padding: 1px 6px; }
+  .m.get { background: color-mix(in srgb, #3b82f6 20%, transparent); color: #60a5fa; }
+  .m.post { background: color-mix(in srgb, #22c55e 20%, transparent); color: #4ade80; }
+  .m.put, .m.patch { background: color-mix(in srgb, #f59e0b 20%, transparent); color: #fbbf24; }
+  .m.delete { background: color-mix(in srgb, #ef4444 20%, transparent); color: #f87171; }
+  /* The dark-theme method colours are too pale to read on white. */
+  :root[data-theme="light"] .m.get { color: #1d4ed8; }
+  :root[data-theme="light"] .m.post { color: #15803d; }
+  :root[data-theme="light"] :is(.m.put, .m.patch) { color: #b45309; }
+  :root[data-theme="light"] .m.delete { color: #b91c1c; }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) .m.get { color: #1d4ed8; }
+    :root:not([data-theme="dark"]) .m.post { color: #15803d; }
+    :root:not([data-theme="dark"]) :is(.m.put, .m.patch) { color: #b45309; }
+    :root:not([data-theme="dark"]) .m.delete { color: #b91c1c; }
+  }
+  .p { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .s { color: var(--text-muted); font-size: 12.5px; margin-left: auto; text-align: right; }
+  .op-body { padding: 10px 12px 12px; font-size: 12.5px; }
+  .op-body > p { margin: 0 0 10px; }
+
+  /* Request builder: inputs on the left, the generated code on the right;
+     stacked on narrow screens. */
+  .builder { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 1.6fr); gap: 14px; }
+  @media (max-width: 900px) { .builder { grid-template-columns: 1fr; } }
+  .b-sec { margin-bottom: 12px; }
+  .b-sec > h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: 0 0 6px; font-weight: 600; }
+  .b-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .b-row.param { grid-template-columns: minmax(70px, auto) 1fr; }
+  .b-row.param > span { font-family: var(--mono); font-size: 12px; }
+  .b-row .api-in { width: 100%; min-width: 0; }
+  .b-sec textarea.api-in { width: 100%; min-height: 110px; resize: vertical; }
+  .b-err { color: var(--off); font-size: 12px; margin-top: 4px; }
+  .code-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 6px; }
+  .code-head .seg button { padding: 4px 10px; font-size: 12px; }
+  .code-box { position: relative; }
+  .code-box pre { background: var(--surface-2); padding: 10px 12px; border-radius: 6px; overflow-x: auto; font-size: 12px;
+    margin: 0; max-height: 460px; font-family: var(--mono); line-height: 1.5; }
+
+  /* Declared query parameters: name, then the input that fits its type,
+     then what it does. */
+  .b-row.qd { grid-template-columns: minmax(90px, auto) 1fr; }
+  .b-row.qd > span:first-child { font-family: var(--mono); font-size: 12px; }
+  .b-row.qd input[type="checkbox"] { justify-self: start; }
+  .b-desc { grid-column: 2; font-size: 11.5px; color: var(--text-muted); margin-top: -2px; }
+  .b-tools { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 4px; }
+  .flag { display: inline-block; font-size: 10.5px; line-height: 1.5; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border);
+    color: var(--text-muted); margin-right: 4px; white-space: nowrap; font-family: inherit; }
+  .flag.req { border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); }
+
+  /* Schemas: a field table per object, nested objects opened on demand. */
+  .schema { margin-top: 8px; }
+  .schema > summary, .sub-ref > summary { cursor: pointer; font-size: 12px; color: var(--text-muted); }
+  .f-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 4px 0; }
+  .f-table th, .f-table td { padding: 4px 6px; height: auto; font-size: 12px; white-space: normal; vertical-align: top;
+    border-bottom: 1px solid var(--border); }
+  /* A field's name stays whole beside a long description (break-word keeps
+     its column wide enough); a type or a long word in the text gives way. */
+  .f-table td:first-child { font-family: var(--mono); overflow-wrap: break-word; }
+  .f-table td.t { font-family: var(--mono); color: var(--text-muted); overflow-wrap: anywhere; }
+  .f-table td.d { overflow-wrap: anywhere; }
+  .f-table td.d, .type-desc { white-space: pre-line; }
+  .type-desc { margin: 4px 0 2px; }
+  .f-table tbody tr:hover { background: none; }
+  .f-table tr.sub > td { padding: 0 0 4px 14px; border-bottom: 1px solid var(--border); font-family: inherit; }
+  .sub-ref { margin: 2px 0 0; }
+  .b-sec > input.api-in { width: 100%; }
+  .b-sec.resps { margin-top: 12px; }
+  .resp { margin: 4px 0; }
+  .resp-line { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+  .resp-code { font-family: var(--mono); font-weight: 700; }
+  .resp-ex { background: var(--surface-2); padding: 8px 10px; border-radius: 6px; overflow: auto; font-size: 12px;
+    margin: 4px 0 0; max-height: 360px; font-family: var(--mono); line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="api-page-head"></div>
+      <div class="panel">
+        <div class="spec-card">
+          <div class="spec-meta">
+            <div class="spec-title">OpenAPI <span id="spec-oas">3.2</span> specification <span class="hint" id="spec-version"></span></div>
+            <div class="spec-url"><code id="spec-url"></code></div>
+            <div class="hint">Import it, as JSON or YAML, into Postman, Insomnia, Bruno or any OpenAPI code generator. It is generated from the running server, so it is always current.</div>
+          </div>
+          <div class="spec-actions">
+            <div class="seg" role="radiogroup" aria-label="Spec format">
+              <button type="button" role="radio" data-spec-format="json">JSON</button>
+              <button type="button" role="radio" data-spec-format="yaml">YAML</button>
+            </div>
+            <button type="button" class="tiny" id="spec-download">Download</button>
+            <button type="button" class="tiny" id="spec-copy-url">Copy URL</button>
+            <button type="button" class="tiny" id="spec-copy">Copy</button>
+            <button type="button" class="tiny" id="spec-open">Open raw</button>
+          </div>
+        </div>
+        <p class="hint">
+          Call the API with a token from <a href="/settings#tokens">Administration → API Tokens</a>, sent as
+          <code>Authorization: Bearer &lt;token&gt;</code>; a token can do only what its permissions allow. The examples read it from the
+          <code>MUSTRA_TOKEN</code> environment variable so it never ends up pasted in a script. Open a route to build a request:
+          fill in its path parameters, query string and body, pick a language and copy the code. Where the spec describes a
+          route, its query parameters and body fields are filled in from the schema and its responses are listed.
+        </p>
+        <div class="api-bar">
+          <input type="search" class="api-in" id="api-q" placeholder="Search: agents, patches, POST, certificates…" aria-label="Search routes">
+          <label>Base URL <input class="api-in mono" id="api-base" spellcheck="false"></label>
+          <span class="hint" id="api-count"></span>
+        </div>
+        <div id="api-list"><p class="hint">loading…</p></div>
+      </div>
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+<script>
+const SPEC_PATH = "/api/openapi.json";
+// The spec's formats, as served. The page reads the JSON; the YAML is
+// fetched only to hand over, so it is the server's own and not a
+// conversion made here.
+const SPEC_FORMATS = {
+  json: { label: "JSON", ext: "json", path: SPEC_PATH, type: "application/json" },
+  yaml: { label: "YAML", ext: "yaml", path: "/api/openapi.yaml", type: "application/yaml" },
+};
+const LANGS = [
+  { id: "curl", label: "cURL" },
+  { id: "powershell", label: "PowerShell" },
+  { id: "python", label: "Python" },
+  { id: "javascript", label: "JavaScript" },
+  { id: "typescript", label: "TypeScript" },
+  { id: "go", label: "Go" },
+  { id: "csharp", label: "C#" },
+];
+const WRITE_METHODS = new Set(["post", "put", "patch"]);
+
+let spec = null;
+let specText = "";
+const ops = {};         // operationId → { method, path, op }
+const state = {};       // operationId → builder inputs, kept across searches
+const lsGet = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+let lang = lsGet("mustra-api-lang", "curl");
+if (!LANGS.some(l => l.id === lang)) lang = "curl";
+let specFormat = lsGet("mustra-api-spec-format", "json");
+if (!SPEC_FORMATS[specFormat]) specFormat = "json";
+let specYAML = null;    // a promise of the YAML text, once asked for
+
+const baseInput = document.getElementById("api-base");
+baseInput.value = lsGet("mustra-api-base", location.origin);
+applySpecFormat();
+
+document.addEventListener("mustra:user", async () => {
+  renderPageHead("api-page-head", "/api-docs", { title: "API reference" });
+  document.getElementById("api-page-head-actions").innerHTML =
+    `<button type="button" class="primary head-btn" id="head-download">Download OpenAPI spec</button>`;
+  document.getElementById("head-download").addEventListener("click", downloadSpec);
+  const r = await fetch(SPEC_PATH);
+  if (!r.ok) { document.getElementById("api-list").innerHTML = `<p class="hint">Could not load the spec (HTTP ${escapeHtml(r.status)}).</p>`; return; }
+  specText = await r.text();
+  spec = JSON.parse(specText);
+  document.getElementById("spec-oas").textContent = spec.openapi;
+  document.getElementById("spec-version").textContent = `· Mustra ${spec.info.version}`;
+  for (const [path, byMethod] of Object.entries(spec.paths)) {
+    for (const [method, op] of Object.entries(byMethod)) ops[op.operationId] = { method, path, op };
+  }
+  render();
+  const want = decodeURIComponent(location.hash.slice(1));
+  const el = want && document.getElementById("op-" + want);
+  if (el) { el.open = true; el.scrollIntoView({ block: "start" }); }
+});
+
+// --- the spec itself -------------------------------------------------------
+
+// applySpecFormat points the card's URL and buttons at the chosen format.
+// Choosing YAML starts fetching it, so a later copy is not left waiting
+// on the network past the click that allowed it.
+function applySpecFormat() {
+  const f = SPEC_FORMATS[specFormat];
+  document.getElementById("spec-url").textContent = location.origin + f.path;
+  document.getElementById("spec-download").textContent = `Download ${f.label}`;
+  document.getElementById("spec-copy").textContent = `Copy ${f.label}`;
+  document.querySelectorAll("[data-spec-format]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.specFormat === specFormat)));
+  if (specFormat === "yaml") specFileText().catch(() => {});
+}
+document.querySelectorAll("[data-spec-format]").forEach(b => b.addEventListener("click", () => {
+  specFormat = b.dataset.specFormat;
+  lsSet("mustra-api-spec-format", specFormat);
+  applySpecFormat();
+}));
+
+// specFileText is the spec in the chosen format, as a file holds it.
+function specFileText() {
+  if (specFormat === "json") return Promise.resolve(JSON.stringify(spec, null, 2));
+  if (!specYAML) {
+    specYAML = fetch(SPEC_FORMATS.yaml.path).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.text();
+    });
+    specYAML.catch(() => { specYAML = null; }); // ask again next time
+  }
+  return specYAML;
+}
+// The format is fixed at the click: switching while the YAML is still on
+// its way must not name or label that YAML as JSON.
+function withSpecText(use) {
+  if (!specText) return;
+  const f = SPEC_FORMATS[specFormat];
+  specFileText().then(text => use(text, f), e => showToast(`Could not load the ${f.label} spec (${e.message})`, "error"));
+}
+function downloadSpec() {
+  withSpecText((text, f) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: f.type }));
+    a.download = `mustra-openapi-${spec.info.version}.${f.ext}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+}
+function copy(text, what) {
+  navigator.clipboard.writeText(text).then(() => showToast(`${what} copied`, "ok"), () => showToast("Could not copy to the clipboard", "error"));
+}
+document.getElementById("spec-download").addEventListener("click", downloadSpec);
+document.getElementById("spec-copy-url").addEventListener("click", () => copy(location.origin + SPEC_FORMATS[specFormat].path, "Spec URL"));
+document.getElementById("spec-copy").addEventListener("click", () => withSpecText((text, f) => copy(text, `OpenAPI ${f.label}`)));
+document.getElementById("spec-open").addEventListener("click", () => {
+  if (specFormat === "json") { window.open(SPEC_PATH, "_blank", "noopener"); return; }
+  // A browser saves application/yaml rather than showing it, so the
+  // server's YAML opens as plain text instead.
+  withSpecText(text => {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    window.open(url, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  });
+});
+
+// --- schemas ---------------------------------------------------------------
+
+// The spec's JSON Schema: named types are components referenced by $ref,
+// a value that may be null is type [T, "null"] or anyOf [T, null], a
+// read-only or write-only reference is wrapped in a one-element allOf,
+// and a route that requires more of a shared type than the type does
+// adds allOf [{$ref}, {required: […]}].
+const refName = ref => ref.slice(ref.lastIndexOf("/") + 1);
+const component = name => (spec.components.schemas || {})[name] || {};
+
+// resolve follows references and wrappers to the schema that says what a
+// value is, keeping what the wrappers added along the way.
+function resolve(s) {
+  const out = { schema: s || {}, name: "", nullable: false, readOnly: false, writeOnly: false, required: [] };
+  for (let i = 0; i < 20; i++) {
+    const c = out.schema;
+    if (c.readOnly) out.readOnly = true;
+    if (c.writeOnly) out.writeOnly = true;
+    if (c.$ref) { out.name = refName(c.$ref); out.schema = component(out.name); continue; }
+    if (c.allOf) {
+      const base = c.allOf.find(x => x.$ref || x.type || x.properties) || {};
+      for (const x of c.allOf) if (x !== base) out.required.push(...(x.required || []));
+      out.schema = base;
+      continue;
+    }
+    if (c.anyOf) {
+      const rest = c.anyOf.filter(x => x.type !== "null");
+      if (rest.length === 1) { out.nullable = out.nullable || rest.length < c.anyOf.length; out.schema = rest[0]; continue; }
+    }
+    break;
+  }
+  const types = [].concat(out.schema.type || []);
+  out.nullable = out.nullable || types.includes("null");
+  out.type = types.find(t => t !== "null") || "";
+  return out;
+}
+
+// typeLabel is a schema in a few words: string (date-time), Agent[],
+// map<string, integer>, "a" | "b".
+function typeLabel(s) {
+  const r = resolve(s);
+  let label;
+  if (r.name) label = r.name;
+  else if (r.schema.anyOf) label = r.schema.anyOf.map(typeLabel).join(" | ");
+  else if (r.schema.enum) label = r.schema.enum.map(v => JSON.stringify(v)).join(" | ");
+  else if (r.type === "array") { const item = typeLabel(r.schema.items); label = (item.includes(" ") ? `(${item})` : item) + "[]"; }
+  else if (r.type === "object" && !r.schema.properties && r.schema.additionalProperties) label = `map<string, ${/* safe-html: plain text; escaped where it is shown */ typeLabel(r.schema.additionalProperties)}>`;
+  else if (r.type === "string" && (r.schema.format || r.schema.contentEncoding)) label = `string (${r.schema.format || r.schema.contentEncoding})`;
+  else label = r.type || "any";
+  return r.nullable ? label + " | null" : label;
+}
+
+// requiredOf is what a resolved object requires: its own required
+// fields and those a route adds.
+const requiredOf = r => [...new Set([...(r.schema.required || []), ...(r.required || [])])];
+
+// Required fields first, then the rest alphabetically, as the spec lists them.
+function orderedFields(schema, required) {
+  required = required || schema.required || [];
+  return [...required, ...Object.keys(schema.properties || {}).filter(k => !required.includes(k)).sort()];
+}
+
+// example is a value to start editing from: every top-level field the
+// client may send, required fields of nested objects, and a typed
+// placeholder for each. A list or map starts empty (any of them may be
+// null on the wire); any other field that may be null starts as null,
+// which is what "leave it unchanged" means to the handlers that take one.
+function example(s, depth) {
+  const r = resolve(s);
+  if (r.nullable && r.type === "array") return [];
+  if (r.nullable && r.type === "object" && !r.schema.properties) return {};
+  if (r.nullable) return null;
+  if (r.schema.enum) return r.schema.enum[0];
+  switch (r.type) {
+    case "string": return r.schema.format === "date-time" ? new Date().toISOString().replace(/\.\d+Z$/, "Z") : "";
+    case "integer": case "number": return 0;
+    case "boolean": return false;
+    case "array": return [];
+    case "object": {
+      const props = r.schema.properties;
+      if (!props || depth > 2) return {};
+      const required = new Set(requiredOf(r));
+      const out = {};
+      for (const k of orderedFields(r.schema, requiredOf(r))) {
+        if (resolve(props[k]).readOnly || (depth > 0 && !required.has(k))) continue;
+        out[k] = example(props[k], depth + 1);
+      }
+      return out;
+    }
+  }
+  return null;
+}
+
+// objectName is the component a field holds, directly or as a list, when
+// it has fields of its own to show.
+function objectName(s) {
+  let r = resolve(s);
+  if (r.type === "array") r = resolve(r.schema.items);
+  return r.name && r.schema.properties ? r.name : "";
+}
+
+// fieldsHTML is a table of an object's fields (or a list's items'). A
+// field holding another component opens its own table on demand; seen
+// stops a type that contains itself from opening forever.
+function fieldsHTML(s, seen) {
+  let r = resolve(s);
+  if (r.type === "array") r = resolve(r.schema.items);
+  const props = r.schema.properties;
+  if (!props || !Object.keys(props).length) return "";
+  const required = new Set(requiredOf(r));
+  const rows = orderedFields(r.schema, requiredOf(r)).map(k => {
+    const p = resolve(props[k]);
+    const nested = objectName(props[k]);
+    const sub = nested && !seen.includes(nested) && seen.length < 4
+      ? `<tr class="sub"><td colspan="3"><details class="sub-ref" data-ref="${escapeHtml(nested)}" data-seen="${escapeHtml([...seen, nested].join(" "))}"><summary>${escapeHtml(k)}: ${escapeHtml(nested)} fields</summary></details></td></tr>` : "";
+    const flags = (required.has(k) ? '<span class="flag req">required</span>' : "") +
+      (p.readOnly ? '<span class="flag">read-only</span>' : "") + (p.writeOnly ? '<span class="flag">write-only</span>' : "");
+    // A field without words of its own shows its schema's (a unit), but
+    // not a whole type's doc comment: that opens with the type's table.
+    const desc = props[k].description || (p.name ? "" : p.schema.description) || "";
+    return `<tr><td>${escapeHtml(k)}</td><td class="t">${escapeHtml(typeLabel(props[k]))}</td>` +
+      `<td class="d">${/* safe-html: fixed markup */ flags}${escapeHtml(desc)}</td></tr>${/* safe-html: built from escaped values above */ sub}`;
+  });
+  return `<table class="f-table"><thead><tr><th>Field</th><th>Type</th><th></th></tr></thead><tbody>${/* safe-html: rows escape their values */ rows.join("")}</tbody></table>`;
+}
+
+// A described schema has fields, a type or a reference: the generic
+// {"type": "object"} of an undeclared route says nothing.
+const described = s => !!s && !(s.type === "object" && Object.keys(s).length === 1);
+
+// --- list ------------------------------------------------------------------
+
+document.getElementById("api-q").addEventListener("input", render);
+baseInput.addEventListener("input", () => {
+  lsSet("mustra-api-base", baseInput.value.trim() || location.origin);
+  document.querySelectorAll(".op[open]").forEach(d => updateCode(d.dataset.op));
+});
+
+function render() {
+  if (!spec) return;
+  const q = document.getElementById("api-q").value.trim().toLowerCase();
+  const byTag = {};
+  let n = 0;
+  for (const [id, { method, path, op }] of Object.entries(ops)) {
+    const hay = `${method} ${path} ${op.summary} ${op.tags.join(" ")} ${op.description}`.toLowerCase();
+    if (q && !q.split(/\s+/).every(w => hay.includes(w))) continue;
+    (byTag[op.tags[0]] = byTag[op.tags[0]] || []).push(id);
+    n++;
+  }
+  document.getElementById("api-count").textContent = `${n} operation(s)`;
+  document.getElementById("api-list").innerHTML = Object.keys(byTag).sort().map(tag => `
+    <div class="api-tag"><h2>${escapeHtml(tag)}</h2>
+    ${byTag[tag].sort((a, b) => ops[a].path.localeCompare(ops[b].path) || ops[a].method.localeCompare(ops[b].method)).map(id => {
+      const { method, path, op } = ops[id];
+      const open = state[id] && state[id].open;
+      return `<details class="op" id="op-${escapeHtml(id)}" data-op="${escapeHtml(id)}"${open ? " open" : ""}>
+        <summary><span class="m ${escapeHtml(method)}">${escapeHtml(method.toUpperCase())}</span><span class="p">${escapeHtml(path)}</span><span class="s">${escapeHtml(op.summary)}</span></summary>
+        <div class="op-body">${open ? bodyHTML(id) : ""}</div></details>`;
+    }).join("")}</div>`).join("") || '<p class="hint">nothing matches</p>';
+  document.querySelectorAll(".op[open]").forEach(d => updateCode(d.dataset.op));
+}
+
+// requestKind is what a route's body is: JSON with its schema, multipart
+// form fields, a raw file of some media type, or nothing at all.
+function requestKind(op) {
+  const content = op.requestBody && op.requestBody.content;
+  if (!content) return { kind: "none" };
+  const optional = op.requestBody.required === false;
+  if (content["application/json"]) {
+    const media = content["application/json"];
+    return { kind: "json", schema: media.schema, example: media.example, optional };
+  }
+  if (content["multipart/form-data"]) {
+    const s = content["multipart/form-data"].schema || {};
+    const required = new Set(s.required || []);
+    return { kind: "form", optional, fields: Object.entries(s.properties || {}).map(([name, p]) =>
+      ({ name, file: p.contentMediaType !== undefined, required: required.has(name), desc: p.description || "" })) };
+  }
+  return { kind: "raw", type: Object.keys(content)[0] };
+}
+
+// exampleText is the body a JSON route starts with: its own example when
+// the spec has one, otherwise one made from the schema.
+const exampleText = req => req.example !== undefined ? JSON.stringify(req.example, null, 2)
+  : described(req.schema) ? JSON.stringify(example(req.schema, 0), null, 2) : "{}";
+
+function stateFor(id) {
+  if (!state[id]) {
+    const { op } = ops[id];
+    const params = op.parameters || [];
+    const req = requestKind(op);
+    const body = req.kind === "json" ? exampleText(req) : "";
+    let lastBody = {};
+    try { lastBody = JSON.parse(body || "{}"); } catch (e) {}
+    state[id] = {
+      open: false,
+      params: Object.fromEntries(params.filter(p => p.in === "path").map(p => [p.name, ""])),
+      qd: Object.fromEntries(params.filter(p => p.in === "query").map(p => [p.name, ""])), // declared query values
+      query: [],                                                                            // custom rows
+      body, lastBody,
+      form: Object.fromEntries((req.fields || []).map(f => [f.name, ""])),
+      rawPath: "",
+    };
+  }
+  return state[id];
+}
+
+// Builder panels are built when a route is opened: there are hundreds of
+// routes and most are never expanded. A nested schema table is built when
+// it is opened, for the same reason.
+document.getElementById("api-list").addEventListener("toggle", e => {
+  const d = e.target;
+  if (!d.classList) return;
+  if (d.classList.contains("sub-ref")) {
+    if (d.open && !d.querySelector("table")) {
+      const desc = component(d.dataset.ref).description;
+      d.insertAdjacentHTML("beforeend", (desc ? `<div class="hint type-desc">${escapeHtml(desc)}</div>` : "") +
+        fieldsHTML({ $ref: "#/components/schemas/" + d.dataset.ref }, d.dataset.seen.split(" ")));
+    }
+    return;
+  }
+  if (!d.classList.contains("op")) return;
+  const id = d.dataset.op, st = stateFor(id);
+  st.open = d.open;
+  if (d.open) {
+    const body = d.querySelector(".op-body");
+    if (!body.innerHTML) body.innerHTML = bodyHTML(id);
+    updateCode(id);
+    history.replaceState(null, "", "#" + encodeURIComponent(id));
+  }
+}, true);
+
+function bodyHTML(id) {
+  const { method, op } = ops[id];
+  const st = stateFor(id);
+  const params = Object.keys(st.params);
+  const declared = (op.parameters || []).filter(p => p.in === "query");
+  return `<p>${escapeHtml(op.description)}</p>
+    <div class="builder">
+      <div>
+        ${params.length ? `<div class="b-sec"><h3>Path parameters</h3>${params.map(p => `
+          <div class="b-row param"><span>${escapeHtml(p)}</span>
+            <input class="api-in mono" data-role="param" data-name="${escapeHtml(p)}" value="${escapeHtml(st.params[p])}" placeholder="required" spellcheck="false"></div>`).join("")}</div>` : ""}
+        <div class="b-sec"><h3>Query parameters</h3>
+          ${declared.map(p => queryParamHTML(p, st.qd[p.name])).join("")}
+          <div data-role="query-rows">${st.query.map((q, i) => queryRowHTML(q, i)).join("")}</div>
+          <button type="button" class="tiny" data-role="query-add">${declared.length ? "+ Add another parameter" : "+ Add parameter"}</button>
+        </div>
+        ${requestBodyHTML(method, op, st)}
+      </div>
+      <div>
+        <div class="code-head">
+          <div class="seg" role="radiogroup" aria-label="Language">${LANGS.map(l =>
+            `<button type="button" role="radio" data-role="lang" data-lang="${escapeHtml(l.id)}" aria-checked="${escapeHtml(l.id === lang)}">${escapeHtml(l.label)}</button>`).join("")}</div>
+          <button type="button" class="tiny" data-role="copy">Copy</button>
+        </div>
+        <div class="code-box"><pre><code data-role="code"></code></pre></div>
+      </div>
+    </div>
+    ${responsesHTML(op)}`;
+}
+
+const isFlag = s => !!s.enum && s.enum.length === 1 && s.enum[0] === "1";
+
+// queryParamHTML is the input a declared parameter's type calls for: a
+// checkbox for a flag or a boolean, a list for an enum, a number field for
+// an integer, text otherwise.
+function queryParamHTML(p, value) {
+  const s = p.schema || {};
+  const attrs = `data-role="qd" data-name="${escapeHtml(p.name)}" aria-label="${escapeHtml(p.name)}"`;
+  let input;
+  if (isFlag(s) || s.type === "boolean") input = `<input type="checkbox" ${/* safe-html: escaped above */ attrs}${value ? " checked" : ""}>`;
+  else if (s.enum) input = `<select class="api-in mono" ${/* safe-html: escaped above */ attrs}><option value="">(not set)</option>${s.enum.map(v =>
+    `<option value="${escapeHtml(v)}"${v === value ? " selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select>`;
+  else input = `<input class="api-in mono" ${/* safe-html: escaped above */ attrs}${s.type === "integer" ? ' type="number" step="1"' : ""} value="${escapeHtml(value)}" placeholder="${p.required ? "required" : "optional"}" spellcheck="false">`;
+  return `<div class="b-row qd"><span>${escapeHtml(p.name)}${p.required ? ' <span class="flag req">required</span>' : ""}</span>${/* safe-html: built from escaped values */ input}` +
+    `${p.description ? `<div class="b-desc">${escapeHtml(p.description)}</div>` : ""}</div>`;
+}
+
+function queryRowHTML(q, i) {
+  return `<div class="b-row" data-i="${/* safe-html: array index */ i}">
+    <input class="api-in mono" data-role="qk" value="${escapeHtml(q.k)}" placeholder="name" spellcheck="false" aria-label="Query parameter name">
+    <input class="api-in mono" data-role="qv" value="${escapeHtml(q.v)}" placeholder="value" spellcheck="false" aria-label="Query parameter value">
+    <button type="button" class="tiny" data-role="query-del" aria-label="Remove parameter">✕</button></div>`;
+}
+
+function requestBodyHTML(method, op, st) {
+  const req = requestKind(op);
+  switch (req.kind) {
+    case "json": {
+      const known = described(req.schema);
+      const fields = known ? fieldsHTML(req.schema, []) : "";
+      return `<div class="b-sec"><h3>JSON body${known && req.optional ? " · optional" : ""}</h3>
+        <textarea class="api-in" data-role="body" spellcheck="false" aria-label="JSON request body">${escapeHtml(st.body)}</textarea>
+        <div class="b-tools"><span class="hint">${req.example !== undefined
+          ? "Filled in with the route's example: replace its IDs and values with your own. The fields below are everything it takes." +
+            (req.optional ? " The route also takes no body at all: clear it to send none." : "")
+          : known
+          ? "Filled in from the schema: required fields first; read-only ones are left out. Lists start empty; other fields that may be null start as null, which keeps what is stored." +
+            (req.optional ? " The route also takes no body at all: clear it to send none." : "")
+          : "Leave empty to send no body. The spec does not describe this route's fields yet; see the matching console page."}</span>
+          ${known ? '<button type="button" class="tiny" data-role="body-reset">Reset to example</button>' : ""}</div>
+        <div class="b-err" data-role="body-err" hidden></div>
+        ${fields ? `<details class="schema"><summary>Fields · ${escapeHtml(typeLabel(req.schema))}</summary>${/* safe-html: escaped by fieldsHTML */ fields}</details>` : ""}
+      </div>`;
+    }
+    case "form":
+      return `<div class="b-sec"><h3>Form · multipart/form-data${req.optional ? " · optional" : ""}</h3>${req.fields.map(f => `
+        <div class="b-row qd"><span>${escapeHtml(f.name)}${f.required ? ' <span class="flag req">required</span>' : ""}</span>
+          <input class="api-in mono" data-role="form" data-name="${escapeHtml(f.name)}" value="${escapeHtml(st.form[f.name])}"
+            placeholder="${f.file ? "path of the file to upload" : "value"}" spellcheck="false" aria-label="${escapeHtml(f.name)}">
+          ${f.desc ? `<div class="b-desc">${escapeHtml(f.desc)}</div>` : ""}</div>`).join("")}
+        <div class="hint">The example reads each file from this path when it runs.</div></div>`;
+    case "raw":
+      return `<div class="b-sec"><h3>Body · ${escapeHtml(req.type)}</h3>
+        <input class="api-in mono" data-role="raw" value="${escapeHtml(st.rawPath)}" placeholder="path of the file to send" spellcheck="false" aria-label="File to send">
+        <div class="hint">The example sends this file as the request body.</div></div>`;
+  }
+  return WRITE_METHODS.has(method) ? '<div class="b-sec"><h3>Body</h3><p class="hint">This route reads no body.</p></div>' : "";
+}
+
+// What a response's body is, in words: a schema, a stream, a file.
+function contentHTML(type, media) {
+  if (type === "application/json") {
+    if (!described(media.schema)) return `<span class="hint">JSON object; the spec does not describe its fields yet</span>`;
+    // An answer that is one of several shapes lists each.
+    const alts = (media.schema.anyOf || []).filter(x => x.type !== "null");
+    if (alts.length > 1) return alts.map(alt => jsonSchemaHTML(alt)).join('<span class="hint"> or </span>');
+    return jsonSchemaHTML(media.schema);
+  }
+  if (type === "text/event-stream") return `<span class="hint">a stream of server-sent events (text/event-stream)</span>`;
+  if (type === "text/plain") return `<span class="hint">a message (text/plain)</span>`;
+  return `<span class="hint">a file (${escapeHtml(type)})</span>`;
+}
+
+function jsonSchemaHTML(schema) {
+  const fields = fieldsHTML(schema, []);
+  const label = `<span class="hint">JSON · </span><code>${escapeHtml(typeLabel(schema))}</code>`;
+  return fields ? `<details class="schema"><summary>${/* safe-html: escaped above */ label}</summary>${/* safe-html: escaped by fieldsHTML */ fields}</details>` : label;
+}
+
+// responsesHTML lists what a route answers with. The bare 401 and 403
+// every route can return are left out; one a route declares has a body,
+// and a JSON success response may carry an example of it.
+function responsesHTML(op) {
+  const codes = Object.keys(op.responses).filter(c => !((c === "401" || c === "403") && !op.responses[c].content)).sort();
+  return `<div class="b-sec resps"><h3>Responses</h3>${codes.map(code => {
+    const resp = op.responses[code];
+    const content = Object.entries(resp.content || {});
+    const what = content.length ? content.map(([type, media]) => contentHTML(type, media)).join('<span class="hint"> or </span>') : '<span class="hint">no body</span>';
+    const json = (resp.content || {})["application/json"];
+    const ex = json && json.example !== undefined
+      ? `<details class="schema"><summary>Example</summary><pre class="resp-ex">${escapeHtml(JSON.stringify(json.example, null, 2))}</pre></details>` : "";
+    return `<div class="resp"><div class="resp-line"><span class="resp-code">${escapeHtml(code)}</span><span>${escapeHtml(resp.description)}</span>${/* safe-html: built from escaped values */ what}</div>${/* safe-html: escaped above */ ex}</div>`;
+  }).join("")}</div>`;
+}
+
+function onInput(e) {
+  const t = e.target, d = t.closest(".op");
+  if (!d) return;
+  const st = stateFor(d.dataset.op);
+  const role = t.dataset.role;
+  if (role === "param") st.params[t.dataset.name] = t.value;
+  else if (role === "qd") st.qd[t.dataset.name] = t.type === "checkbox" ? (t.checked ? (isFlag(paramSchema(d.dataset.op, t.dataset.name)) ? "1" : "true") : "") : t.value;
+  else if (role === "qk" || role === "qv") st.query[+t.closest(".b-row").dataset.i][role === "qk" ? "k" : "v"] = t.value;
+  else if (role === "body") st.body = t.value;
+  else if (role === "form") st.form[t.dataset.name] = t.value;
+  else if (role === "raw") st.rawPath = t.value;
+  else return;
+  updateCode(d.dataset.op);
+}
+document.getElementById("api-list").addEventListener("input", onInput);
+
+function paramSchema(id, name) {
+  const p = (ops[id].op.parameters || []).find(p => p.in === "query" && p.name === name);
+  return (p && p.schema) || {};
+}
+
+document.getElementById("api-list").addEventListener("click", e => {
+  const t = e.target.closest("[data-role]"), d = e.target.closest(".op");
+  if (!t || !d) return;
+  const id = d.dataset.op, st = stateFor(id);
+  switch (t.dataset.role) {
+    case "query-add":
+      st.query.push({ k: "", v: "" });
+      d.querySelector('[data-role="query-rows"]').innerHTML = st.query.map((q, i) => queryRowHTML(q, i)).join("");
+      d.querySelector('[data-role="query-rows"] .b-row:last-child input').focus();
+      updateCode(id);
+      break;
+    case "query-del":
+      st.query.splice(+t.closest(".b-row").dataset.i, 1);
+      d.querySelector('[data-role="query-rows"]').innerHTML = st.query.map((q, i) => queryRowHTML(q, i)).join("");
+      updateCode(id);
+      break;
+    case "body-reset":
+      st.body = exampleText(requestKind(ops[id].op));
+      d.querySelector('[data-role="body"]').value = st.body;
+      updateCode(id);
+      break;
+    case "lang":
+      // One choice for the whole page, remembered: someone writing
+      // PowerShell wants PowerShell on every route they open.
+      lang = t.dataset.lang;
+      lsSet("mustra-api-lang", lang);
+      document.querySelectorAll('[data-role="lang"]').forEach(b => b.setAttribute("aria-checked", String(b.dataset.lang === lang)));
+      document.querySelectorAll(".op[open]").forEach(o => updateCode(o.dataset.op));
+      break;
+    case "copy":
+      copy(d.querySelector('[data-role="code"]').textContent, LANGS.find(l => l.id === lang).label + " example");
+      break;
+  }
+});
+
+// --- request model ---------------------------------------------------------
+
+// A file's extension, by its media type's subtype.
+const FILE_EXT = { csv: ".csv", html: ".html", plain: ".txt", gzip: ".gz", zip: ".zip", yaml: ".yaml", "x-x509-ca-cert": ".crt" };
+const fileExt = type => FILE_EXT[type.split("/")[1]] || "";
+
+// responseKind is what the example does with the answer: print JSON, follow
+// a stream, or save a file. A route that answers JSON unless asked for a
+// file (?format=csv, ?download=1) saves one only when asked.
+function responseKind(id, qs) {
+  const { path, op } = ops[id];
+  const ok = Object.keys(op.responses).filter(c => c < "300").sort()[0];
+  const content = (op.responses[ok] || {}).content || {};
+  const json = content["application/json"];
+  const other = Object.keys(content).find(t => t !== "application/json");
+  if (!json && !other) return { kind: "none" };
+  if (other === "text/event-stream") return { kind: "stream" };
+  if (other && (!json || qs.has("format") || qs.has("download"))) {
+    const last = path.split("/").filter(seg => seg && !seg.startsWith("{")).pop();
+    const file = last.includes(".") ? last : op.summary.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + (fileExt(other) || ".bin");
+    return { kind: "file", file };
+  }
+  return { kind: "json", schema: json.schema };
+}
+
+// buildRequest turns a route's builder inputs into what every generator
+// needs: method, full URL and the body (parsed JSON, form fields or a file
+// to send). Unfilled path parameters stay as {name} so the gap is visible
+// in the copied code.
+function buildRequest(id) {
+  const { method, path, op } = ops[id];
+  const st = stateFor(id);
+  const req = requestKind(op);
+  const p = path.replace(/\{([a-zA-Z_]+)\}/g, (m, name) => st.params[name] ? encodeURIComponent(st.params[name]) : m);
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(st.qd)) if (v !== "") qs.append(k, v);
+  for (const q of st.query) if (q.k.trim()) qs.append(q.k.trim(), q.v);
+  const qstr = qs.toString();
+  const base = (baseInput.value.trim() || location.origin).replace(/\/+$/, "");
+  let body, bodyErr = "", form, raw;
+  if (req.kind === "json" && st.body.trim()) {
+    try { body = JSON.parse(st.body); st.lastBody = body; }
+    catch (e) { bodyErr = e.message; body = st.lastBody; }
+  }
+  if (req.kind === "form") {
+    form = req.fields.filter(f => f.required || st.form[f.name])
+      .map(f => ({ name: f.name, file: f.file, value: st.form[f.name] || (f.file ? "./" + f.name : "") }));
+  }
+  if (req.kind === "raw") raw = { type: req.type, path: st.rawPath || "./body" + fileExt(req.type) };
+  const rel = p + (qstr ? "?" + qstr : "");
+  return { method: method.toUpperCase(), base, rel, url: base + rel, body, bodyErr, form, raw,
+    bodySchema: req.kind === "json" && described(req.schema) ? req.schema : null, resp: responseKind(id, qs) };
+}
+
+function updateCode(id) {
+  const d = document.getElementById("op-" + id);
+  if (!d) return;
+  const codeEl = d.querySelector('[data-role="code"]');
+  if (!codeEl) return;
+  const req = buildRequest(id);
+  const err = d.querySelector('[data-role="body-err"]'), ta = d.querySelector('[data-role="body"]');
+  if (err) {
+    err.hidden = !req.bodyErr;
+    err.textContent = req.bodyErr ? `Not valid JSON (${req.bodyErr}); the example uses the last valid body.` : "";
+    ta.classList.toggle("bad", !!req.bodyErr);
+  }
+  codeEl.textContent = GEN[lang](req);
+}
+
+// --- code generators -------------------------------------------------------
+
+const pretty = (v, indent) => JSON.stringify(v, null, 2).replace(/\n/g, "\n" + (indent || ""));
+const sq = s => "'" + s.replace(/'/g, `'\\''`) + "'";          // POSIX shell
+const psq = s => "'" + s.replace(/'/g, "''") + "'";            // PowerShell
+const dq = s => JSON.stringify(s);                             // JS, Go, C#, Python strings
+const titleCase = m => m.charAt(0) + m.slice(1).toLowerCase();
+const baseName = p => p.split(/[\\/]/).pop() || "file";
+
+// pyLiteral writes a JSON value as Python: True/False/None instead of
+// true/false/null; everything else in JSON is already valid Python.
+function pyLiteral(v, indent) {
+  const pad = indent + "    ";
+  if (v === null) return "None";
+  if (v === true) return "True";
+  if (v === false) return "False";
+  if (Array.isArray(v)) return v.length ? "[\n" + v.map(x => pad + pyLiteral(x, pad)).join(",\n") + ",\n" + indent + "]" : "[]";
+  if (typeof v === "object") {
+    const ks = Object.keys(v);
+    return ks.length ? "{\n" + ks.map(k => pad + dq(k) + ": " + pyLiteral(v[k], pad)).join(",\n") + ",\n" + indent + "}" : "{}";
+  }
+  return JSON.stringify(v);
+}
+
+// --- TypeScript types from the schemas
+
+const tsKey = k => /^[A-Za-z_$][\w$]*$/.test(k) ? k : JSON.stringify(k);
+
+function tsType(s, refs, indent) {
+  if (!s) return "unknown";
+  if (s.$ref) { const n = refName(s.$ref); refs.add(n); return n; }
+  if (s.allOf) {
+    // A route's extra required fields: the type, with those made required.
+    const r = resolve(s), base = tsType(s.allOf.find(x => x.$ref || x.type || x.properties) || {}, refs, indent);
+    return r.required.length ? `${/* safe-html: code shown via textContent */ base} & Required<Pick<${/* safe-html: code shown via textContent */ base}, ${/* safe-html: code shown via textContent */ r.required.map(k => JSON.stringify(k)).join(" | ")}>>` : base;
+  }
+  if (s.anyOf) return s.anyOf.map(x => tsType(x, refs, indent)).join(" | ");
+  const types = [].concat(s.type || []);
+  if (!types.length) return "unknown";
+  return types.map(t => {
+    switch (t) {
+      case "string": return s.enum ? s.enum.map(v => JSON.stringify(v)).join(" | ") : "string";
+      case "integer": case "number": return "number";
+      case "boolean": return "boolean";
+      case "null": return "null";
+      case "array": { const item = tsType(s.items, refs, indent); return /[ |]/.test(item) ? `Array<${/* safe-html: code shown via textContent */ item}>` : item + "[]"; }
+      case "object": return s.properties ? tsObject(s, refs, indent) : `Record<string, ${/* safe-html: code shown via textContent */ s.additionalProperties ? tsType(s.additionalProperties, refs, indent) : "unknown"}>`;
+    }
+    return "unknown";
+  }).join(" | ");
+}
+
+// A field is optional (?) unless the schema requires it, and read-only
+// when the server sets it.
+function tsObject(s, refs, indent) {
+  const required = new Set(s.required || []);
+  const inner = indent + "  ";
+  const lines = orderedFields(s).map(k => (resolve(s.properties[k]).readOnly ? "readonly " : "") +
+    tsKey(k) + (required.has(k) ? "" : "?") + ": " + tsType(s.properties[k], refs, inner) + ";");
+  return lines.length ? "{\n" + lines.map(l => inner + l).join("\n") + "\n" + indent + "}" : "Record<string, never>";
+}
+
+const TS_MAX_TYPES = 40;
+
+// tsDeclarations declares the request's and response's types and every
+// component they reach, up to a limit past which a type is left loose
+// rather than making the example pages long.
+function tsDeclarations(bodySchema, respSchema) {
+  const refs = new Set();
+  const bodyType = bodySchema ? tsType(bodySchema, refs, "") : "";
+  const respType = respSchema ? tsType(respSchema, refs, "") : "unknown";
+  const queue = [...refs], done = new Set(), out = [];
+  while (queue.length) {
+    const name = queue.shift();
+    if (done.has(name)) continue;
+    done.add(name);
+    const c = component(name);
+    if (out.length >= TS_MAX_TYPES) { out.push(`type ${/* safe-html: code shown via textContent */ name} = Record<string, unknown>; // not expanded: the example would get too long`); continue; }
+    const more = new Set();
+    out.push(c.type === "object" && c.properties && Object.keys(c.properties).length
+      ? `interface ${name} ${tsObject(c, more, "")}` : `type ${name} = ${tsType(c, more, "")};`);
+    for (const m of more) if (!done.has(m)) queue.push(m);
+  }
+  return { decls: out.join("\n\n"), bodyType, respType };
+}
+
+// Invoke-RestMethod returns only when the response ends, and an event
+// stream does not end: read it through HttpClient, a line at a time, as
+// it arrives. Runs in PowerShell 7 and Windows PowerShell 5.1.
+function powershellStream({ method, url, body }) {
+  let s = `Add-Type -AssemblyName System.Net.Http\n$http = [System.Net.Http.HttpClient]::new()\n` +
+    `$http.Timeout = [System.Threading.Timeout]::InfiniteTimeSpan\n` +
+    `$request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::new(${psq(method)}), ${psq(url)})\n` +
+    `$request.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $env:MUSTRA_TOKEN)\n`;
+  if (body !== undefined) {
+    s += `$body = @'\n${JSON.stringify(body, null, 2)}\n'@\n` +
+      `$request.Content = [System.Net.Http.StringContent]::new($body, [System.Text.Encoding]::UTF8, 'application/json')\n`;
+  }
+  return s + `\n$response = $http.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()\n` +
+    `$null = $response.EnsureSuccessStatusCode()\n` +
+    `$reader = [System.IO.StreamReader]::new($response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())\n` +
+    `while ($null -ne ($line = $reader.ReadLine())) {\n    $line\n}`;
+}
+
+const GEN = {
+  curl({ method, url, body, form, raw, resp }) {
+    const lines = [`curl${resp.kind === "stream" ? " -N" : ""} -X ${method} ${sq(url)}`, `  -H "Authorization: Bearer $MUSTRA_TOKEN"`];
+    if (body !== undefined) lines.push(`  -H 'Content-Type: application/json'`, `  -d ${sq(JSON.stringify(body))}`);
+    // --form-string, so a value starting with @ or < is sent as it is.
+    for (const f of form || []) lines.push(f.file ? `  -F ${sq(f.name + "=@" + f.value)}` : `  --form-string ${sq(f.name + "=" + f.value)}`);
+    if (raw) lines.push(`  -H ${sq("Content-Type: " + raw.type)}`, `  --data-binary ${sq("@" + raw.path)}`);
+    if (resp.kind === "file") lines.push(`  -o ${sq(resp.file)}`);
+    return lines.join(" \\\n");
+  },
+
+  powershell({ method, url, body, form, raw, resp }) {
+    if (resp.kind === "stream") return powershellStream({ method, url, body });
+    let s = `$headers = @{ Authorization = "Bearer $env:MUSTRA_TOKEN" }\n`;
+    const args = [`-Method ${titleCase(method)}`, `-Uri ${psq(url)}`, `-Headers $headers`];
+    if (body !== undefined) {
+      s += `$body = @'\n${JSON.stringify(body, null, 2)}\n'@\n`;
+      args.push(`-ContentType 'application/json'`, `-Body $body`);
+    }
+    if (form && form.length) {
+      s += `# -Form needs PowerShell 7 or later.\n$form = @{\n${form.map(f =>
+        `    ${psq(f.name)} = ${f.file ? `Get-Item -LiteralPath ${psq(f.value)}` : psq(f.value)}`).join("\n")}\n}\n`;
+      args.push(`-Form $form`);
+    }
+    if (raw) args.push(`-InFile ${psq(raw.path)}`, `-ContentType ${psq(raw.type)}`);
+    if (resp.kind === "file") {
+      args.push(`-OutFile ${psq(resp.file)}`);
+      return s + `\nInvoke-RestMethod ${args.join(" `\n    ")}`;
+    }
+    return s + `\n$response = Invoke-RestMethod ${args.join(" `\n    ")}\n$response | ConvertTo-Json -Depth 10`;
+  },
+
+  python({ method, url, body, form, raw, resp }) {
+    const headers = [`"Authorization": f"Bearer {os.environ['MUSTRA_TOKEN']}"`];
+    if (raw) headers.push(`"Content-Type": ${dq(raw.type)}`);
+    let s = `import os\n\nimport requests\n\nresponse = requests.request(\n    ${dq(method)},\n    ${dq(url)},\n    headers={${headers.join(", ")}},\n`;
+    if (body !== undefined) s += `    json=${pyLiteral(body, "    ")},\n`;
+    const files = (form || []).filter(f => f.file), fields = (form || []).filter(f => !f.file);
+    if (files.length) s += `    files={${files.map(f => `${dq(f.name)}: open(${dq(f.value)}, "rb")`).join(", ")}},\n`;
+    if (fields.length) s += `    data={${fields.map(f => `${dq(f.name)}: ${dq(f.value)}`).join(", ")}},\n`;
+    if (raw) s += `    data=open(${dq(raw.path)}, "rb"),\n`;
+    if (resp.kind === "stream") s += `    stream=True,\n`;
+    s += `    timeout=${resp.kind === "stream" ? "None" : "30"},\n)\nresponse.raise_for_status()\n`;
+    if (resp.kind === "stream") return s + `for line in response.iter_lines(decode_unicode=True):\n    print(line)`;
+    if (resp.kind === "file") return s + `with open(${dq(resp.file)}, "wb") as f:\n    f.write(response.content)`;
+    return s + `print(response.json() if response.content else response.status_code)`;
+  },
+
+  javascript({ method, url, body, form, raw, resp }) {
+    const imports = [];
+    if ((form || []).some(f => f.file) || raw) imports.push(`import { openAsBlob } from "node:fs";`);
+    if (resp.kind === "file") imports.push(`import { writeFile } from "node:fs/promises";`);
+    let s = imports.length ? imports.join("\n") + "\n\n" : "";
+    if (form && form.length) {
+      s += `const form = new FormData();\n` + form.map(f => f.file
+        ? `form.append(${dq(f.name)}, await openAsBlob(${dq(f.value)}), ${dq(baseName(f.value))});`
+        : `form.append(${dq(f.name)}, ${dq(f.value)});`).join("\n") + "\n\n";
+    }
+    s += `const response = await fetch(${dq(url)}, {\n  method: ${dq(method)},\n  headers: {\n` +
+      `    Authorization: \`Bearer \${process.env.MUSTRA_TOKEN}\`,\n`;
+    if (body !== undefined) s += `    "Content-Type": "application/json",\n`;
+    if (raw) s += `    "Content-Type": ${dq(raw.type)},\n`;
+    s += `  },\n`;
+    if (body !== undefined) s += `  body: JSON.stringify(${pretty(body, "  ")}),\n`;
+    if (form && form.length) s += `  body: form,\n`;
+    if (raw) s += `  body: await openAsBlob(${dq(raw.path)}),\n`;
+    s += `});\nif (!response.ok) throw new Error(\`\${response.status} \${await response.text()}\`);\n`;
+    if (resp.kind === "stream") return s + `for await (const chunk of response.body) process.stdout.write(chunk);`;
+    if (resp.kind === "file") return s + `await writeFile(${dq(resp.file)}, Buffer.from(await response.arrayBuffer()));`;
+    return s + `const text = await response.text();\nconsole.log(text ? JSON.parse(text) : response.status);`;
+  },
+
+  typescript({ method, base, rel, body, form, raw, resp, bodySchema }) {
+    const types = tsDeclarations(bodySchema, resp.kind === "json" && described(resp.schema) ? resp.schema : null);
+    const imports = [];
+    if ((form || []).some(f => f.file) || raw) imports.push(`import { openAsBlob } from "node:fs";`);
+    if (resp.kind === "file") imports.push(`import { writeFile } from "node:fs/promises";`);
+    let s = (imports.length ? imports.join("\n") + "\n\n" : "") +
+      `const MUSTRA_URL = ${dq(base)};\nconst token = process.env.MUSTRA_TOKEN;\nif (!token) throw new Error("Set MUSTRA_TOKEN to an API token");\n\n` +
+      (types.decls ? types.decls + "\n\n" : "") +
+      `async function mustra(method: string, path: string, init: { json?: unknown; body?: RequestInit["body"]; type?: string } = {}): Promise<Response> {\n` +
+      `  const headers: Record<string, string> = { Authorization: \`Bearer \${token}\` };\n  let body = init.body;\n` +
+      `  if (init.json !== undefined) {\n    headers["Content-Type"] = "application/json";\n    body = JSON.stringify(init.json);\n` +
+      `  } else if (init.type) {\n    headers["Content-Type"] = init.type;\n  }\n` +
+      `  const response = await fetch(MUSTRA_URL + path, { method, headers, body });\n` +
+      `  if (!response.ok) throw new Error(\`\${method} \${path}: \${response.status} \${await response.text()}\`);\n  return response;\n}\n\n`;
+    let init = "";
+    if (body !== undefined) {
+      s += `const body${types.bodyType ? ": " + types.bodyType : ""} = ${pretty(body)};\n`;
+      init = ", { json: body }";
+    }
+    if (form && form.length) {
+      s += `const form = new FormData();\n` + form.map(f => f.file
+        ? `form.append(${dq(f.name)}, await openAsBlob(${dq(f.value)}), ${dq(baseName(f.value))});`
+        : `form.append(${dq(f.name)}, ${dq(f.value)});`).join("\n") + "\n";
+      init = ", { body: form }";
+    }
+    if (raw) init = `, { body: await openAsBlob(${dq(raw.path)}), type: ${dq(raw.type)} }`;
+    s += `const response = await mustra(${/* safe-html: code shown via textContent */ dq(method)}, ${/* safe-html: code shown via textContent */ dq(rel)}${/* safe-html: code shown via textContent */ init});\n`;
+    if (resp.kind === "stream") return s + `for await (const chunk of response.body!) process.stdout.write(chunk);`;
+    if (resp.kind === "file") return s + `await writeFile(${dq(resp.file)}, Buffer.from(await response.arrayBuffer()));`;
+    if (resp.kind === "none") return s + `console.log(response.status);`;
+    return s + `const text = await response.text();\nconst result = (text ? JSON.parse(text) : undefined) as ${/* safe-html: code shown via textContent */ types.respType};\nconsole.log(result);`;
+  },
+
+  go({ method, url, body, form, raw, resp }) {
+    const imports = new Set(["fmt", "io", "net/http", "os"]);
+    let s = "", reader = "nil", ctype = "";
+    if (body !== undefined) {
+      const json = JSON.stringify(body, null, 2);
+      imports.add("strings");
+      s += `\tbody := strings.NewReader(${json.includes("`") ? dq(json) : "`" + json + "`"})\n`;
+      reader = "body"; ctype = `"application/json"`;
+    }
+    if (form && form.length) {
+      imports.add("bytes"); imports.add("mime/multipart");
+      s += `\tvar body bytes.Buffer\n\tform := multipart.NewWriter(&body)\n`;
+      for (const f of form) {
+        if (f.file) {
+          imports.add("path/filepath");
+          s += `\t{\n\t\tf, err := os.Open(${dq(f.value)})\n\t\tif err != nil {\n\t\t\tpanic(err)\n\t\t}\n\t\tdefer f.Close()\n` +
+            `\t\tpart, err := form.CreateFormFile(${dq(f.name)}, filepath.Base(f.Name()))\n\t\tif err != nil {\n\t\t\tpanic(err)\n\t\t}\n` +
+            `\t\tif _, err := io.Copy(part, f); err != nil {\n\t\t\tpanic(err)\n\t\t}\n\t}\n`;
+        } else {
+          s += `\tif err := form.WriteField(${dq(f.name)}, ${dq(f.value)}); err != nil {\n\t\tpanic(err)\n\t}\n`;
+        }
+      }
+      s += `\tif err := form.Close(); err != nil {\n\t\tpanic(err)\n\t}\n`;
+      reader = "&body"; ctype = "form.FormDataContentType()";
+    }
+    if (raw) {
+      // Read whole, so the request carries a Content-Length rather than
+      // being sent chunked.
+      imports.add("bytes");
+      s += `\tdata, err := os.ReadFile(${dq(raw.path)})\n\tif err != nil {\n\t\tpanic(err)\n\t}\n`;
+      reader = "bytes.NewReader(data)"; ctype = dq(raw.type);
+    }
+    s += `\treq, err := http.NewRequest(${dq(method)}, ${dq(url)}, ${reader})\n\tif err != nil {\n\t\tpanic(err)\n\t}\n` +
+      `\treq.Header.Set("Authorization", "Bearer "+os.Getenv("MUSTRA_TOKEN"))\n` +
+      (ctype ? `\treq.Header.Set("Content-Type", ${ctype})\n` : "") +
+      `\n\tresp, err := http.DefaultClient.Do(req)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tdefer resp.Body.Close()\n`;
+    if (resp.kind === "stream") {
+      s += `\tfmt.Println(resp.Status)\n\tif _, err := io.Copy(os.Stdout, resp.Body); err != nil {\n\t\tpanic(err)\n\t}\n`;
+    } else if (resp.kind === "file") {
+      s += `\tout, err := io.ReadAll(resp.Body)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n` +
+        `\tif resp.StatusCode >= 300 {\n\t\tfmt.Println(resp.Status, string(out))\n\t\tos.Exit(1)\n\t}\n` +
+        `\tif err := os.WriteFile(${dq(resp.file)}, out, 0o644); err != nil {\n\t\tpanic(err)\n\t}\n\tfmt.Println(resp.Status, "saved", ${dq(resp.file)})\n`;
+    } else {
+      s += `\tout, _ := io.ReadAll(resp.Body)\n\tfmt.Println(resp.Status)\n\tfmt.Println(string(out))\n`;
+    }
+    return `package main\n\nimport (\n${[...imports].sort().map(i => `\t"${i}"`).join("\n")}\n)\n\nfunc main() {\n${s}}`;
+  },
+
+  csharp({ method, url, body, form, raw, resp }) {
+    const verb = { GET: "Get", POST: "Post", PUT: "Put", PATCH: "Patch", DELETE: "Delete" }[method];
+    const m = verb ? `HttpMethod.${verb}` : `new HttpMethod(${dq(method)})`;
+    let s = `using System.Net.Http.Headers;\nusing System.Text;\n\nusing var http = new HttpClient();\n` +
+      `http.DefaultRequestHeaders.Authorization =\n    new AuthenticationHeaderValue("Bearer", Environment.GetEnvironmentVariable("MUSTRA_TOKEN"));\n\n` +
+      `var request = new HttpRequestMessage(${m}, ${dq(url)});\n`;
+    if (body !== undefined) {
+      const json = JSON.stringify(body, null, 2);
+      // A raw string literal keeps the JSON readable; one containing """
+      // falls back to an ordinary escaped string.
+      const lit = json.includes('"""') ? dq(json) : `"""\n    ${json.replace(/\n/g, "\n    ")}\n    """`;
+      s += `request.Content = new StringContent(${lit}, Encoding.UTF8, "application/json");\n`;
+    }
+    if (form && form.length) {
+      s += `using var form = new MultipartFormDataContent();\n` + form.map(f => f.file
+        ? `form.Add(new StreamContent(File.OpenRead(${dq(f.value)})), ${dq(f.name)}, Path.GetFileName(${dq(f.value)}));`
+        : `form.Add(new StringContent(${dq(f.value)}), ${dq(f.name)});`).join("\n") + `\nrequest.Content = form;\n`;
+    }
+    if (raw) {
+      s += `request.Content = new StreamContent(File.OpenRead(${dq(raw.path)}));\n` +
+        `request.Content.Headers.ContentType = new MediaTypeHeaderValue(${dq(raw.type)});\n`;
+    }
+    if (resp.kind === "stream") {
+      return s + `\nusing var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);\nresponse.EnsureSuccessStatusCode();\n` +
+        `await using var stream = await response.Content.ReadAsStreamAsync();\nawait stream.CopyToAsync(Console.OpenStandardOutput());`;
+    }
+    if (resp.kind === "file") {
+      return s + `\nusing var response = await http.SendAsync(request);\nresponse.EnsureSuccessStatusCode();\n` +
+        `await File.WriteAllBytesAsync(${dq(resp.file)}, await response.Content.ReadAsByteArrayAsync());\nConsole.WriteLine(${dq("saved " + resp.file)});`;
+    }
+    return s + `\nvar response = await http.SendAsync(request);\nresponse.EnsureSuccessStatusCode();\nConsole.WriteLine(await response.Content.ReadAsStringAsync());`;
+  },
+};
+</script>
+</body>
+</html>

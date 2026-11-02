@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backup Status — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.overdue, .pill.never, .pill.failed { background: color-mix(in srgb, var(--viz-danger, #e5484d) 20%, transparent); color: var(--viz-danger, #e5484d); }
+  .pill.not_covered { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  .muted { color: var(--text-muted); font-size: var(--fs-meta); }
+  .bk-settings { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin: 0 0 12px; font-size: 12.5px; }
+  .bk-settings input { width: 90px; }
+  .pill.orphaned { background: var(--surface-2); color: var(--text-muted); }
+  .pill.verify_failed { background: color-mix(in srgb, var(--viz-danger, #e5484d) 20%, transparent); color: var(--viz-danger, #e5484d); }
+  .bks-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 14px 0 8px; }
+  .bks-head h3 { margin: 0; font-size: 14px; }
+  .bks-error { color: var(--viz-danger, #e5484d); font-size: 12.5px; margin: 0 0 8px; }
+  .bks-jobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 4px 16px; margin: 0 0 10px; font-size: 13px; }
+  .bks-job.failed b { color: var(--danger, #d1242f); }
+  .bks-stores { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 16px; margin: 0 0 10px; }
+  .bks-store { font-size: 12.5px; }
+  .bks-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 4px; }
+  .bks-bar > span { display: block; height: 100%; background: var(--accent); }
+  .bks-bar.high > span { background: var(--viz-warning, #f5a524); }
+  .bks-bar.full > span { background: var(--viz-danger, #e5484d); }
+  .bks-filter { font-size: 12.5px; margin: 0 0 8px; display: inline-flex; gap: 6px; align-items: center; }
+  .bks-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 14px; margin: 8px 0 10px; }
+  .bks-form label { font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; }
+  .bks-form label[hidden] { display: none; }
+  .bks-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .bks-actions button { width: auto; }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="backups-page-head"></div>
+      <div class="stat-tiles" id="bk-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Virtual machines and containers</h2><span class="scan-status" id="bk-status"></span></div>
+        <p class="hint">
+          Read from each Proxmox VE node by its Mustra agent (the Backups sensor): every guest's newest backup on any
+          backup storage — Proxmox Backup Server, a directory, NFS — and whether an enabled backup job includes it.
+          A guest is joined to the Mustra endpoint running inside it by its network card, then by name. A covered guest
+          whose newest backup is older than the threshold is <b>overdue</b> and raises a notification once, and again
+          when it recovers. <b>Not covered</b> means no backup job includes it, whatever old backups exist.
+        </p>
+        <div class="bk-settings" id="bk-settings" hidden>
+          <label>Overdue after (hours)<br><input type="number" id="bk-hours" min="1" max="2160"></label>
+          <button class="secondary u-w-auto" id="bk-save">Save</button><span class="muted" id="bk-save-status"></span>
+        </div>
+        <div class="table-scroll rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Guest</th><th>Endpoint</th><th>Node</th><th>Last backup</th><th>Size</th><th>Kept</th><th>Storages</th><th>Job</th><th>State</th></tr></thead>
+            <tbody id="bk-body"><tr><td class="empty" colspan="9">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="bks-panel" hidden>
+        <div class="panel-header"><h2>Backup systems</h2><span class="scan-status" id="bks-status"></span></div>
+        <p class="hint">
+          Read from the backup systems themselves, every 15 minutes: what each protects and when it last backed it up,
+          verification, and how full its storage is. They add what no Proxmox job made — a host backed up with the Proxmox
+          Backup Server client, a server Rubrik protects — and the same overdue notification applies to it. A Proxmox guest
+          already listed above is marked, and alerts from its row there only.
+        </p>
+        <label class="bks-filter"><input type="checkbox" id="bks-hide-pve" checked> Hide Proxmox guests listed above</label>
+        <div id="bks-systems"></div>
+      </div>
+
+      <div class="panel" id="bks-manage" hidden>
+        <div class="panel-header"><h2>Connect a backup system</h2></div>
+        <p class="hint">
+          <b>Proxmox Backup Server:</b> an API token with the DatastoreAudit role on <code>/datastore</code> (for the token and its user),
+          e.g. <code>proxmox-backup-manager user generate-token mustra@pbs status</code>, and the server's certificate fingerprint
+          (Dashboard → Show Fingerprint) unless it has a certificate this server trusts.
+          <b>Rubrik Security Cloud:</b> a service account with a read-only role; its client ID and secret, and
+          <code>https://&lt;account&gt;.my.rubrik.com</code>. Read only; tested against a stand-in, not yet a live account.
+          An address inside your network must be on the internal destinations allowlist (Settings).
+        </p>
+        <div id="bks-list"></div>
+        <div class="bks-form">
+          <label>System<select id="bks-kind"><option value="pbs">Proxmox Backup Server</option><option value="rubrik">Rubrik Security Cloud</option></select></label>
+          <label>Name<input id="bks-name" placeholder="Backup server"></label>
+          <label>URL<input id="bks-url" placeholder="https://pbs.example.com:8007"></label>
+          <label><span id="bks-token-label">API token ID</span><input id="bks-token" placeholder="mustra@pbs!status" autocomplete="off"></label>
+          <label><span id="bks-secret-label">Token secret</span><input id="bks-secret" type="password" autocomplete="new-password"></label>
+          <label class="bks-pbs">Certificate fingerprint (SHA-256)<input id="bks-fp" placeholder="24:c9:ca:…" autocomplete="off"></label>
+          <label class="bks-pbs">Datastore (blank: all)<input id="bks-ds"></label>
+        </div>
+        <div class="bks-actions"><button class="primary" id="bks-add">Connect</button><span class="muted" id="bks-add-status"></span></div>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let data = {}, canSettings = false;
+const stateLabel = { ok: "ok", overdue: "overdue", never: "never backed up", not_covered: "not in a job", verify_failed: "verification failed", orphaned: "no such guest" };
+
+document.addEventListener("mustra:user", (e) => {
+  const perms = (e.detail && e.detail.permissions) || [];
+  canSettings = !!(e.detail && e.detail.is_admin) || perms.includes("settings.manage");
+  renderPageHead("backups-page-head", "/backup-status", { title: "Backup Status" });
+  load();
+});
+document.getElementById("bk-save").addEventListener("click", async () => {
+  const st = document.getElementById("bk-save-status"); st.textContent = "saving…";
+  const r = await fetch("/api/backup-status/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stale_hours: +document.getElementById("bk-hours").value }) });
+  st.textContent = r.ok ? "saved" : "failed: " + await r.text();
+  if (r.ok) load();
+});
+
+function fmtBytes(n) {
+  if (!n) return "—";
+  const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${u[i]}`;
+}
+
+async function load() {
+  const r = await fetch("/api/backup-status");
+  if (r.status === 401) { window.location.href = "/login"; return; }
+  if (!r.ok) return;
+  data = await r.json();
+  const g = data.guests || [], c = data.counts || {};
+  document.getElementById("bk-tiles").innerHTML = [
+    { label: "Guests", value: g.length },
+    { label: "Backed up on time", value: c.ok || 0, cls: "ok" },
+    { label: "Overdue or never", value: (c.overdue || 0) + (c.never || 0), cls: (c.overdue || 0) + (c.never || 0) ? "bad" : "ok" },
+    { label: "Not in a backup job", value: c.not_covered || 0, cls: c.not_covered ? "warn" : "ok" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  document.getElementById("bk-status").textContent = `${g.length} guests · overdue after ${data.stale_hours} h`;
+  document.getElementById("bk-settings").hidden = !canSettings;
+  if (document.activeElement !== document.getElementById("bk-hours")) document.getElementById("bk-hours").value = data.stale_hours;
+
+  const body = document.getElementById("bk-body");
+  body.innerHTML = g.length === 0
+    ? '<tr><td class="empty" colspan="9">no Proxmox VE node has reported yet — install the Mustra agent on each node (agent 0.57.29 or newer)</td></tr>'
+    : g.map(b => `<tr>
+        <td><strong>${escapeHtml(b.name || "—")}</strong> <span class="muted">${escapeHtml(b.type === "lxc" ? "CT" : "VM")} ${escapeHtml(b.vmid)}</span></td>
+        <td>${b.agent_id ? `<a href="/endpoint/${escapeHtml(b.agent_id)}">${escapeHtml(b.hostname)}</a>` : '<span class="muted">no agent inside</span>'}</td>
+        <td>${escapeHtml(b.node)}</td>
+        <td data-sort="${escapeHtml(b.last_backup || "")}" title="${escapeHtml(b.last_backup || "")}">${b.last_backup ? fmtAgo(b.last_backup) : "—"}</td>
+        <td data-sort="${escapeHtml(b.last_size_bytes || 0)}">${escapeHtml(fmtBytes(b.last_size_bytes))}</td>
+        <td>${escapeHtml(b.backups || 0)}</td>
+        <td class="muted">${escapeHtml((b.storages || []).join(", ") || "—")}</td>
+        <td class="muted">${escapeHtml((b.jobs || []).join(", ") || "none")}</td>
+        <td data-sort="${escapeHtml(b.state)}"><span class="pill ${escapeHtml(b.state)}">${escapeHtml(stateLabel[b.state] || b.state)}</span></td>
+      </tr>`).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "backup-status" });
+  if (dt) dt.refresh();
+  renderSystems();
+  if (canSettings) loadSources();
+}
+
+const kindName = { pbs: "Proxmox Backup Server", rubrik: "Rubrik Security Cloud" };
+
+function storeHTML(st) {
+  const pct = st.total_bytes ? Math.min(100, Math.round(st.used_bytes / st.total_bytes * 100)) : 0;
+  const cls = pct >= 90 ? "full" : pct >= 75 ? "high" : "";
+  const full = st.full_at ? ` · full around ${escapeHtml(fmtDate(st.full_at))}` : "";
+  return `<div class="bks-store"><b>${escapeHtml(st.name)}</b> — ${escapeHtml(fmtBytes(st.used_bytes))} of ${escapeHtml(fmtBytes(st.total_bytes))} (${pct}%)${full}
+    <div class="bks-bar ${cls}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${escapeHtml(st.name)} used"><span data-pct="${pct}"></span></div></div>`;
+}
+
+const jobKind = { verify: "Verify", prune: "Prune", gc: "Garbage collection", sync: "Sync" };
+
+// A PBS maintenance job, one line: how its last run ended and when.
+function jobHTML(j) {
+  const failed = !["OK", "running", "never"].includes(j.state);
+  const state = j.state === "OK" ? "OK" : j.state === "running" ? "running now" : j.state === "never" ? "never run" : "failed";
+  const when = j.last_end ? ` ${escapeHtml(fmtAgo(j.last_end))}` : "";
+  const next = j.next_run ? ` · next ${escapeHtml(fmtDate(j.next_run))}` : "";
+  return `<div class="bks-job${failed ? " failed" : ""}" title="${escapeHtml(`${j.id}${failed ? ": " + j.state : ""}`)}">
+    <b>${escapeHtml(jobKind[j.kind] || j.kind)}</b> <span class="muted">${escapeHtml(j.store)}</span>:
+    <span class="pill ${failed ? "failed" : j.state === "OK" ? "ok" : ""}">${escapeHtml(state)}</span>${when}${next}${j.detail ? ` <span class="muted">· ${escapeHtml(j.detail)}</span>` : ""}</div>`;
+}
+
+function renderSystems() {
+  const systems = data.systems || [];
+  document.getElementById("bks-panel").hidden = systems.length === 0;
+  if (!systems.length) return;
+  const hide = document.getElementById("bks-hide-pve").checked;
+  const items = systems.reduce((n, x) => n + (x.items || []).length, 0);
+  document.getElementById("bks-status").textContent = `${systems.length} system(s) · ${items} protected item(s)`;
+  document.getElementById("bks-systems").innerHTML = systems.map(sys => {
+    const rows = (sys.items || []).filter(it => !(hide && it.in_proxmox));
+    const counts = Object.entries(sys.counts || {}).map(([k, v]) => `${v} ${stateLabel[k] || k}`).join(" · ");
+    return `<div class="bks-head"><h3>${escapeHtml(sys.name)}</h3><span class="muted">${escapeHtml(kindName[sys.kind] || sys.kind)}
+        · read ${sys.ok_at ? escapeHtml(fmtAgo(sys.ok_at)) : "never"}${counts ? " · " + escapeHtml(counts) : ""}</span></div>
+      ${sys.error ? `<p class="bks-error">Last read failed: ${escapeHtml(sys.error)}</p>` : ""}
+      ${(sys.stores || []).length ? `<div class="bks-stores">${sys.stores.map(storeHTML).join("")}</div>` : ""}
+      ${(sys.jobs || []).length ? `<div class="bks-jobs">${sys.jobs.map(jobHTML).join("")}</div>` : ""}
+      <div class="table-scroll rows-10"><table class="table-compact" data-bks="${escapeHtml(sys.id)}">
+        <thead><tr><th>Protected</th><th>Endpoint</th><th>Type</th><th>Last backup</th><th>Size</th><th>Kept</th><th>Verified</th><th>Where</th><th>State</th></tr></thead>
+        <tbody>${rows.length ? rows.map(it => `<tr>
+          <td><strong>${escapeHtml(it.guest_name || it.name)}</strong>${it.vmid ? ` <span class="muted">${escapeHtml(it.type.toUpperCase())} ${escapeHtml(it.vmid)}</span>` : ""}${it.in_proxmox ? ' <span class="muted">(listed above)</span>' : ""}</td>
+          <td>${it.agent_id ? `<a href="/endpoint/${escapeHtml(it.agent_id)}">${escapeHtml(it.hostname)}</a>` : '<span class="muted">—</span>'}</td>
+          <td class="muted">${escapeHtml(it.type)}</td>
+          <td data-sort="${escapeHtml(it.last_backup || "")}" title="${escapeHtml(it.last_backup || "")}">${it.last_backup ? fmtAgo(it.last_backup) : "—"}</td>
+          <td data-sort="${escapeHtml(it.size_bytes || 0)}">${escapeHtml(fmtBytes(it.size_bytes))}</td>
+          <td>${escapeHtml(it.count || "—")}</td>
+          <td>${escapeHtml(it.verified || it.compliance || "—")}</td>
+          <td class="muted">${escapeHtml(it.location || "—")}</td>
+          <td data-sort="${escapeHtml(it.state)}"><span class="pill ${escapeHtml(it.state)}">${escapeHtml(stateLabel[it.state] || it.state)}</span></td>
+        </tr>`).join("") : '<tr><td class="empty" colspan="9">nothing beyond the Proxmox guests above</td></tr>'}</tbody></table></div>`;
+  }).join("");
+  // Bar widths go through the CSSOM rather than a style attribute: a
+  // percentage cannot be a class, and the CSP allows the CSSOM even once
+  // style attributes are refused (#143).
+  document.querySelectorAll("#bks-systems .bks-bar > span").forEach(el => { el.style.width = el.dataset.pct + "%"; });
+  document.querySelectorAll("#bks-systems table").forEach(t => { const d = initDataTable(t, { storageKey: "backup-system-" + t.dataset.bks }); if (d) d.refresh(); });
+}
+document.getElementById("bks-hide-pve").addEventListener("change", renderSystems);
+
+async function loadSources() {
+  document.getElementById("bks-manage").hidden = false;
+  const r = await fetch("/api/backup-sources");
+  if (!r.ok) return;
+  const list = (await r.json()).sources || [];
+  const el = document.getElementById("bks-list");
+  el.innerHTML = list.length ? `<div class="table-scroll"><table class="table-compact"><thead><tr><th>Name</th><th>System</th><th>URL</th><th>Last read</th><th></th></tr></thead><tbody>${list.map(src => `<tr>
+      <td><strong>${escapeHtml(src.name)}</strong>${src.enabled ? "" : ' <span class="muted">(off)</span>'}</td>
+      <td>${escapeHtml(kindName[src.kind] || src.kind)}</td>
+      <td class="mono">${escapeHtml(src.url)}</td>
+      <td>${src.last_error ? `<span class="bks-error">${escapeHtml(src.last_error)}</span>` : (src.last_ok_at ? escapeHtml(fmtAgo(src.last_ok_at)) + ` · ${escapeHtml(src.items)} item(s)` : "not yet")}</td>
+      <td class="bks-actions"><button class="tiny" data-poll="${escapeHtml(src.id)}">Read now</button><button class="tiny danger" data-del="${escapeHtml(src.id)}" data-name="${escapeHtml(src.name)}">Remove</button></td>
+    </tr>`).join("")}</tbody></table></div>` : '<p class="muted">No backup system connected yet.</p>';
+  el.querySelectorAll("[data-poll]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "reading…";
+    const r = await fetch(`/api/backup-sources/${encodeURIComponent(b.dataset.poll)}/poll`, { method: "POST" });
+    if (!r.ok) alert((await r.text()).trim());
+    load();
+  }));
+  el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm(`Disconnect ${b.dataset.name}? Its items leave this page; nothing changes on the backup system.`)) return;
+    const r = await fetch(`/api/backup-sources/${encodeURIComponent(b.dataset.del)}`, { method: "DELETE" });
+    if (!r.ok) alert((await r.text()).trim());
+    load();
+  }));
+}
+
+function syncKindForm() {
+  const pbs = document.getElementById("bks-kind").value === "pbs";
+  document.querySelectorAll(".bks-pbs").forEach(el => { el.hidden = !pbs; });
+  document.getElementById("bks-token-label").textContent = pbs ? "API token ID" : "Client ID";
+  document.getElementById("bks-secret-label").textContent = pbs ? "Token secret" : "Client secret";
+  document.getElementById("bks-token").placeholder = pbs ? "mustra@pbs!status" : "client|…";
+  document.getElementById("bks-url").placeholder = pbs ? "https://pbs.example.com:8007" : "https://account.my.rubrik.com";
+}
+document.getElementById("bks-kind").addEventListener("change", syncKindForm);
+syncKindForm();
+
+document.getElementById("bks-add").addEventListener("click", async () => {
+  const st = document.getElementById("bks-add-status"), btn = document.getElementById("bks-add");
+  const v = id => document.getElementById(id).value.trim();
+  const pbs = v("bks-kind") === "pbs";
+  btn.disabled = true; st.textContent = "connecting and reading…";
+  try {
+    const r = await fetch("/api/backup-sources", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      kind: v("bks-kind"), name: v("bks-name"), url: v("bks-url"), token_id: v("bks-token"), secret: document.getElementById("bks-secret").value,
+      fingerprint: pbs ? v("bks-fp") : "", datastore: pbs ? v("bks-ds") : "" }) });
+    if (!r.ok) { st.textContent = "failed: " + (await r.text()).trim(); return; }
+    const out = await r.json();
+    st.textContent = out.last_error ? "saved, but reading it failed: " + out.last_error : `connected · ${out.items} item(s)`;
+    ["bks-name", "bks-url", "bks-token", "bks-secret", "bks-fp", "bks-ds"].forEach(id => { document.getElementById(id).value = ""; });
+    load();
+  } finally { btn.disabled = false; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+# Weekly, grouped dependency updates. Actions are pinned by commit SHA in
+# the workflows; Dependabot understands the `# vX.Y.Z` comments and moves
+# both together. Base images in deploy/Dockerfile.* are pinned by digest
+# for the same reason.
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    # "/" covers .github/workflows; the composite action is listed too.
+    directories:
+      - /
+      - /.github/actions/build-binaries
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule:
+      interval: weekly
+    groups:
+      docker-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+    groups:
+      compose-images:
+        patterns: ["*"]
+
+  # tools/script-editor builds internal/server/static/vendor/script-editor.js.
+  # A bump must include the rebuilt bundle (CI fails on a stale one), so
+  # these PRs need `npm run build --prefix tools/script-editor` added.
+  - package-ecosystem: npm
+    directories:
+      - /tools/script-editor
+      - /tools/script-service
+    schedule:
+      interval: weekly
+    groups:
+      npm-dependencies:
+        patterns: ["*"]

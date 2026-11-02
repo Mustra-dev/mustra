@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threat Briefings — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .muted { color: var(--text-muted); font-size: var(--fs-meta); }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  .tb-head-right { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; }
+  .tb-bar { scroll-margin-top: 64px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; }
+  .tb-bar input[type=search] { max-width: 280px; }
+  .tb-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tb-chips button { width: auto; padding: 5px 11px; font-size: 12.5px; }
+  .tb-chips button.on { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .tb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .tb-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-md);
+             background: var(--surface); color: inherit; text-decoration: none; }
+  .tb-card:hover, .tb-card:focus-visible { border-color: var(--accent); outline: none; }
+  .tb-card.hit { border-left: 4px solid var(--viz-danger, #e5484d); }
+  .tb-card.warn { border-left: 4px solid var(--viz-warning, #f5a524); }
+  .tb-card h3 { margin: 0; font-size: 14.5px; line-height: 1.35; }
+  .tb-card p { margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .tb-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tb-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); white-space: nowrap; }
+  .tb-badge.kev { background: var(--off-bg); color: var(--off); }
+  .tb-badge.ransom { background: #b4151f; color: #fff; }
+  .tb-badge.custom { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+  .tb-counts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .tb-count { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+  .tb-count b { display: block; font-size: 22px; line-height: 1.1; }
+  .tb-count span { font-size: 11.5px; color: var(--text-muted); }
+  .tb-count.bad { background: color-mix(in srgb, var(--viz-danger, #e5484d) 22%, transparent); }
+  .tb-count.warn { background: color-mix(in srgb, var(--viz-warning, #f5a524) 20%, transparent); }
+  .tb-foot { font-size: 11.5px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .tb-back { display: inline-block; margin: 0 0 10px; font-size: 13px; }
+  .tb-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; margin: 0 0 6px; }
+  .tb-title h2 { margin: 0; font-size: 20px; }
+  .tb-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; }
+  @media (max-width: 900px) { .tb-cols { grid-template-columns: 1fr; } }
+  .tb-prose p { margin: 0 0 10px; line-height: 1.6; font-size: 13.5px; }
+  .tb-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin: 0 0 12px; }
+  .tb-fact span { display: block; font-size: 11.5px; color: var(--text-muted); }
+  .tb-fact b { font-size: 17px; }
+  .tb-refs { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+  .tb-cves { margin: 0 0 12px; }
+  .tb-cves .tb-cve { padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .tb-cves .tb-cve:first-child { border-top: 0; }
+  .tb-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin: 14px 0; }
+  .tb-tile { padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface); }
+  .tb-tile b { display: block; font-size: 30px; line-height: 1.1; }
+  .tb-tile span { font-size: 12px; color: var(--text-muted); }
+  .tb-tile.bad { background: color-mix(in srgb, var(--viz-danger, #e5484d) 22%, var(--surface)); border-color: color-mix(in srgb, var(--viz-danger, #e5484d) 50%, var(--border)); }
+  .tb-tile.warn { background: color-mix(in srgb, var(--viz-warning, #f5a524) 18%, var(--surface)); }
+  .tb-panels { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; margin: 0 0 14px; }
+  .tb-panels .pnl { min-width: 0; }
+  .tb-q { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+  .tb-q li { margin: 0 0 6px; }
+  .tb-q code { white-space: pre-wrap; word-break: break-word; }
+  .pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .pill.vulnerable { background: color-mix(in srgb, var(--viz-danger, #e5484d) 20%, transparent); color: var(--viz-danger, #e5484d); }
+  .pill.present { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .tb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
+  .tb-actions button { width: auto; }
+  .tb-remediate { display: contents; }
+  .tb-remediate .muted { align-self: center; font-size: 12px; }
+  .tb-remediate-out { margin: -4px 0 12px; font-size: 13px; }
+  .tb-only-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
+  .tb-only-host { font-weight: 600; }
+  .tb-auto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 14px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+  .tb-auto span { flex: 1 1 320px; }
+  .tb-auto button { width: auto; }
+  .ar-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  .ar-row label { min-width: 80px; }
+  .ar-row select { flex: 1; }
+  .tb-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px 14px; }
+  .tb-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+  .tb-form label.wide { grid-column: 1 / -1; }
+  .tb-form textarea { min-height: 90px; font-family: inherit; }
+  .tb-form .mono-in { font-family: var(--mono); font-size: 12px; }
+  .tb-os { display: flex; gap: 14px; align-items: center; font-size: 12.5px; }
+  .tb-empty { padding: 30px; text-align: center; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="threats-page-head"></div>
+
+      <section id="tb-list-view">
+        <div class="stat-tiles" id="tb-tiles"></div>
+        <div class="tb-auto" id="tb-auto" hidden></div>
+        <div class="panel">
+          <div class="panel-header"><h2>Actively exploited vulnerabilities</h2><div class="tb-head-right"><span class="scan-status" id="tb-status"></span><button class="tiny" id="tb-refresh" hidden title="Download the CISA catalog and EPSS scores now, then re-scan endpoints for vulnerable versions">Refresh now</button></div></div>
+          <p class="hint">
+            Every vulnerability CISA lists as exploited in the wild (the KEV catalog) from the last <span id="tb-window">30</span> days,
+            any older one found in this fleet, and the briefings your team has written. <b>Vulnerable</b> means the vulnerability
+            scan matched an installed version against the advisory; <b>product present</b> means the product is installed (or the
+            endpoint runs the operating system) but its version has not been checked against this CVE — look at those. A Linux
+            package the vulnerability scan checked and did not flag is not counted.
+          </p>
+          <div class="tb-bar">
+            <div class="tb-chips" role="group" aria-label="Show">
+              <button class="secondary on" data-filter="all">All</button>
+              <button class="secondary" data-filter="fleet">In this fleet</button>
+              <button class="secondary" data-filter="vulnerable">Vulnerable</button>
+              <button class="secondary" data-filter="custom">Written briefings</button>
+              <button class="secondary" data-filter="ransom">Ransomware</button>
+            </div>
+            <input type="search" id="tb-search" placeholder="Search name, CVE, vendor…" aria-label="Search briefings">
+            <button class="primary" id="tb-new" hidden>Write a briefing</button>
+          </div>
+          <div class="tb-grid" id="tb-grid"><div class="tb-empty">loading…</div></div>
+        </div>
+      </section>
+
+      <section id="tb-detail-view" hidden>
+        <a href="#" class="tb-back" id="tb-back">← All briefings</a>
+        <div id="tb-detail"></div>
+      </section>
+
+      <section id="tb-edit-view" hidden>
+        <a href="#" class="tb-back" id="tb-edit-back">← Back</a>
+        <div class="panel">
+          <div class="panel-header"><h2 id="tb-edit-title">Write a briefing</h2></div>
+          <p class="hint">
+            Group CVEs under one name with what your team knows: what it is, what to do about it, where to read more, how to find
+            the product on an endpoint, and questions to hunt with. A CVE in a written briefing is shown here instead of on its own.
+          </p>
+          <div class="tb-form">
+            <label class="wide">Title<input id="tbf-title" placeholder="PHP2Shell: CVE-2026-109618 and CVE-2026-109619"></label>
+            <label class="wide">CVEs (comma or space separated)<input id="tbf-cves" class="mono-in" placeholder="CVE-2026-109618, CVE-2026-109619"></label>
+            <label class="wide">Overview<textarea id="tbf-summary" placeholder="What it is, who is at risk, whether it is being exploited. A blank line starts a new paragraph."></textarea></label>
+            <label class="wide">Mitigation<textarea id="tbf-mitigation" placeholder="Update to …; until then …"></textarea></label>
+            <label class="wide">References (one per line: Label | https://…)<textarea id="tbf-refs" class="mono-in" placeholder="PHP.net advisory | https://www.php.net/…"></textarea></label>
+            <label>Product name<input id="tbf-rule-label" placeholder="PHP"></label>
+            <label>Installed software that is the product (one regular expression per line, matched against the whole name)<textarea id="tbf-rule-apps" class="mono-in" placeholder="php\d*(\.\d+)?(-cli|-fpm|-common)?"></textarea></label>
+            <label>Process names (for hunting, one per line)<textarea id="tbf-rule-procs" class="mono-in" placeholder="php-fpm"></textarea></label>
+            <label>Service names (for hunting, one per line)<textarea id="tbf-rule-svcs" class="mono-in" placeholder="php8.3-fpm"></textarea></label>
+            <div class="wide tb-os"><span>Only on:</span>
+              <label><input type="checkbox" id="tbf-os-linux"> Linux</label>
+              <label><input type="checkbox" id="tbf-os-windows"> Windows</label>
+              <label><input type="checkbox" id="tbf-os-darwin"> macOS</label>
+              <label><input type="checkbox" id="tbf-rule-appliance"> A network appliance or hosted service (no endpoint sees it)</label>
+            </div>
+            <label class="wide">Detection note<input id="tbf-rule-note" placeholder="Only the packaged PHP is seen; copies built from source need a file search."></label>
+            <label class="wide">Hunting questions (one Interact question per line)<textarea id="tbf-questions" class="mono-in" placeholder="get hostname and processes.name from all machines with processes.name contains php"></textarea></label>
+          </div>
+          <div class="tb-actions"><button class="primary" id="tbf-save">Save</button><span class="muted" id="tbf-status"></span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script src="/static/charts.js"></script>
+<script>
+let list = [], editable = false, filter = "all", editing = null, lastDetail = null, me = null;
+const osLabelOf = o => ({ linux: "Linux", windows: "Windows", darwin: "macOS" }[o] || o || "—");
+
+document.addEventListener("mustra:user", (e) => {
+  me = e.detail || null;
+  renderPageHead("threats-page-head", "/threats", { title: "Threat Briefings" });
+  // The refresh reuses Risk & Compliance's feed refresh and scan, which
+  // both require patches.manage; the server enforces it either way.
+  document.getElementById("tb-refresh").hidden = !(e.detail && hasPermission(e.detail, "patches.manage"));
+  route();
+});
+window.addEventListener("hashchange", route);
+
+function route() {
+  const id = decodeURIComponent(location.hash.replace(/^#/, ""));
+  document.getElementById("tb-list-view").hidden = !!id;
+  document.getElementById("tb-detail-view").hidden = !id || id === "new" || id.startsWith("edit/");
+  document.getElementById("tb-edit-view").hidden = !(id === "new" || id.startsWith("edit/"));
+  if (!id) return loadList();
+  if (id === "new") return openEditor(null);
+  if (id.startsWith("edit/")) return loadDetail(id.slice(5), true);
+  loadDetail(id, false);
+}
+document.getElementById("tb-back").addEventListener("click", e => { e.preventDefault(); location.hash = ""; });
+document.getElementById("tb-edit-back").addEventListener("click", e => { e.preventDefault(); history.back(); });
+document.getElementById("tb-refresh").addEventListener("click", async () => {
+  const btn = document.getElementById("tb-refresh");
+  btn.disabled = true;
+  try {
+    btn.textContent = "Downloading feeds…";
+    let r = await fetch("/api/risk/intel/refresh", { method: "POST" });
+    if (!r.ok) throw new Error(await r.text());
+    const feeds = await r.json();
+    if (feeds.kev_error) throw new Error("CISA catalog: " + feeds.kev_error);
+    btn.textContent = "Scanning endpoints…";
+    r = await fetch("/api/risk/scan", { method: "POST" });
+    if (!r.ok) throw new Error(await r.text());
+    await loadList();
+    showToast("Briefings refreshed", "ok");
+  } catch (err) {
+    showToast("Refresh failed: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Refresh now";
+  }
+});
+document.getElementById("tb-new").addEventListener("click", () => { location.hash = "new"; });
+
+function paragraphs(text) {
+  return String(text || "").split(/\n\s*\n/).map(p => p.trim()).filter(Boolean).map(p => `<p>${escapeHtml(p)}</p>`).join("");
+}
+function epssText(e) { return e == null ? "—" : (e * 100).toFixed(e < 0.1 ? 1 : 0) + "%"; }
+
+async function loadList() {
+  const r = await fetch("/api/threats");
+  if (r.status === 401) { location.href = "/login"; return; }
+  if (!r.ok) { document.getElementById("tb-grid").innerHTML = `<div class="tb-empty">${escapeHtml(await r.text())}</div>`; return; }
+  const d = await r.json();
+  list = d.briefings || []; editable = !!d.editable;
+  document.getElementById("tb-new").hidden = !editable;
+  document.getElementById("tb-window").textContent = d.window_days;
+  document.getElementById("tb-status").textContent = d.kev_fetched_at ? `CISA catalog updated ${fmtAgo(d.kev_fetched_at)}` : "the CISA catalog has not been downloaded yet";
+  const inFleet = list.filter(b => b.vulnerable || b.present);
+  const vulnEps = list.reduce((n, b) => n + (b.vulnerable || 0), 0);
+  document.getElementById("tb-tiles").innerHTML = [
+    { label: "Briefings", value: list.length, filter: "all" },
+    { label: "Found in this fleet", value: inFleet.length, cls: inFleet.length ? "bad" : "ok", filter: "fleet" },
+    { label: "Vulnerable endpoints (sum)", value: vulnEps, cls: vulnEps ? "bad" : "ok", filter: "vulnerable" },
+    { label: "Ransomware-linked", value: list.filter(b => b.ransomware).length, filter: "ransom" },
+  ].map(t => `<button type="button" class="stat-tile stat-tile-link" data-tile-filter="${escapeHtml(t.filter)}" title="Show these briefings"><div class="stat-tile-label">${escapeHtml(t.label)}</div><div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></button>`).join("");
+  document.querySelectorAll("[data-tile-filter]").forEach(b => b.addEventListener("click", () => {
+    // A tile shows a count over the whole list, so clear the search
+    // too: otherwise the grid could show fewer cards than the tile says.
+    document.getElementById("tb-search").value = "";
+    setFilter(b.dataset.tileFilter);
+    document.querySelector(".tb-bar").scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+  renderGrid();  loadAutoRemediation();
+}
+// The automatic remediation rule (threat_autoremediate.go): a one-line
+// summary for everyone, and a dialog for patches.manage.
+async function loadAutoRemediation() {
+  const el = document.getElementById("tb-auto");
+  const r = await fetch("/api/threat-settings");
+  if (!r.ok) return;
+  const d = await r.json();
+  const c = d.auto_remediation || {};
+  const when = c.after_days ? `${c.after_days} day${c.after_days === 1 ? "" : "s"} after an endpoint is found vulnerable` : "within the hour an endpoint is found vulnerable";
+  el.hidden = false;
+  el.innerHTML = `<span><b>Automatic remediation:</b> ${c.enabled
+      ? `on, patching the affected packages ${escapeHtml(when)}, inside maintenance windows${c.restart_mode ? ", restarting if the updates need it" : ", without restarting"}`
+      : "off"}.
+    <b>Past-due alerts:</b> ${c.overdue_alerts ? "on" : "off"}.</span>
+    ${d.editable ? '<button class="tiny" id="tb-auto-edit" type="button">Change</button>' : ""}`;
+  el.querySelector("#tb-auto-edit")?.addEventListener("click", () => editAutoRemediation(c));
+}
+
+function editAutoRemediation(c) {
+  const days = [0, 1, 2, 3, 7, 14, 30];
+  openModal("Automatic remediation", `
+    <p class="modal-note">For endpoints the vulnerability scan confirms as vulnerable to a briefing (never "product present"): install the
+      pending updates for the vulnerable packages and nothing else, within maintenance windows and the patch lists, at most
+      three attempts a day apart. Runs appear under Patch → Deployments, started by "auto-remediation". Like patch schedules,
+      these runs are not held for approval: turning this on is the decision.</p>
+    <label class="pa-opt"><input type="checkbox" id="ar-enabled"${c.enabled ? " checked" : ""}><span><b>Patch vulnerable endpoints automatically</b></span></label>
+    <div class="ar-row"><label for="ar-days">Wait</label>
+      <select id="ar-days">${days.map(n => `<option value="${escapeHtml(n)}"${n === (c.after_days || 0) ? " selected" : ""}>${escapeHtml(n ? `${n} day${n === 1 ? "" : "s"} after it is found` : "no, patch at the next hourly check")}</option>`).join("")}</select></div>
+    <div class="ar-row"><label for="ar-restart">Afterwards</label>
+      <select id="ar-restart"><option value="">Don't restart</option><option value="if_required"${c.restart_mode === "if_required" ? " selected" : ""}>Restart if the updates need it (15-minute warning)</option></select></div>
+    <label class="pa-opt"><input type="checkbox" id="ar-overdue"${c.overdue_alerts ? " checked" : ""}><span><b>Alert for endpoints still vulnerable after CISA's due date</b><span class="pa-hint">One notification per endpoint and briefing.</span></span></label>
+    <div class="modal-actions u-d-flex u-gap-8 u-mt-16">
+      <button class="primary" id="ar-save" type="button">Save</button><button class="tiny" id="ar-cancel" type="button">Cancel</button>
+      <span class="muted" id="ar-status"></span></div>`, wrap => {
+    wrap.querySelector("#ar-cancel").addEventListener("click", () => wrap.remove());
+    wrap.querySelector("#ar-save").addEventListener("click", async () => {
+      const restart = wrap.querySelector("#ar-restart").value;
+      const body = { enabled: wrap.querySelector("#ar-enabled").checked, after_days: Number(wrap.querySelector("#ar-days").value),
+        restart_mode: restart, restart_warn_minutes: restart ? 15 : 0, overdue_alerts: wrap.querySelector("#ar-overdue").checked };
+      if (body.enabled && !c.enabled && !confirm("Turn on automatic patching? Vulnerable endpoints will be patched without anyone pressing a button.")) return;
+      const r = await fetch("/api/threat-settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { wrap.querySelector("#ar-status").textContent = (await r.text()).trim(); return; }
+      wrap.remove();
+      showToast("Automatic remediation saved");
+      loadAutoRemediation();
+    });
+  });
+}
+
+function renderGrid() {
+  const q = document.getElementById("tb-search").value.trim().toLowerCase();
+  const rows = list.filter(b => {
+    if (filter === "fleet" && !(b.vulnerable || b.present)) return false;
+    if (filter === "vulnerable" && !b.vulnerable) return false;
+    if (filter === "custom" && b.kind !== "custom") return false;
+    if (filter === "ransom" && !b.ransomware) return false;
+    if (!q) return true;
+    return [b.title, b.vendor, b.product, (b.cves || []).join(" "), b.summary].join(" ").toLowerCase().includes(q);
+  });
+  const grid = document.getElementById("tb-grid");
+  if (!rows.length) { grid.innerHTML = `<div class="tb-empty">${escapeHtml(list.length ? (EMPTY[filter] && !q ? EMPTY[filter] : "nothing matches") : "No briefings yet: the CISA catalog downloads a minute after the server starts.")}</div>`; return; }
+  grid.innerHTML = rows.map(b => {
+    const cls = b.vulnerable ? "hit" : (b.present ? "warn" : "");
+    const det = b.rule.appliance ? "appliance — no endpoint sees it" : (b.rule.checked ? escapeHtml(b.rule.label || "detection rule") : "not checked in this fleet");
+    return `<a class="tb-card ${cls}" href="#${escapeHtml(encodeURIComponent(b.id))}">
+      <div class="tb-badges">${b.kind === "custom" ? '<span class="tb-badge custom">Briefing</span>' : ""}${b.kev ? '<span class="tb-badge kev">Exploited in the wild</span>' : ""}${b.ransomware ? '<span class="tb-badge ransom">Ransomware</span>' : ""}${(b.cves || []).slice(0, 3).map(c => `<span class="tb-badge mono">${escapeHtml(c)}</span>`).join("")}</div>
+      <h3>${escapeHtml(b.title)}</h3>
+      <p>${escapeHtml(b.summary || "")}</p>
+      <div class="tb-counts">
+        <div class="tb-count ${b.vulnerable ? "bad" : ""}"><b>${escapeHtml(b.vulnerable)}</b><span>vulnerable</span></div>
+        <div class="tb-count ${b.present ? "warn" : ""}"><b>${b.rule.checked ? escapeHtml(b.present) : "—"}</b><span>product present</span></div>
+      </div>
+      <div class="tb-foot">${b.date_added ? `<span>added ${escapeHtml(fmtDate(b.date_added))}</span>` : ""}${b.due_date ? `<span>CISA due ${escapeHtml(fmtDate(b.due_date))}</span>` : ""}<span>EPSS ${escapeHtml(epssText(b.epss))}</span><span>${det}</span></div>
+    </a>`;
+  }).join("");
+}
+document.getElementById("tb-search").addEventListener("input", renderGrid);
+// What an empty filter means, so a zero count reads as good news
+// rather than as a broken page.
+const EMPTY = {
+  fleet: "No briefing applies to this fleet: no endpoint has an affected product installed.",
+  vulnerable: "No endpoint is vulnerable to any of these: the vulnerability scan matched no installed version.",
+  ransom: "None of these is linked to ransomware campaigns.",
+  custom: "Your team has not written a briefing yet.",
+};
+function setFilter(f) {
+  filter = f;
+  document.querySelectorAll("[data-filter]").forEach(x => x.classList.toggle("on", x.dataset.filter === f));
+  renderGrid();
+}
+document.querySelectorAll("[data-filter]").forEach(b => b.addEventListener("click", () => setFilter(b.dataset.filter)));
+
+async function loadDetail(id, edit) {
+  const el = document.getElementById("tb-detail");
+  if (!edit) el.innerHTML = '<div class="tb-empty">loading…</div>';
+  const r = await fetch(`/api/threats/${encodeURIComponent(id)}`);
+  if (!r.ok) { el.innerHTML = `<div class="tb-empty">${escapeHtml((await r.text()).trim())}</div>`; return; }
+  const d = lastDetail = await r.json();
+  editable = !!d.editable;
+  if (edit) return openEditor(d);
+  renderDetail(d);
+}
+
+function panel(p) { return renderPanel(Object.assign({ width: 1 }, p)); }
+
+function renderDetail(d) {
+  const el = document.getElementById("tb-detail");
+  const eps = d.endpoints || [];
+  const online = eps.filter(e => e.online).length;
+  // Installed versions, one donut per operating system.
+  const byOS = {};
+  for (const v of d.versions || []) (byOS[v.os] = byOS[v.os] || []).push(v);
+  const donuts = Object.entries(byOS).map(([os, vs]) => {
+    const total = vs.reduce((n, v) => n + v.count, 0);
+    return panel({ id: "v-" + os, title: `${osLabelOf(os)} endpoints`, chart: "donut", count: total,
+      series: vs.slice(0, 8).map(v => ({ label: `${v.product} ${v.version}`.trim(), key: v.version, value: v.count, share: v.count / total * 100 })) });
+  }).join("");
+  const trend = (d.trend || []).map(t => ({ at: t.day, value: t.vulnerable + t.present }));
+  const trendPanel = panel({ id: "trend", title: "Affected endpoints, last 30 days", chart: "area", history: trend, count: trend.length });
+  const cveBlocks = (d.cve_details || []).map(c => `<div class="tb-cve">
+      <b class="mono">${escapeHtml(c.cve)}</b>${c.kev ? ' <span class="tb-badge kev">KEV</span>' : ""}${c.ransomware ? ' <span class="tb-badge ransom">Ransomware</span>' : ""}
+      ${c.epss != null ? ` <span class="tb-badge">EPSS ${escapeHtml(epssText(c.epss))}${c.percentile != null ? `, top ${escapeHtml(Math.max(1, Math.round((1 - c.percentile) * 100)))}%` : ""}</span>` : ""}
+      ${c.name ? `<div>${escapeHtml(c.name)}</div>` : ""}
+      ${c.description ? `<div class="muted">${escapeHtml(c.description)}</div>` : ""}
+      ${c.required_action ? `<div><b>CISA's required action:</b> ${escapeHtml(c.required_action)}${c.due_date ? ` (federal agencies, by ${escapeHtml(fmtDate(c.due_date))})` : ""}</div>` : ""}
+    </div>`).join("");
+  const det = d.rule.appliance ? `<b>Outside the fleet:</b> ${escapeHtml(d.rule.label)} runs on a network appliance or hosted service, which no endpoint agent sees. Check it in the vendor's own console.`
+    : d.rule.checked ? `<b>How it is found:</b> ${escapeHtml(d.rule.label || "detection rule")}${d.rule.note ? " — " + escapeHtml(d.rule.note) : ""}`
+    : `<b>Not checked:</b> there is no rule yet for finding ${escapeHtml(d.rule.label || "this product")} on an endpoint, so only a vulnerability-scan match would show here.${d.editable ? " Write a briefing from this to add one." : ""}`;
+
+  el.innerHTML = `
+    <div class="tb-title"><h2>${escapeHtml(d.title)}</h2>
+      <div class="tb-badges">${d.kind === "custom" ? '<span class="tb-badge custom">Briefing</span>' : ""}${d.kev ? '<span class="tb-badge kev">Exploited in the wild</span>' : ""}${d.ransomware ? '<span class="tb-badge ransom">Ransomware</span>' : ""}${d.custom && d.custom.archived ? '<span class="tb-badge">Archived</span>' : ""}</div></div>
+    <div class="tb-actions" id="tb-detail-actions"></div>
+    <div class="tb-tiles">
+      <div class="tb-tile ${d.vulnerable ? "bad" : ""}"><b>${escapeHtml(d.vulnerable)}</b><span>Vulnerable endpoints (version confirmed)</span></div>
+      <div class="tb-tile ${d.present ? "warn" : ""}"><b>${d.rule.checked ? escapeHtml(d.present) : "—"}</b><span>Product present, version not checked</span></div>
+      <div class="tb-tile"><b>${escapeHtml(online)}</b><span>Of those, online now</span></div>
+      <div class="tb-tile"><b>${escapeHtml(d.cvss != null ? d.cvss.toFixed(1) : "—")}</b><span>CVSS (from the scan)</span></div>
+      <div class="tb-tile"><b>${escapeHtml(epssText(d.epss))}</b><span>EPSS: chance of exploitation in 30 days</span></div>
+    </div>
+    <div class="tb-cols">
+      <div class="panel"><div class="panel-header"><h2>Overview</h2></div>
+        <div class="tb-prose">${paragraphs(d.summary) || '<p class="muted">No overview.</p>'}</div>
+        ${d.mitigation ? `<h3>Mitigation</h3><div class="tb-prose">${paragraphs(d.mitigation)}</div>` : ""}
+        <p class="muted">${det}</p>
+        ${d.cleared ? `<p class="muted"><b>${escapeHtml(d.cleared)} Linux endpoint(s)</b> have the product, and their vulnerability scan (the distribution's own security data) does not flag ${d.cves.length > 1 ? "these CVEs" : "this CVE"} for them: checked, not affected.</p>` : ""}
+      </div>
+      <div class="panel"><div class="panel-header"><h2>Facts</h2></div>
+        <div class="tb-facts">
+          ${d.date_added ? `<div class="tb-fact"><span>Added to CISA KEV</span><b>${escapeHtml(fmtDate(d.date_added))}</b></div>` : ""}
+          ${d.due_date ? `<div class="tb-fact"><span>CISA due date</span><b>${escapeHtml(fmtDate(d.due_date))}</b></div>` : ""}
+          ${d.vendor ? `<div class="tb-fact"><span>Vendor</span><b>${escapeHtml(d.vendor)}</b></div>` : ""}
+          ${d.product ? `<div class="tb-fact"><span>Product</span><b>${escapeHtml(d.product)}</b></div>` : ""}
+        </div>
+        <div class="tb-cves">${cveBlocks}</div>
+        <h3>References</h3>
+        ${(d.refs || []).length ? `<ul class="tb-refs">${d.refs.map(x => `<li><a href="${escapeHtml(safeUrl(x.url))}" target="_blank" rel="noopener noreferrer">${escapeHtml(x.label)}</a></li>`).join("")}</ul>` : '<p class="muted">None.</p>'}
+      </div>
+    </div>
+    <div class="tb-panels">${donuts || panel({ id: "v-none", title: "Installed versions", chart: "donut", series: [], count: 0 })}${trendPanel}</div>
+    <div class="panel"><div class="panel-header"><h2>Affected endpoints</h2><span class="scan-status">${escapeHtml(eps.length)} endpoint(s)</span></div>
+      <div class="table-scroll rows-10"><table class="table-compact" id="tb-eps">
+        <thead><tr><th>Endpoint</th><th>OS</th><th>Status</th><th>Product</th><th>Version</th><th>Fixed in</th><th>CVEs</th></tr></thead>
+        <tbody>${eps.length ? eps.map(e => `<tr>
+          <td><a href="/endpoint/${escapeHtml(e.agent_id)}">${escapeHtml(e.hostname)}</a>${e.online ? "" : ' <span class="muted">(offline)</span>'}</td>
+          <td>${escapeHtml(osLabelOf(e.os))}</td>
+          <td data-sort="${escapeHtml(e.status)}"><span class="pill ${escapeHtml(e.status)}">${e.status === "vulnerable" ? "vulnerable" : "product present"}</span></td>
+          <td>${escapeHtml(e.product)}</td><td class="mono">${escapeHtml(e.version || "—")}</td><td class="mono">${escapeHtml(e.fixed || "—")}</td>
+          <td class="mono">${escapeHtml((e.cves || []).join(", ") || "—")}</td></tr>`).join("")
+          : `<tr><td class="empty" colspan="7">${d.rule.checked || d.vulnerable ? "No endpoint in this fleet is affected." : "Nothing to show: the product is not checked here."}</td></tr>`}</tbody></table></div>
+      ${d.vulnerable ? '<p class="muted">Patch them with the buttons at the top of this briefing: only the affected packages, or everything pending, from the operating system\'s own updater. Software that updater does not manage is updated from the Software catalog when a catalog package detects it. The list updates a couple of minutes after an endpoint is fixed.</p>' : ""}
+    </div>
+    <div class="panel"><div class="panel-header"><h2>Hunting</h2></div>
+      <p class="hint">Questions that show where the product is and what it is doing right now. Each opens in Interact, where the answer can be acted on.</p>
+      ${(d.questions || []).length ? `<ol class="tb-q">${d.questions.map(q => `<li><a href="/interact#ask?q=${escapeHtml(encodeURIComponent(q))}">${escapeHtml(q.replace(/^get /, "Get "))}</a></li>`).join("")}</ol>` : '<p class="muted">No questions: there is no detection rule for this product.</p>'}
+      <p class="muted">Signs of compromise: <a href="/hunt#findings">Threat Response findings</a> and <a href="/hunt#activity">live activity</a>.</p>
+    </div>`;
+  wirePanels(el);
+  const t = el.querySelector("#tb-eps"); if (t) { const dt = initDataTable(t, { storageKey: "threat-endpoints" }); if (dt) dt.refresh(); }
+  const actions = el.querySelector("#tb-detail-actions");
+  if (d.editable) {
+    if (d.kind === "custom") {
+      actions.innerHTML = `<button class="secondary" id="tb-edit">Edit</button><button class="secondary" id="tb-archive">${d.custom && d.custom.archived ? "Restore" : "Archive"}</button><button class="danger" id="tb-delete">Delete</button>`;
+      actions.querySelector("#tb-edit").addEventListener("click", () => { location.hash = "edit/" + d.id; });
+      actions.querySelector("#tb-archive").addEventListener("click", () => saveBrief(Object.assign({}, d.custom, { archived: !d.custom.archived }), d.id, true));
+      actions.querySelector("#tb-delete").addEventListener("click", async () => {
+        if (!confirm(`Delete the briefing "${d.title}"? Its trend history goes with it.`)) return;
+        const r = await fetch(`/api/threats/${encodeURIComponent(d.id)}`, { method: "DELETE" });
+        if (!r.ok) { alert((await r.text()).trim()); return; }
+        location.hash = "";
+      });
+    } else {
+      actions.innerHTML = `<button class="secondary" id="tb-fork">Write a briefing from this</button>`;
+      actions.querySelector("#tb-fork").addEventListener("click", () => { location.hash = "edit/" + d.id; });
+    }
+  }
+  wireRemediate(d, eps, actions);
+}
+
+// wireRemediate adds the remediation buttons: patching the vulnerable
+// endpoints, separately the ones where only the product was seen (patching
+// those is a guess about the version), and deploying a Software catalog
+// package that updates the product, for software the operating system's
+// updater does not manage. Patching is Patch's own "Deploy now" with the
+// endpoints named, and can be narrowed to the packages the briefing found
+// vulnerable; either way approvals, maintenance windows, patch lists and
+// the audit trail apply as they do on the Patch page.
+function wireRemediate(d, eps, actions) {
+  const canPatch = !!(me && hasPermission(me, "patches.manage"));
+  const canDeploy = !!(me && hasPermission(me, "deploy.manage"));
+  const online = new Map(eps.filter(e => e.online).map(e => [e.agent_id, e]));
+  const vuln = canPatch ? eps.filter(e => e.online && e.status === "vulnerable") : [];
+  const present = canPatch ? eps.filter(e => e.online && e.status !== "vulnerable") : [];
+  const fixes = canDeploy ? (d.catalog || []).map(f => Object.assign({}, f, { targets: f.agent_ids.filter(id => online.has(id)) })).filter(f => f.targets.length) : [];
+  const offline = eps.filter(e => !e.online).length;
+  if (!vuln.length && !present.length && !fixes.length) return;
+  const box = document.createElement("span");
+  box.className = "tb-remediate";
+  box.innerHTML = (vuln.length ? `<button class="primary" id="tb-fix-vuln">Patch ${escapeHtml(vuln.length)} vulnerable endpoint${vuln.length === 1 ? "" : "s"}</button>` : "")
+    + (present.length ? `<button class="secondary" id="tb-fix-present" title="The product is installed but its version was not checked against the advisory">Patch ${escapeHtml(present.length)} endpoint${present.length === 1 ? "" : "s"} with the product</button>` : "")
+    + fixes.map((f, i) => `<button class="secondary" data-fix="${escapeHtml(i)}" title="Software catalog package that detects the affected product on these endpoints">${escapeHtml(f.operation === "update" ? "Update" : "Install")} ${escapeHtml(f.name)} on ${escapeHtml(f.targets.length)}</button>`).join("")
+    + (offline ? `<span class="muted" title="Offline endpoints are not sent anything; a patch schedule catches them when they are back">${escapeHtml(offline)} offline, not included</span>` : "");
+  actions.prepend(box);
+  const out = document.createElement("div");
+  out.className = "tb-remediate-out muted";
+  out.hidden = true;
+  actions.after(out);
+  const post = async (url, body) => {
+    const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const text = await resp.text();
+    let data = {}; try { data = JSON.parse(text); } catch (e) {}
+    if (!resp.ok) throw new Error(data.error || text.trim() || resp.statusText);
+    return data;
+  };
+  const parked = data => {
+    out.innerHTML = `${escapeHtml(data.message || "Parked for approval.")} <a href="/access#approvals">Approvals</a>`;
+  };
+  const after = "The briefing updates a couple of minutes after each endpoint finishes, once its software is re-scanned.";
+
+  const patch = async (targets, btn) => {
+    // The packages the scan found vulnerable, per endpoint. An endpoint
+    // matched on its operating system alone has none, and is patched in
+    // full or not at all.
+    const onlyMap = {};
+    for (const e of targets) if ((e.packages || []).length) onlyMap[e.agent_id] = e.packages;
+    const narrowable = targets.filter(e => onlyMap[e.agent_id]);
+    let opts = null;
+    if (narrowable.length) {
+      let detail = "";
+      try {
+        const pv = await post("/api/patches/deploy/preview", { target_agents: narrowable.map(e => e.agent_id), only_packages: onlyMap });
+        const rows = (pv.endpoints || []).map(x => `<li><span class="tb-only-host">${escapeHtml(x.hostname)}</span>: ${(x.only || []).length
+          ? escapeHtml(x.only.join(", ")) : `<span class="muted">no pending update for ${escapeHtml((onlyMap[x.agent_id] || []).join(", "))} yet</span>`}${x.agent_too_old ? ' <span class="muted">(agent too old)</span>' : ""}</li>`);
+        if (rows.length) detail = `<ul class="tb-only-list">${rows.slice(0, 8).join("")}${rows.length > 8 ? `<li class="muted">${escapeHtml(rows.length - 8)} more</li>` : ""}</ul>`;
+      } catch (e) { /* the dialog works without the preview */ }
+      opts = { only: { label: "Only the affected packages",
+        hint: narrowable.length < targets.length
+          ? `Updates for the packages this briefing found vulnerable, nothing else. ${targets.length - narrowable.length} endpoint(s) matched on the operating system alone are left out.`
+          : "Updates for the packages this briefing found vulnerable, nothing else.", detailHTML: detail } };
+    }
+    const choice = await askPatchApply(targets.map(e => e.hostname), opts);
+    if (!choice) return;
+    const narrow = choice.scope === "only";
+    const chosen = narrow ? narrowable : targets;
+    const body = { target_agents: chosen.map(e => e.agent_id), restart_mode: choice.restart_mode, restart_warn_minutes: choice.restart_warn_minutes };
+    if (narrow) body.only_packages = onlyMap;
+    btn.disabled = true;
+    out.hidden = false;
+    out.textContent = "Starting…";
+    try {
+      // Never an empty list: /api/patches/deploy without target_agents
+      // patches the whole fleet.
+      if (!body.target_agents.length) throw new Error("no endpoint to patch");
+      const data = await post("/api/patches/deploy", body);
+      if (data.approval_required) return parked(data);
+      const started = (data.started || []).length, failed = Object.keys(data.failed || {}).length;
+      out.innerHTML = `Patching started on ${escapeHtml(started)} endpoint${started === 1 ? "" : "s"}${failed ? `, ${escapeHtml(failed)} not started` : ""}. `
+        + `<a href="/patches?run=${encodeURIComponent(data.run_id || "")}#deployments">Follow the deployment</a>. ${escapeHtml(after)}`;
+      showToast("Patching started");
+    } catch (e) {
+      out.textContent = "Patch request failed: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  const deployFix = async (f, btn) => {
+    const verb = f.operation === "update" ? "Update" : "Install";
+    if (!confirm(`${verb} ${f.name}${f.version ? " " + f.version : ""} from the Software catalog on ${f.targets.length} endpoint(s)? Maintenance windows apply.`)) return;
+    btn.disabled = true;
+    out.hidden = false;
+    out.textContent = "Starting…";
+    try {
+      // Never empty: an empty agent_ids deploys to every eligible endpoint.
+      if (!f.targets.length) throw new Error("no endpoint to deploy to");
+      const data = await post("/api/software/deploy", { package_id: f.package_id, operation: f.operation, agent_ids: f.targets });
+      if (data.approval_required) return parked(data);
+      out.innerHTML = `${escapeHtml(verb)} of ${escapeHtml(f.name)} started on ${escapeHtml(data.targets || 0)} endpoint(s)${data.skipped ? `, ${escapeHtml(data.skipped)} skipped` : ""}. `
+        + `<a href="/software?run=${encodeURIComponent(data.run_id || "")}#deployments">Follow the deployment</a>. ${escapeHtml(after)}`;
+      showToast(`${verb} started`);
+    } catch (e) {
+      out.textContent = "Deployment failed: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  box.querySelector("#tb-fix-vuln")?.addEventListener("click", e => patch(vuln, e.currentTarget));
+  box.querySelector("#tb-fix-present")?.addEventListener("click", e => patch(present, e.currentTarget));
+  box.querySelectorAll("[data-fix]").forEach(b => b.addEventListener("click", e => deployFix(fixes[Number(b.dataset.fix)], e.currentTarget)));
+}
+
+// The editor: a new briefing, an existing one, or one started from a
+// KEV briefing (its CVE, overview, references and detection rule).
+function openEditor(d) {
+  editing = d && d.kind === "custom" ? d.id : null;
+  document.getElementById("tb-detail-view").hidden = true;
+  document.getElementById("tb-edit-view").hidden = false;
+  document.getElementById("tb-edit-title").textContent = editing ? "Edit briefing" : "Write a briefing";
+  const c = d && d.custom ? d.custom : null;
+  const rule = c ? c.rule || {} : (d ? d.rule_spec || {} : {});
+  const set = (id, v) => { document.getElementById(id).value = v || ""; };
+  set("tbf-title", c ? c.title : (d ? d.title : ""));
+  set("tbf-cves", (c ? c.cves : (d ? d.cves : [])).join(", "));
+  set("tbf-summary", c ? c.summary : (d ? d.summary : ""));
+  set("tbf-mitigation", c ? c.mitigation : ((d && d.cve_details || []).map(x => x.required_action).filter(Boolean)[0] || ""));
+  set("tbf-refs", (c ? c.refs : (d ? d.refs : [])).map(x => `${x.label} | ${x.url}`).join("\n"));
+  set("tbf-rule-label", rule.label);
+  set("tbf-rule-apps", (rule.apps || []).join("\n"));
+  set("tbf-rule-procs", (rule.processes || []).join("\n"));
+  set("tbf-rule-svcs", (rule.services || []).join("\n"));
+  set("tbf-rule-note", rule.note);
+  set("tbf-questions", (c ? c.questions : []).join("\n"));
+  for (const o of ["linux", "windows", "darwin"]) document.getElementById("tbf-os-" + o).checked = (rule.os || []).includes(o);
+  document.getElementById("tbf-rule-appliance").checked = !!rule.appliance;
+  document.getElementById("tbf-status").textContent = "";
+}
+
+const lines = id => document.getElementById(id).value.split("\n").map(s => s.trim()).filter(Boolean);
+document.getElementById("tbf-save").addEventListener("click", () => {
+  const body = {
+    title: document.getElementById("tbf-title").value,
+    cves: document.getElementById("tbf-cves").value.split(/[\s,]+/).filter(Boolean),
+    summary: document.getElementById("tbf-summary").value,
+    mitigation: document.getElementById("tbf-mitigation").value,
+    refs: lines("tbf-refs").map(l => { const i = l.lastIndexOf("|"); return i < 0 ? { label: "", url: l } : { label: l.slice(0, i).trim(), url: l.slice(i + 1).trim() }; }),
+    rule: { label: document.getElementById("tbf-rule-label").value.trim(), apps: lines("tbf-rule-apps"), processes: lines("tbf-rule-procs"),
+      services: lines("tbf-rule-svcs"), os: ["linux", "windows", "darwin"].filter(o => document.getElementById("tbf-os-" + o).checked),
+      appliance: document.getElementById("tbf-rule-appliance").checked, note: document.getElementById("tbf-rule-note").value.trim() },
+    questions: lines("tbf-questions"),
+    archived: false,
+  };
+  saveBrief(body, editing, false);
+});
+
+async function saveBrief(body, id, stay) {
+  const st = document.getElementById("tbf-status");
+  st.textContent = "saving…";
+  const r = await fetch(id ? `/api/threats/${encodeURIComponent(id)}` : "/api/threats", {
+    method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { const msg = (await r.text()).trim(); st.textContent = "failed: " + msg; if (stay) alert(msg); return; }
+  const saved = await r.json();
+  st.textContent = "";
+  if (location.hash === "#" + encodeURIComponent(saved.id)) loadDetail(saved.id, false);
+  else location.hash = encodeURIComponent(saved.id);
+}
+</script>
+</body>
+</html>
