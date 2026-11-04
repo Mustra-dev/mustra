@@ -757,7 +757,16 @@ func (s *Server) deployDispatchLoop(ctx context.Context) {
 				continue
 			}
 			var reply proto.AgentCommandResult
-			if json.Unmarshal(message.Data, &reply) != nil || !reply.OK {
+			if json.Unmarshal(message.Data, &reply) != nil {
+				continue
+			}
+			if status, detail, refused := refusedDeploy(reply, record.CancelRequested); refused {
+				_ = s.store.UpdateDeployJob(ctx, j.ID, j.AgentID, status, detail)
+				_ = s.store.FinishAgentAction(ctx, j.AgentID, j.ID, status, detail)
+				s.notifyRunFinished(ctx, j.RunID)
+				continue
+			}
+			if !reply.OK {
 				continue
 			}
 			if record.Status == "queued" {
@@ -766,6 +775,20 @@ func (s *Server) deployDispatchLoop(ctx context.Context) {
 		}
 	}
 }
+
+// refusedDeploy ends a job on an endpoint that refuses code from the server.
+// Every other failed reply is retried, but this one won't change on its own, and
+// retrying it would keep the job open until the mode came off and then run it.
+func refusedDeploy(reply proto.AgentCommandResult, cancelRequested bool) (status, detail string, refused bool) {
+	if reply.OK || reply.Error != proto.NoRemoteCodeRefusal {
+		return "", "", false
+	}
+	if cancelRequested {
+		return "cancelled", reply.Error, true
+	}
+	return "failed", reply.Error, true
+}
+
 func (s *Server) consumeDeployEvent(ctx context.Context, event proto.DeployEvent) error {
 	record, e := s.store.GetDeployJob(ctx, event.JobID)
 	if e != nil {

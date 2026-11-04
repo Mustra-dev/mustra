@@ -116,53 +116,7 @@ func (a *Agent) runSelfService(ctx context.Context, addr string) {
 		writeLocalJSON(w, map[string]any{"ok": true, "checked_in_at": time.Now().Format(time.RFC3339)})
 	})
 
-	mux.HandleFunc("POST /api/install", func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			ItemID string `json:"item_id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeLocalJSON(w, map[string]any{"ok": false, "error": "bad request"})
-			return
-		}
-		auth := a.askServer(r.Context(), proto.SelfServiceRequest{
-			Action: "install", ItemID: body.ItemID, User: localUser(),
-		})
-		if auth.OK && auth.Deploy != nil {
-			if err := a.store.acceptDeploy(*auth.Deploy); err != nil {
-				writeLocalJSON(w, map[string]any{"ok": false, "error": err.Error()})
-				return
-			}
-			writeLocalJSON(w, map[string]any{"ok": true, "output": "Deployment queued; progress appears in Activity", "run_id": auth.RunID})
-			return
-		}
-		if !auth.OK || auth.Package == "" {
-			writeLocalJSON(w, map[string]any{"ok": false, "error": firstNonEmpty(auth.Error, "install was not authorized")})
-			return
-		}
-
-		a.softwareMu.Lock()
-		defer a.softwareMu.Unlock()
-		pending, err := a.store.deployStates()
-		if err != nil || len(pending) > 0 {
-			detail := "A software deployment is already pending; try again after it completes"
-			a.askServer(r.Context(), proto.SelfServiceRequest{Action: "install_result", RunID: auth.RunID, OK: false, Detail: detail})
-			writeLocalJSON(w, map[string]any{"ok": false, "error": detail})
-			return
-		}
-		// Self Service installs use the agent's default budget: the server
-		// hands back a package name to run, not the package's own timeout.
-		out, err := runSoftwareCommand(r.Context(), auth.Package, 0)
-		result := proto.SelfServiceRequest{
-			Action: "install_result", RunID: auth.RunID, OK: err == nil, Detail: out,
-		}
-		if err != nil {
-			result.Detail = err.Error() + "\n" + out
-		}
-		a.askServer(context.WithoutCancel(r.Context()), result)
-
-		writeLocalJSON(w, map[string]any{"ok": err == nil, "output": out,
-			"error": errString(err), "command": auth.Package})
-	})
+	mux.HandleFunc("POST /api/install", a.handleSelfServiceInstall)
 
 	// Updating the agent is offered, never applied on its own: a fleet that
 	// silently replaces its own agent binary is a fleet that can silently
@@ -351,4 +305,59 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// handleSelfServiceInstall installs an item the server authorizes. An endpoint
+// in inventory-and-patching mode says no before asking: the server would record
+// a run, and answer "queued" for a job that can never start here.
+func (a *Agent) handleSelfServiceInstall(w http.ResponseWriter, r *http.Request) {
+	if a.noRemoteCode {
+		writeLocalJSON(w, map[string]any{"ok": false, "error": errNoRemoteCode.Error()})
+		return
+	}
+	var body struct {
+		ItemID string `json:"item_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeLocalJSON(w, map[string]any{"ok": false, "error": "bad request"})
+		return
+	}
+	auth := a.askServer(r.Context(), proto.SelfServiceRequest{
+		Action: "install", ItemID: body.ItemID, User: localUser(),
+	})
+	if auth.OK && auth.Deploy != nil {
+		if err := a.store.acceptDeploy(*auth.Deploy); err != nil {
+			writeLocalJSON(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeLocalJSON(w, map[string]any{"ok": true, "output": "Deployment queued; progress appears in Activity", "run_id": auth.RunID})
+		return
+	}
+	if !auth.OK || auth.Package == "" {
+		writeLocalJSON(w, map[string]any{"ok": false, "error": firstNonEmpty(auth.Error, "install was not authorized")})
+		return
+	}
+
+	a.softwareMu.Lock()
+	defer a.softwareMu.Unlock()
+	pending, err := a.store.deployStates()
+	if err != nil || len(pending) > 0 {
+		detail := "A software deployment is already pending; try again after it completes"
+		a.askServer(r.Context(), proto.SelfServiceRequest{Action: "install_result", RunID: auth.RunID, OK: false, Detail: detail})
+		writeLocalJSON(w, map[string]any{"ok": false, "error": detail})
+		return
+	}
+	// Self Service installs use the agent's default budget: the server
+	// hands back a package name to run, not the package's own timeout.
+	out, err := runSoftwareCommand(r.Context(), auth.Package, 0)
+	result := proto.SelfServiceRequest{
+		Action: "install_result", RunID: auth.RunID, OK: err == nil, Detail: out,
+	}
+	if err != nil {
+		result.Detail = err.Error() + "\n" + out
+	}
+	a.askServer(context.WithoutCancel(r.Context()), result)
+
+	writeLocalJSON(w, map[string]any{"ok": err == nil, "output": out,
+		"error": errString(err), "command": auth.Package})
 }

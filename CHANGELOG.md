@@ -4,6 +4,31 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
+## 1.2.1 — 2026-11-04
+
+Security patch; server 1.2.1, agent 1.2.1. Upgrade the server if any endpoint runs
+in inventory-and-patching mode, and update those agents by running the installer
+on the machine. Install commands copied before the upgrade stop working: create a
+new enrollment token.
+
+### Security
+- **Jobs sent to a restricted endpoint no longer wait to run.** Inventory-and-patching
+  mode refused them, but a managed deployment stayed open and ran as soon as
+  somebody removed the mode, however old it was. Nothing ran while the mode was on.
+  A refusal now ends the deployment, and the agent drops any it had stored.
+- **A refused shell command no longer reads as a success.** The transcript and audit
+  log recorded it with exit code 0 and no output. They now record the refusal, with
+  exit code -1. This applies to any command an agent answers with an error.
+
+### Fixed
+- A deployment to a restricted endpoint shows as failed, with the reason, instead
+  of running forever while the server retried it every 5 seconds.
+- Self Service on a restricted endpoint says it can't install, instead of "Deployment
+  queued", and no longer records a run.
+- A restricted agent no longer logs a warning a minute about deployment settings.
+- The macOS installer no longer says Full Disk Access is missing when it can't tell.
+  It was checking its own access rather than the agent's.
+
 ## 1.2.0 — 2026-11-04
 
 Server 1.2.0; agent 1.2.0. Inventory-and-patching mode needs the new agent, so

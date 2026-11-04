@@ -86,6 +86,20 @@ func (s *Store) cancelDeploy(id string) error {
 		return b.Put([]byte(id), raw)
 	})
 }
+
+// dropDeploys forgets every stored deployment and says how many there were.
+func (s *Store) dropDeploys() (int, error) {
+	n := 0
+	e := s.db.Update(func(tx *bolt.Tx) error {
+		if tx.Bucket(deployBucket) == nil {
+			return nil
+		}
+		n = tx.Bucket(deployBucket).Stats().KeyN
+		return tx.DeleteBucket(deployBucket)
+	})
+	return n, e
+}
+
 func (s *Store) deployStates() ([]deployState, error) {
 	out := []deployState{}
 	e := s.db.View(func(tx *bolt.Tx) error {

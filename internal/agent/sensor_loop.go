@@ -210,7 +210,11 @@ func (a *Agent) handleCommand(ctx context.Context, data []byte, intervalChans ma
 	}
 	if a.noRemoteCode {
 		if !noRemoteCodeCommands[cmd.Cmd] {
-			a.logger.Warn("refused a command: inventory-and-patching mode", "command", cmd.Cmd)
+			// The server pushes deployment settings to every endpoint every
+			// minute. They run nothing, so refusing them isn't worth a warning.
+			if cmd.Cmd != "deploy_settings" {
+				a.logger.Warn("refused a command: inventory-and-patching mode", "command", cmd.Cmd)
+			}
 			return proto.AgentCommandResult{OK: false, Error: errNoRemoteCode.Error()}
 		}
 		if err := checkPatchNames(cmd.Patches); err != nil {
