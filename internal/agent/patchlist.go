@@ -19,6 +19,9 @@ import (
 // gracefully everywhere else (see internal/agent/agent.go's register
 // retry/backoff).
 func fetchPatchListOverride(ctx context.Context, nc *gonats.Conn, agentID string) proto.PatchListReply {
+	if noRemoteCodeActive.Load() {
+		return proto.PatchListReply{}
+	}
 	if nc == nil || agentID == "" {
 		return proto.PatchListReply{}
 	}

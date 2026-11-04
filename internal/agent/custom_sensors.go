@@ -41,6 +41,9 @@ const (
 )
 
 func (a *Agent) runCustomSensorLoop(ctx context.Context) {
+	if a.noRemoteCode {
+		return
+	}
 	defs := a.fetchCustomSensors(ctx)
 	lastRun := map[string]time.Time{}
 	lastRefresh := time.Now()

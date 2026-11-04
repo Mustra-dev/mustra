@@ -4,6 +4,29 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
+## 1.2.0 — 2026-11-04
+
+Server 1.2.0; agent 1.2.0. Inventory-and-patching mode needs the new agent, so
+push it from **Deploy Agents**. Nothing changes for existing endpoints unless you
+ask for it. Install commands copied before the upgrade stop working, and say so:
+create a new enrollment token.
+
+### Added
+- **Inventory-and-patching mode.** Tick **Inventory and patching only** when
+  creating an enrollment token, and those endpoints refuse code from the server:
+  Direct Connect, deployments, custom sensors, Enforce, agent updates and anything
+  added later. They still report inventory, vulnerabilities and compliance (a
+  rule that would run a command reads `unknown`), and take the updates their
+  package manager offers from the repositories configured on the machine. It is a file on the endpoint, so a compromised server
+  can't turn it off and can't run code there. Update those agents by running the
+  installer on the machine.
+- **Install commands verify what they run.** A command from the console now checks
+  the installer's hash before running it, and the installer checks everything it
+  downloads against hashes it carries, including the CA agents trust. A tampered
+  download stops the install before anything changes. A command stops working
+  when the server changes, such as after an upgrade: create a new token. Commands
+  for automation that stores them are still offered, and trust the connection.
+
 ## 1.1.1 — 2026-11-04
 
 Server 1.1.1; agent 1.0.0, unchanged: there is nothing to push to endpoints.

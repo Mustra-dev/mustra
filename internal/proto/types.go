@@ -96,6 +96,9 @@ type AgentSettings struct {
 	// Profile names the profile these came from, echoed back so drift is
 	// judged against the right one.
 	Profile string `json:"profile,omitempty"`
+	// NoRemoteCode says this endpoint runs in inventory-and-patching mode.
+	// Reported, never applied: only a file on the endpoint sets it.
+	NoRemoteCode bool `json:"no_remote_code,omitempty"`
 }
 
 // QueryKind enumerates the fixed set of safe, canned queries/sensors

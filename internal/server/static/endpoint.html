@@ -149,6 +149,14 @@ document.addEventListener("mustra:user", (e) => {
   if (currentTab() === "processes") renderProcessTree(document.getElementById("ep-content"));
 });
 
+// Reported by the agent in its facts; only a file on the endpoint sets it.
+function agentRefusesCode(agent) {
+  try {
+    const st = typeof agent.settings === "string" ? JSON.parse(agent.settings) : agent.settings;
+    return !!(st && st.no_remote_code);
+  } catch (e) { return false; }
+}
+
 async function loadAgent() {
   const resp = await fetch("/api/agents");
   if (resp.status === 401) { window.location.href = "/login"; return; }
@@ -721,6 +729,7 @@ async function renderOverview(el) {
         <h3>Agent</h3>
         ${detailRows([
           ["Agent version", agent.agent_version || "—"],
+          ["Runs code from the server", agentRefusesCode(agent) ? "No: inventory and patching only" : "Yes"],
           ["Agent ID", agent.agent_id],
           ["Site", agent.site || "—"],
           ["First seen", agent.first_seen ? fmtTime(agent.first_seen) : "—"],

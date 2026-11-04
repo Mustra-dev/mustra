@@ -76,3 +76,22 @@ If **Administration → Uninstall Password** is set, the uninstaller asks for it
 - **The command fails with a certificate error:** the server's agent certificate does not name the address the endpoint used. Ask the server's administrator to re-run the server setup with that address.
 - **The endpoint never appears:** check that port 4222 (or the port in the command) is reachable from the endpoint, and look at the agent's log: `journalctl -u mustra-agent` on Linux, `/var/log/mustra-agent.log` on macOS, `C:\ProgramData\mustra-agent\agent.log` on Windows.
 - **"token is not valid":** it has expired, been revoked or used up. Create another.
+
+## Inventory and patching only
+
+For machines you want visibility into, without giving mustra the ability to run code on them. Tick **Inventory and patching only** when you create the enrollment token.
+
+These endpoints still report inventory, vulnerabilities and compliance, and take the updates their package manager offers. They refuse everything else from the server: Direct Connect, deployments and Self Service installs, custom sensors, Enforce, end-user notices, and agent updates. A compliance rule that would run a command reads **unknown**, and updates come only from the repositories configured on the machine, so patch lists that choose repositories don't apply. The endpoint's page shows the mode.
+
+- **It can't be turned off from the console.** It's a file beside the agent, `no-remote-code`, that only an administrator on the endpoint can change. To leave the mode, delete that file and restart the agent.
+- **Updating the agent:** run a new install command on the machine. It keeps the mode.
+- **Not available yet:** Network Scan & Push and the Home Assistant add-on.
+
+## How install commands protect you
+
+A command from the console checks the installer's hash before running it, and the installer checks everything it downloads, so a tampered download stops the install before anything changes.
+
+If a command says it **no longer matches the server**, the server has changed since you copied it, usually because of an upgrade or a new uninstall password. Create a new enrollment token.
+
+For tools that store a command and reuse it, **Commands for automation that stores them** keeps working across upgrades until the token expires. Those commands trust the connection rather than checking the installer, so use them only over HTTPS.
+

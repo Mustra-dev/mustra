@@ -70,6 +70,11 @@ var ErrRestart = errors.New("agent restart requested")
 
 // Agent is one running instance of the mustra endpoint agent.
 type Agent struct {
+	// noRemoteCode is inventory-and-patching mode; see noremotecode.go. Read
+	// once at start, from a file only an administrator on the endpoint can
+	// change.
+	noRemoteCode bool
+
 	deployMu     sync.Mutex
 	jitMu        sync.Mutex
 	softwareMu   sync.Mutex
@@ -165,7 +170,12 @@ func New(cfg Config) *Agent {
 	if cfg.SensorInterval <= 0 {
 		cfg.SensorInterval = 15 * time.Minute
 	}
-	return &Agent{cfg: cfg, logger: cfg.Logger}
+	a := &Agent{cfg: cfg, logger: cfg.Logger, noRemoteCode: detectNoRemoteCode()}
+	if a.noRemoteCode {
+		a.logger.Info("inventory-and-patching mode: this endpoint refuses code from the server")
+		noRemoteCodeActive.Store(true)
+	}
+	return a
 }
 
 // Run blocks until ctx is cancelled, running the full agent lifecycle:
@@ -229,7 +239,14 @@ func (a *Agent) Run(ctx context.Context) error {
 	deployCtx, stopDeploy := context.WithCancel(ctx)
 	deployDone := make(chan struct{})
 	workerStarted := false
-	startDeploy := func() { workerStarted = true; go func() { defer close(deployDone); a.runDeployLoop(deployCtx) }() }
+	startDeploy := func() {
+		// Jobs accepted before this mode was turned on stay unstarted.
+		if a.noRemoteCode {
+			return
+		}
+		workerStarted = true
+		go func() { defer close(deployDone); a.runDeployLoop(deployCtx) }()
+	}
 	defer func() {
 		stopDeploy()
 		if workerStarted {

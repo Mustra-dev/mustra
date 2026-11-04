@@ -156,6 +156,10 @@ func evaluateRule(ctx context.Context, rule string) (bool, bool) {
 		return applyContentMatcher(string(data), matcher)
 
 	case strings.HasPrefix(target, "c:"):
+		// Not evaluated is not a pass or a fail: it reads as unknown.
+		if checkCommandsDisabled(ctx) {
+			return false, false
+		}
 		out := runCheckCommand(ctx, strings.TrimPrefix(target, "c:"))
 		if !hasMatcher {
 			return out != "", true

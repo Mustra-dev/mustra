@@ -42,6 +42,11 @@ func (a *Agent) subscribeShell(ctx context.Context) (*gonats.Subscription, error
 			respondShell(msg, proto.ShellReply{Error: "malformed shell request"})
 			return
 		}
+		if a.noRemoteCode {
+			a.logger.Warn("refused a shell command: inventory-and-patching mode")
+			respondShell(msg, proto.ShellReply{Error: errNoRemoteCode.Error()})
+			return
+		}
 		if strings.TrimSpace(req.Command) == "" {
 			respondShell(msg, proto.ShellReply{Error: "empty command"})
 			return

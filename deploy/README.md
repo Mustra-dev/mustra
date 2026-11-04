@@ -190,7 +190,10 @@ See `docs/ARCHITECTURE.md` for how each works and for RBAC.
 
 Every endpoint has an identity of its own. **Client Management → Manual
 install** creates an **enrollment token** (one use by default; up to 1000 for
-a mass rollout; it expires) and shows the one-liner per OS that carries it:
+a mass rollout; it expires) and shows the one-liner per OS that carries it. The
+command checks the installer's hash before running it, so it stops working if the
+server changes; the console also offers commands for automation that stores them,
+such as:
 
 ```sh
 curl -fsSL -H 'Authorization: Bearer mte_…' 'https://<console>/install.sh?site=lab' | sudo bash

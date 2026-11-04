@@ -336,7 +336,7 @@ func stepEnroll(t *testing.T, r *run) {
 	if !strings.Contains(tok1.Commands["unix"], "Authorization: Bearer "+tok1.Token) || !strings.Contains(tok1.Commands["unix"], r.e.publicURL+"/install.sh?site=lab") {
 		t.Fatalf("unexpected one-liner: %s", tok1.Commands["unix"])
 	}
-	// The one-liner pipes to sudo bash; run it under a permissive umask to
+	// The one-liner runs the script with sudo bash; run it under a permissive umask to
 	// prove the installer sets its own modes.
 	install(t, r.ep1, "umask 000; "+tok1.Commands["unix"])
 	r.agent1 = r.c.waitAgent(r.ep1.name, 90*time.Second, "ep1 registration", nil)

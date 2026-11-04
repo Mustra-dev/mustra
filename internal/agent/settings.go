@@ -123,6 +123,7 @@ func (a *Agent) currentSettings() *proto.AgentSettings {
 	if out.LogLevel == "" && a.cfg.LogLevel != nil {
 		out.LogLevel = strings.ToLower(a.cfg.LogLevel.Level().String())
 	}
+	out.NoRemoteCode = a.noRemoteCode
 	return &out
 }
 
