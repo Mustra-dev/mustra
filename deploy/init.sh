@@ -325,7 +325,11 @@ echo
 echo "Building and starting the stack. The first build cross-compiles six agent"
 echo "binaries and packages their Python runtimes, so it takes a few minutes."
 echo
-if ! docker compose up -d --build --wait; then
+# Build first, then start. `up --build` decides which images it must pull
+# before a build that can take many minutes, so one removed meanwhile (an
+# image prune, say) fails the start with "No such image" instead of being
+# pulled again.
+if ! { docker compose build && docker compose up -d --wait; }; then
   echo >&2
   echo "The stack did not come up healthy. What each service says:" >&2
   docker compose ps >&2
