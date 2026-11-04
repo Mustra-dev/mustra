@@ -156,9 +156,20 @@ func (s *Server) runEnforcePolicy(ctx context.Context, p store.EnforcePolicy, wh
 
 	targets, err := s.enforceTargets(ctx, p)
 	if err != nil {
+		s.emitCompleted("enforce", "Enforce run failed: "+p.Name, "failed", "warning", err.Error(), p.Name, "/enforce", nil)
 		return enforceRunSummary{Policy: p.Name, Mode: p.Mode}, err
 	}
-	return s.runEnforceOn(ctx, p, targets, who)
+	summary, err := s.runEnforceOn(ctx, p, targets, who)
+	switch {
+	case err != nil:
+		s.emitCompleted("enforce", "Enforce run failed: "+p.Name, "failed", "warning", err.Error(), p.Name, "/enforce", nil)
+	case summary.Endpoints > 0: // a pass with nobody in scope did nothing to report
+		title, outcome, severity, body := enforceCompletion(summary)
+		s.emitCompleted("enforce", title, outcome, severity, body, p.Name, "/enforce", map[string]any{
+			"mode": summary.Mode, "endpoints": summary.Endpoints, "compliant": summary.Compliant, "drifted": summary.Drifted,
+			"remediated": summary.Remediated, "failed": summary.Failed, "unknown": summary.Unknown, "unreached": summary.Unreached})
+	}
+	return summary, err
 }
 
 // runEnforceOn evaluates a policy against an explicit target list. Split

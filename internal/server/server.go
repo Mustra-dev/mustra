@@ -545,6 +545,7 @@ func Run(ctx context.Context, cfg Config) error {
 	go s.complianceScanLoop(ctx)
 	go s.warrantyLoop(ctx)
 	go s.integrationLoop(ctx)
+	go s.completionSweepLoop(ctx)
 	go s.recorderEventPruneLoop(ctx)
 	go s.exploitIntelRefreshLoop(ctx)
 	go s.clientProfileLoop(ctx)

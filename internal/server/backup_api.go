@@ -59,9 +59,12 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	rec, err := s.createBackup(r.Context(), u.Username, body.Note, body.IncludePackageFiles)
 	if err != nil {
 		s.logger.Error("backup failed", "error", err)
+		s.emitCompleted("backup", "A backup failed", "failed", "warning", err.Error(), firstNonEmpty(body.Note, "manual"), "/backup", map[string]any{"by": u.Username})
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.emitCompleted("backup", "A backup finished", "succeeded", "info", fmt.Sprintf("%d MB written, by %s.", rec.Bytes>>20, u.Username),
+		firstNonEmpty(body.Note, "manual"), "/backup", map[string]any{"bytes": rec.Bytes, "id": rec.ID, "by": u.Username})
 	s.audit(r.Context(), auditEvent{
 		Action: "backup.create", Actor: u.Username, Target: rec.ID, Severity: "notice",
 		Detail: map[string]any{"bytes": rec.Bytes, "package_files": rec.IncludesPackageFiles},

@@ -2832,7 +2832,22 @@ CREATE INDEX IF NOT EXISTS idx_vuln_alerts_last_seen ON vuln_alerts (last_seen);
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS email_template JSONB NOT NULL DEFAULT '{}';
 
 -- When a deployment or patch run's completion was announced to integrations,
--- whether or not it asked for a console notification (notified_at). A run that
--- finished before this column existed is never announced: its last result has
--- already come in, and only a result triggers the check.
+-- whether or not it asked for a console notification (notified_at).
 ALTER TABLE patch_job_runs ADD COLUMN IF NOT EXISTS completion_announced_at TIMESTAMPTZ;
+
+-- Once: runs that had already finished when completions began being swept are
+-- history, not news, whether or not anything announced them. A run still going
+-- keeps its NULL and is announced when it ends.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM settings WHERE key = 'migration.completion_backfill') THEN
+    UPDATE patch_job_runs p SET completion_announced_at = now()
+     WHERE p.completion_announced_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM deploy_jobs d WHERE d.run_id = p.id
+                        AND d.status NOT IN ('succeeded','failed','timed_out','cancelled','interrupted','expired','skipped','unsupported'))
+       AND NOT EXISTS (SELECT 1 FROM agent_actions a WHERE a.run_id = p.id
+                        AND a.status IN ('started','running','downloading','installing','waiting','pending_restart'));
+    INSERT INTO settings (key, value, updated_by) VALUES ('migration.completion_backfill', 'done', 'schema')
+    ON CONFLICT (key) DO NOTHING;
+  END IF;
+END $$;

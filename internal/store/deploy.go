@@ -311,6 +311,32 @@ func (s *Store) CancelHeldDeployJobs(ctx context.Context, runID, detail string) 
 // same list as deploy.Terminal, which the store cannot import.
 var deployFinalStatuses = []string{"succeeded", "failed", "timed_out", "cancelled", "interrupted", "expired", "skipped", "unsupported"}
 
+// UnannouncedRunIDs lists recent deployment and patch runs whose completion has
+// not been announced, for ClaimRunCompletion to decide about. Notices and surveys
+// share the table and are not "completed". Bounded by since: a run that can never
+// add up must not be looked at for ever.
+func (s *Store) UnannouncedRunIDs(ctx context.Context, since time.Time) ([]string, error) {
+	rows, e := s.pool.Query(ctx, `
+SELECT p.id FROM patch_job_runs p
+WHERE p.completion_announced_at IS NULL AND p.started_at >= $1
+  AND NOT EXISTS (SELECT 1 FROM playbook_runs WHERE id = p.id)
+  AND (EXISTS (SELECT 1 FROM deploy_jobs WHERE run_id = p.id)
+       OR EXISTS (SELECT 1 FROM agent_actions WHERE run_id = p.id AND kind = 'patch_apply'))`, since)
+	if e != nil {
+		return nil, fmt.Errorf("list unannounced runs: %w", e)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if e := rows.Scan(&id); e != nil {
+			return nil, e
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // actionOpenStatuses are the agent action states a run is still waiting on.
 var actionOpenStatuses = []string{"started", "running", "downloading", "installing", "waiting", "pending_restart"}
 
@@ -328,7 +354,7 @@ WHERE p.id = $1 AND p.completion_announced_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM deploy_jobs WHERE run_id = $1 AND NOT (status = ANY($2)))
   AND NOT EXISTS (SELECT 1 FROM agent_actions WHERE run_id = $1 AND status = ANY($3))
   AND (EXISTS (SELECT 1 FROM deploy_jobs WHERE run_id = $1)
-       OR (SELECT count(*) FROM agent_actions WHERE run_id = $1) >= GREATEST(p.agent_count, 1))
+       OR (SELECT count(*) FROM agent_actions WHERE run_id = $1 AND kind = 'patch_apply') >= GREATEST(p.agent_count, 1))
 RETURNING p.id, p.schedule_name, p.target_desc, p.agent_count, p.triggered_by, p.started_at`,
 		runID, deployFinalStatuses, actionOpenStatuses).
 		Scan(&r.ID, &r.ScheduleName, &r.TargetDesc, &r.AgentCount, &r.TriggeredBy, &r.StartedAt)

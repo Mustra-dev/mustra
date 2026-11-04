@@ -4,6 +4,24 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
+## 1.1.1 — 2026-11-04
+
+Server 1.1.1; agent 1.0.0, unchanged: there is nothing to push to endpoints.
+
+### Added
+- **More completed-action events.** Compliance scans, Enforce runs and manual
+  backups can now be announced too. A compliance scan counts as failed only when
+  an endpoint did not answer, and drift in report mode is not an Enforce failure.
+
+### Fixed
+- A deployment or patch run that ended without a result coming in (timed out,
+  expired while held for a maintenance window, or finished through an MDM) was
+  not announced to integrations taking completed actions. Finished runs are now
+  checked every minute. Runs already finished when upgrading are not announced.
+- An endpoint a patch run could not start on, because it was already patching or
+  had no affected package, is now recorded on the run as failed with the reason.
+  It used to be left out, so the run's counts did not add up.
+
 ## 1.1.0 — 2026-11-04
 
 Server 1.1.0; agent 1.0.0, unchanged: there is nothing to push to endpoints.

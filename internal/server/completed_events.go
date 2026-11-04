@@ -13,12 +13,15 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 var completedActions = map[string]string{
 	"deployment":  "Deployments and patch runs",
 	"playbook":    "Playbooks",
 	"backup":      "Backups",
+	"compliance":  "Compliance scans",
+	"enforce":     "Enforce runs",
 	"certificate": "Certificate renewals",
 	"vuln_scan":   "Vulnerability scans",
 	"report":      "Reports",
@@ -65,6 +68,58 @@ func parseCompletedFilter(v string) (string, error) {
 		}
 	}
 	return strings.Join(fields, ","), nil
+}
+
+// completionSweepWindow is how far back the sweep looks. Longer than the day a
+// job held for a maintenance window waits, and short enough that a run which can
+// never add up stops being looked at.
+const completionSweepWindow = 7 * 24 * time.Hour
+
+// completionSweepLoop catches runs that ended on any path. A result coming in
+// announces at once, but jobs also end by timing out, by expiring while held for
+// a window, and through an MDM. The claim makes announcing twice impossible.
+func (s *Server) completionSweepLoop(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.sweepRunCompletions(ctx)
+		}
+	}
+}
+
+func (s *Server) sweepRunCompletions(ctx context.Context) {
+	ids, err := s.store.UnannouncedRunIDs(ctx, time.Now().Add(-completionSweepWindow))
+	if err != nil {
+		s.logger.Warn("could not check for finished runs", "error", err)
+		return
+	}
+	for _, id := range ids {
+		s.announceRunCompleted(ctx, id)
+	}
+}
+
+// complianceCompletion describes a finished compliance run. Failing checks do
+// not make the run a failure: finding them is the job, and drift has its own
+// alert. An endpoint that never answered does, because its state is unknown.
+func complianceCompletion(policy string, total, reported, failing int) (title, outcome, severity, body string) {
+	outcome, severity = completedOutcome(reported, total-reported)
+	body = fmt.Sprintf("%d of %d endpoints reported. %d check%s failing.", reported, total, failing, plural(failing))
+	return "Compliance scan finished: " + policy, outcome, severity, body
+}
+
+// enforceCompletion describes a finished Enforce pass. Drift in report mode is
+// the policy doing its job; a failed remediation or an unreached endpoint is not.
+func enforceCompletion(sum enforceRunSummary) (title, outcome, severity, body string) {
+	bad := sum.Failed + sum.Unreached
+	good := sum.Compliant + sum.Drifted + sum.Remediated + sum.Unknown
+	outcome, severity = completedOutcome(good, bad)
+	body = fmt.Sprintf("%d endpoint%s, %d unreached. Settings: %d compliant, %d drifted, %d remediated, %d failed, %d unknown.",
+		sum.Endpoints, plural(sum.Endpoints), sum.Unreached, sum.Compliant, sum.Drifted, sum.Remediated, sum.Failed, sum.Unknown)
+	return "Enforce run finished: " + sum.Policy, outcome, severity, body
 }
 
 // announceRunCompleted announces a deployment or patch run once its last job
