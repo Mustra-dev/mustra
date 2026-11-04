@@ -254,6 +254,7 @@ function fmtAgo(iso) {
 // One weight, one grid, one stroke width. That uniformity is most of what
 // makes an icon set read as a set rather than as clip art.
 const ICON_PATHS = {
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
   grid:        '<rect x="4" y="4" width="4" height="4" rx=".8"/><rect x="10" y="4" width="4" height="4" rx=".8"/><rect x="16" y="4" width="4" height="4" rx=".8"/><rect x="4" y="10" width="4" height="4" rx=".8"/><rect x="10" y="10" width="4" height="4" rx=".8"/><rect x="16" y="10" width="4" height="4" rx=".8"/><rect x="4" y="16" width="4" height="4" rx=".8"/><rect x="10" y="16" width="4" height="4" rx=".8"/><rect x="16" y="16" width="4" height="4" rx=".8"/>',
   home:        '<path d="M3.5 10.5 12 3.5l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.75 20v-5.5h4.5V20"/>',
   certificate: '<rect x="3.5" y="3.5" width="17" height="12" rx="1.5"/><path d="M7 7.5h7M7 11h4"/><circle cx="16.5" cy="16.5" r="3.2"/><path d="M14.6 19.1 14 22.5l2.5-1.4 2.5 1.4-.6-3.4"/>',
@@ -619,6 +620,7 @@ const NAV_TREE = [
       { label: "Agent Identity", href: "/settings", hash: "agent-identity", perm: "settings.manage", icon: "key", desc: "The public URL agents download from, update signing, and the legacy shared credential." },
       { label: "Uninstall Password", href: "/settings", hash: "uninstall-password", perm: "settings.manage", icon: "lock", desc: "A password needed to remove the agent from an endpoint." },
       { label: "macOS MDM", href: "/settings", hash: "macos-mdm", perm: "settings.manage", icon: "shield", desc: "MDM enrollment offered to Macs, and macOS updates through Fleet." },
+      { label: "Email", href: "/settings", hash: "email", perm: "settings.manage", icon: "mail", desc: "The SMTP account reports and email integrations send through." },
       { label: "Network Allowlists", href: "/settings", hash: "network-allowlists", perm: "settings.manage", icon: "globe", desc: "The internal hosts the server may reach and import from." },
       { label: "Message Buffer", href: "/settings", hash: "message-buffer", perm: "settings.manage", icon: "database", desc: "How long NATS keeps agents' messages while the server is down." },
       { label: "Directory", href: "/settings", hash: "directory", perm: "settings.manage", icon: "users", desc: "Read users, groups and computers from Active Directory for Impact." },

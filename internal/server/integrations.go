@@ -7,9 +7,9 @@ package server
 // subscribe to its type at or above their minimum severity. Delivery never
 // blocks the action that raised the event: a full queue drops and counts.
 //
-// Kinds: webhook (JSON, optionally HMAC-signed), slack, teams, discord,
-// splunk_hec (HTTP Event Collector), loki (push API), servicenow (an
-// incident per event) and prometheus, which receives nothing: it holds the
+// Kinds: webhook (JSON, optionally HMAC-signed), slack, teams, discord, email
+// (through Administration → Email), splunk_hec (HTTP Event Collector), loki
+// (push API), servicenow (an incident per event) and prometheus, which receives nothing: it holds the
 // token that /metrics accepts. Scheduled exports of answers stay in Connect,
 // and the audit log's syslog forwarding in Logging.
 
@@ -40,7 +40,7 @@ import (
 )
 
 type integrationEvent struct {
-	Type     string         `json:"type"` // audit, alert
+	Type     string         `json:"type"` // audit, alert, expiry, vulnerability
 	Time     time.Time      `json:"time"`
 	Title    string         `json:"title"`
 	Action   string         `json:"action,omitempty"`
@@ -63,6 +63,7 @@ var integrationKinds = map[string]string{
 	"slack":      "Slack",
 	"teams":      "Microsoft Teams",
 	"discord":    "Discord",
+	"email":      "Email",
 	"splunk_hec": "Splunk (HTTP Event Collector)",
 	"loki":       "Grafana Loki",
 	"servicenow": "ServiceNow (incidents)",
@@ -209,6 +210,12 @@ func (s *Server) deliverEvent(ctx context.Context, in store.Integration, ev inte
 	}
 	ev.Actions = actions
 	switch in.Kind {
+	case "email":
+		to, err := parseMailRecipients(in.Config["recipients"])
+		if err != nil {
+			return err
+		}
+		return s.sendMail(ctx, eventMail(to, ev, title, link))
 	case "webhook":
 		if ev.Link != "" {
 			ev.Link = link
@@ -492,15 +499,22 @@ func (s *Server) handleSaveIntegration(w http.ResponseWriter, r *http.Request) {
 	if in.Config == nil {
 		in.Config = map[string]string{}
 	}
-	if in.Kind != "prometheus" {
+	if in.Kind == "email" {
+		to, err := parseMailRecipients(in.Config["recipients"])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		in.Config["recipients"] = strings.Join(to, ", ")
+	} else if in.Kind != "prometheus" {
 		if u, err := url.Parse(in.Config["url"]); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 			http.Error(w, "a http(s) URL is required", http.StatusBadRequest)
 			return
 		}
 	}
 	for _, e := range in.Events {
-		if e != "audit" && e != "alert" && e != "expiry" {
-			http.Error(w, "events are audit, alert and/or expiry", http.StatusBadRequest)
+		if e != "audit" && e != "alert" && e != "expiry" && e != "vulnerability" {
+			http.Error(w, "events are audit, alert, expiry and/or vulnerability", http.StatusBadRequest)
 			return
 		}
 	}

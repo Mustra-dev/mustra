@@ -1174,6 +1174,15 @@ var typeDocs = map[string]typeDoc{
 			"Target": "Target as it was saved, scheme included.",
 		},
 	},
+	"github.com/mustra-dev/mustra/internal/server.mailTestRequest": {
+		Doc: "mailTestRequest is the body of POST /api/admin/mail-test.",
+		Fields: map[string]string{
+			"To": "To is who receives the test: addresses separated by commas.",
+		},
+	},
+	"github.com/mustra-dev/mustra/internal/server.mailTestResponse": {
+		Doc: "mailTestResponse is what POST /api/admin/mail-test answers.",
+	},
 	"github.com/mustra-dev/mustra/internal/server.maintenanceWindowCheckRequest": {
 		Doc: "maintenanceWindowCheckRequest is the body of POST /api/maintenance-windows/check.",
 	},
@@ -1724,6 +1733,12 @@ var typeDocs = map[string]typeDoc{
 			"LocalMFARequired":          "LocalMFARequired: every local account must use two-step sign-in.",
 			"LogoURL":                   "Console branding — the uploaded logo itself is fetched as an image from /branding/logo rather than shipped through this JSON.",
 			"MacMDMEnrollURL":           "MacMDMEnrollURL is returned in full: it is not a password, though it usually carries the MDM's enroll secret, and this route already requires settings.manage.",
+			"MailFrom":                  "The SMTP account reports and email integrations send through. The password is never returned, only whether one is set.",
+			"MailHost":                  "The SMTP account reports and email integrations send through. The password is never returned, only whether one is set.",
+			"MailPasswordSet":           "The SMTP account reports and email integrations send through. The password is never returned, only whether one is set.",
+			"MailPort":                  "The SMTP account reports and email integrations send through. The password is never returned, only whether one is set.",
+			"MailSecurity":              "The SMTP account reports and email integrations send through. The password is never returned, only whether one is set.",
+			"MailUsername":              "The SMTP account reports and email integrations send through. The password is never returned, only whether one is set.",
 			"NATSURL":                   "Read-only, env-configured — shown for visibility only.",
 			"SCIMToken":                 "SCIMToken and UpdateToken are never returned: a secret is shown once, when it is set, and afterwards only whether one is set. Any script running in a settings.manage session could otherwise read them off this endpoint.",
 			"SSOAllowlist":              "SSOAllowlist is who may sign in through SSO; see oidc_allowlist.go.",
@@ -1999,6 +2014,7 @@ var typeDocs = map[string]typeDoc{
 			"ImportAllowedHosts":  "ImportAllowedHosts: hosts \"import from URL\" may reach although they are internal, and the only hosts a stored credential is sent to.",
 			"LocalMFARequired":    "LocalMFARequired makes every local account use two-step sign-in; one without it sets it up at its next sign-in.",
 			"MacMDMEnrollURL":     "MacMDMEnrollURL: nil leaves it alone, \"\" turns the offer off.",
+			"MailPassword":        "MailPassword: nil leaves it alone, \"\" removes it.",
 			"UninstallPassword":   "UninstallPassword: nil leaves it alone, \"\" removes the requirement, anything else replaces it.",
 			"WebhookAllowedHosts": "WebhookAllowedHosts: hosts a Connect, report or Jump Gate webhook may reach although they are internal (and the only ones allowed http).",
 		},

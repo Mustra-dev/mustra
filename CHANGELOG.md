@@ -4,6 +4,36 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
+## Unreleased
+
+### Added
+- **Email.** Administration → Email holds an SMTP account, with a test send.
+  Certificates are always verified, a password only travels over TLS, and a
+  server on an internal address needs the internal destinations allowlist.
+- **Reports can be emailed.** The Email destination sends the full report,
+  with the text digest as the plain-text part.
+- **Email integrations.** Anything an integration can take can now go to
+  email, including certificate and credential expiry, which the guide already
+  promised.
+- **New-vulnerability alerts.** Integrations can take a new **vulnerability**
+  event. After each scan, findings not yet announced arrive as one digest per
+  severity level, and the integration's minimum severity chooses between
+  everything and only the big ones: `error` is critical findings and anything
+  in CISA's KEV catalogue. Threat briefings' actively exploited findings are
+  sent too. The first scan after upgrading only takes stock, so nothing is sent
+  for findings you already have. Each finding is announced once per endpoint,
+  and again only if it becomes more severe.
+- The Vulnerabilities source of reports, dashboards and Connect exports has
+  `kev`, `ransomware` and `epss` columns, and lists the worst first. A report's
+  default table for it now shows host, vulnerability, package, severity, KEV
+  and EPSS.
+
+### Fixed
+- The Vulnerabilities source of reports, dashboards and Connect exports
+  included findings the distribution says need no action, so its counts were
+  higher than the Vulnerabilities page's. They are now left out, as the source
+  always claimed. A finding with no rating now reads `unknown` instead of blank.
+
 ## 1.0.0 — 2026-11-02
 
 The first public release. Server 1.0.0; agent 1.0.0. Upgrading from

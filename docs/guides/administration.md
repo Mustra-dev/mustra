@@ -12,7 +12,7 @@ Configure the server: integrations, how agents behave, network allowlists, brand
 
 | Section | What it does |
 | --- | --- |
-| **Integrations** | Connect outside systems: Slack and Teams webhooks, event streaming, Microsoft Entra ID and Intune, certificate authorities |
+| **Integrations** | Connect outside systems: email, Slack and Teams, event streaming, Microsoft Entra ID and Intune, certificate authorities |
 | **Telemetry** | Send endpoint metrics to Prometheus (remote write), or let Prometheus scrape them |
 | **Single Sign-On** | Identity providers and the SSO allowlist. See [Accounts, roles and sign-in](users-and-access.md) |
 | **SCIM** | Let your identity provider create and disable accounts automatically |
@@ -21,6 +21,7 @@ Configure the server: integrations, how agents behave, network allowlists, brand
 | **Agent Identity** | The addresses agents connect to and download from |
 | **Uninstall Password** | A password the agent uninstaller asks for, so users cannot remove it |
 | **macOS MDM** | Enrol Macs in your MDM, and run macOS updates through it |
+| **Email** | The SMTP account reports and Email integrations send through, and a test send |
 | **Network Allowlists** | Which internal hosts the server may reach (webhooks, syslog, LDAP) and import from |
 | **Message Buffer** | How long agent messages are kept when the server cannot process them |
 | **Directory** | Read Active Directory over LDAP, for targeting and Impact |

@@ -870,6 +870,9 @@ func (s *Server) threatLoop(ctx context.Context) {
 					what += fmt.Sprintf(", %d with %s installed", b.Present, firstNonEmpty(rule.Label, "the product"))
 				}
 				s.notify(ctx, "warning", "Threat briefings", "Actively exploited: "+b.Title, what, "/threats#"+url.PathEscape(b.ID))
+				s.emitEvent(integrationEvent{Type: "vulnerability", Title: "Actively exploited: " + b.Title, Body: what,
+					Severity: "critical", Link: "/threats#" + url.PathEscape(b.ID),
+					Detail: map[string]any{"kind": "actively_exploited", "id": b.ID, "cves": b.CVEs, "vulnerable": b.Vulnerable, "present": b.Present}})
 				s.audit(ctx, auditEvent{Action: "threats.found", Actor: "system", Target: b.Title, Severity: "warning",
 					Detail: map[string]any{"id": b.ID, "cves": b.CVEs, "vulnerable": b.Vulnerable, "present": b.Present}})
 				_ = s.store.MarkThreatAlerted(ctx, b.ID, found, false)

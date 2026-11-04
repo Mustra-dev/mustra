@@ -11,7 +11,7 @@ See every certificate in your fleet and when it expires, and have mustra renew a
 
 **Certificate Manager → Overview** lists what expires next across files, the Windows certificate store, the macOS System keychain and the certificates endpoints serve on their TLS ports. **Inventory** lists them all.
 
-Set **Alerts** to be told 60, 30, 14, 7 and 1 days before expiry, by email or webhook. **Send a test** checks the destination.
+Set **Alerts** to be told 60, 30, 14, 7 and 1 days before expiry, through any integration that takes **expiry** events, such as Email, Slack or a webhook. **Test** on the integration checks the destination.
 
 ## Have mustra manage a certificate
 

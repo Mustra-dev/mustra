@@ -146,7 +146,7 @@ type reportRequest struct {
 	WebhookStyle string          `json:"webhook_style"`
 }
 
-var reportDestinations = map[string]bool{"": true, "webhook": true, "file": true, "syslog": true}
+var reportDestinations = map[string]bool{"": true, "webhook": true, "file": true, "syslog": true, "email": true}
 
 // saveReportResponse is what POST /api/reports and PUT /api/reports/{id}
 // answer.
@@ -181,7 +181,7 @@ func (s *Server) handleSaveReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !reportDestinations[req.Destination] {
-		http.Error(w, "destination must be blank, webhook, file or syslog", http.StatusBadRequest)
+		http.Error(w, "destination must be blank, webhook, file, syslog or email", http.StatusBadRequest)
 		return
 	}
 	if req.Destination != "" && strings.TrimSpace(req.Target) == "" {
@@ -190,6 +190,14 @@ func (s *Server) handleSaveReport(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Destination == "" {
 		req.Target, req.WebhookStyle = "", ""
+	}
+	if req.Destination == "email" {
+		to, err := parseMailRecipients(req.Target)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		req.Target, req.WebhookStyle = strings.Join(to, ", "), ""
 	}
 
 	var next *time.Time

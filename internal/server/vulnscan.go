@@ -349,6 +349,9 @@ func (s *Server) runVulnScan(ctx context.Context) error {
 	s.logger.Info("vuln scan complete", "agents_scanned", len(scannable),
 		"unique_vulnerabilities", len(allVulnIDs), "suppressed_by_distribution", suppressed,
 		"debian_index_packages", s.debsec.Len())
+	if err := s.announceNewVulnerabilities(ctx); err != nil {
+		s.logger.Warn("could not announce new vulnerabilities", "error", err)
+	}
 	return nil
 }
 

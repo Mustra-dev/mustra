@@ -102,6 +102,7 @@
         <div class="form-grid">
           <div class="field"><label for="f-destination">Deliver to</label><select id="f-destination">
             <option value="">Nowhere — read it here</option>
+            <option value="email">Email</option>
             <option value="file">A file on the server</option>
             <option value="webhook">A webhook (Discord, Slack, anything)</option>
             <option value="syslog">Syslog</option>
@@ -340,9 +341,14 @@ function syncDestHint() {
     "": "The report is rendered and kept here. Nothing leaves mustra.",
     file: "Give a directory (ending in /) for a timestamped file per run, or an exact path to overwrite the same one. The full HTML document is written. Use /var/lib/mustra/output/ — that path is a volume that survives a redeploy; anywhere else lives inside the server container and is lost the next time it is rebuilt.",
     webhook: "A webhook gets the text digest, not the document — a Discord channel is not a place to paste eight hundred lines of HTML. Pick the Discord or Slack style and a plain webhook URL works as-is.",
+    email: "Addresses separated by commas. The full report is sent, through the account under Administration → Email.",
     syslog: "udp://host:port or tcp://host:port. The text digest is sent.",
   }[d] || "";
   document.getElementById("f-dest-hint").textContent = hint;
+  document.getElementById("f-target").placeholder = d === "email"
+    ? "you@example.com, team@example.com"
+    : "/var/lib/mustra/output/ or https://discord.com/api/webhooks/…";
+  document.getElementById("f-style").closest(".field").hidden = d === "email";
 }
 
 function renderSections() {
