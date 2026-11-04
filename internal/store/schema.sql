@@ -2815,3 +2815,15 @@ BEGIN
     ON CONFLICT (key) DO NOTHING;
   END IF;
 END $$;
+
+-- Which vulnerability findings have been announced to integrations, and at
+-- what tier, so each is announced once. Rows outlive the finding for a while
+-- (last_seen): an endpoint back from a month offline is not news.
+CREATE TABLE IF NOT EXISTS vuln_alerts (
+    agent_id  TEXT NOT NULL,
+    vuln_id   TEXT NOT NULL,
+    tier_rank INTEGER NOT NULL,
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (agent_id, vuln_id)
+);
+CREATE INDEX IF NOT EXISTS idx_vuln_alerts_last_seen ON vuln_alerts (last_seen);

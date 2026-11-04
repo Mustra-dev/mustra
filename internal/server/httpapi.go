@@ -707,6 +707,7 @@ func (s *Server) routes() http.Handler {
 
 	protected.Handle("GET /api/admin/settings", perm(auth.PermSettingsManage, hf(s.handleGetSettings)))
 	protected.Handle("POST /api/admin/settings", perm(auth.PermSettingsManage, hf(s.handleUpdateSettings)))
+	protected.Handle("POST /api/admin/mail-test", perm(auth.PermSettingsManage, hf(s.handleMailTest)))
 	protected.Handle("POST /api/admin/settings/fleet-test", perm(auth.PermSettingsManage, hf(s.handleTestFleet)))
 	protected.Handle("POST /api/admin/branding", perm(auth.PermSettingsManage, hf(s.handleUpdateBranding)))
 

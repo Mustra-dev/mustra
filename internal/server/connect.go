@@ -60,6 +60,38 @@ var (
 	exportDestinations = map[string]bool{"webhook": true, "file": true, "syslog": true}
 )
 
+// findingRows is the findings source, the worst first: a report shows its
+// first rows, and they have to be the ones somebody should read. A finding the
+// distribution says needs no action stays out, as on the Risk page: a report's
+// count has to agree with the page it is about.
+func findingRows(vulns []store.AgentVulnRow, intel map[string]store.ExploitIntel) []map[string]any {
+	rows := make([]map[string]any, 0, len(vulns))
+	for _, v := range vulns {
+		if v.Suppressed {
+			continue
+		}
+		x, _ := vulnIntel(v, intel)
+		rows = append(rows, map[string]any{
+			"agent_id": v.AgentID, "hostname": v.Hostname, "vuln_id": v.VulnID,
+			"package": v.PackageName, "version": v.PackageVersion,
+			"severity": firstNonEmpty(v.Severity, "unknown"), "summary": v.Summary, "fixed_version": v.FixedVersion,
+			"kev": x.KEV, "ransomware": x.Ransomware, "epss": x.EPSS,
+		})
+	}
+	sevRank := map[string]int{"critical": 4, "high": 3, "medium": 2, "low": 1}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a["kev"] != b["kev"] {
+			return a["kev"].(bool)
+		}
+		if ra, rb := sevRank[a["severity"].(string)], sevRank[b["severity"].(string)]; ra != rb {
+			return ra > rb
+		}
+		return a["epss"].(float64) > b["epss"].(float64)
+	})
+	return rows
+}
+
 // runExport produces the rows for one source. Every source answers as
 // []map[string]any so formatting is source-agnostic.
 func (s *Server) runExport(ctx context.Context, cfg store.ExportConfig) ([]map[string]any, string, error) {
@@ -175,15 +207,7 @@ func (s *Server) runExport(ctx context.Context, cfg store.ExportConfig) ([]map[s
 		if err != nil {
 			return nil, "", err
 		}
-		rows := make([]map[string]any, 0, len(vulns))
-		for _, v := range vulns {
-			rows = append(rows, map[string]any{
-				"agent_id": v.AgentID, "hostname": v.Hostname, "vuln_id": v.VulnID,
-				"package": v.PackageName, "version": v.PackageVersion,
-				"severity": v.Severity, "summary": v.Summary, "fixed_version": v.FixedVersion,
-			})
-		}
-		return rows, "", nil
+		return findingRows(vulns, s.intelForRows(ctx, vulns)), "", nil
 
 	case sourceCompliance:
 		results, err := s.store.ListComplianceResults(ctx)

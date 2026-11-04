@@ -636,6 +636,7 @@ var routeDocs = map[string]routeDoc{
 	// settings
 	"GET /api/admin/settings":             {Resp: settingsView{}},
 	"POST /api/admin/settings":            {Body: updateSettingsRequest{}, Resp: settingsView{}, Errors: []int{400, 403, 409, 500, 503}},
+	"POST /api/admin/mail-test":           {Body: mailTestRequest{}, Resp: mailTestResponse{}, Errors: []int{400, 422}},
 	"POST /api/admin/settings/fleet-test": {NoBody: true, Resp: testFleetResponse{}, Errors: []int{400, 422, 500}},
 
 	// shell

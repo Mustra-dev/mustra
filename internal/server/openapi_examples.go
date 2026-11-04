@@ -627,6 +627,7 @@ var bodyExamples = map[string]string{
 	"PUT /api/hunt/signals/{id}":              signalExample,
 
 	// integrations
+	"POST /api/admin/mail-test": `{"to": "you@example.com"}`,
 	"POST /api/admin/integrations": `{
 		"kind": "webhook",
 		"name": "SOC webhook",

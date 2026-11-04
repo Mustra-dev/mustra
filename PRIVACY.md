@@ -28,7 +28,7 @@ your own server.
 | Certificates | Let's Encrypt, Cloudflare, or your Active Directory CA |
 | Sign-in and provisioning | Your identity provider (OIDC, SAML, SCIM, LDAP) |
 | MDM, cloud and backup integrations | The service you connect, such as Microsoft, Google, Fleet, Proxmox or Rubrik |
-| Notifications and log forwarding | The webhook, chat service, SIEM or syslog server you enter |
+| Notifications and log forwarding | The webhook, chat service, email server, SIEM or syslog server you enter |
 | Library packages | Package managers on your endpoints (winget, Homebrew, apt) |
 
 Each of these services' own privacy terms apply to what it receives.

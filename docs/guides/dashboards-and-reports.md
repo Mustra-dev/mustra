@@ -30,11 +30,11 @@ Ready-made dashboards are included; open them from **All Dashboards**.
 
 ## Send a report
 
-A report is a page of tables and charts, rendered on a schedule and delivered to Slack, Discord, a webhook, syslog or a file on the server.
+A report is a page of tables and charts, rendered on a schedule and delivered by email, or to Slack, Discord, a webhook, syslog or a file on the server.
 
 1. Open **Reports** and fill in **New report**: a name and description.
 2. Choose **Add a section** for each part: its source, what to group by, the columns, a filter and a row limit. **Load the weekly-health example** fills in a typical report.
-3. Choose the schedule (**Daily** or **Weekly**, at a time) and where it goes: **Slack**, **Discord**, **A webhook**, **Syslog** or **A file on the server**.
+3. Choose the schedule (**Daily** or **Weekly**, at a time) and where it goes: **Email** (set up under [Administration → Email](administration.md) first), **Slack**, **Discord**, **A webhook**, **Syslog** or **A file on the server**.
 4. Choose **Save report**.
 5. **Preview** shows it now; **Run & send** sends it now.
 

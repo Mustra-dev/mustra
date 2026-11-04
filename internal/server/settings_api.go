@@ -80,6 +80,15 @@ type settingsView struct {
 	UpdateToken    string `json:"update_token"`
 	UpdateTokenSet bool   `json:"update_token_set"`
 
+	// The SMTP account reports and email integrations send through. The
+	// password is never returned, only whether one is set.
+	MailHost        string `json:"mail_host"`
+	MailPort        int    `json:"mail_port"`
+	MailSecurity    string `json:"mail_security"`
+	MailUsername    string `json:"mail_username"`
+	MailPasswordSet bool   `json:"mail_password_set"`
+	MailFrom        string `json:"mail_from"`
+
 	// The MDM that installs macOS itself on Apple Silicon (fleetmdm.go).
 	// The token is never returned, only whether one is set.
 	FleetURL        string `json:"fleet_url"`
@@ -121,6 +130,8 @@ func (s *Server) currentSettingsView(r *http.Request) settingsView {
 		}
 	}
 
+	mailPort, _ := strconv.Atoi(settingsMap[settingMailPort])
+
 	return settingsView{
 		SSOStatus:                 ssoStatus,
 		SSOAllowlist:              s.ssoAllowlist(settingsMap, len(providers)),
@@ -143,6 +154,12 @@ func (s *Server) currentSettingsView(r *http.Request) settingsView {
 		LogoURL:                   s.logoURL(),
 		UpdateRepo:                settingsMap[settingUpdateRepo],
 		UpdateTokenSet:            settingsMap[settingUpdateToken] != "",
+		MailHost:                  settingsMap[settingMailHost],
+		MailPort:                  mailPort,
+		MailSecurity:              settingsMap[settingMailSecurity],
+		MailUsername:              settingsMap[settingMailUsername],
+		MailPasswordSet:           settingsMap[settingMailPassword] != "",
+		MailFrom:                  settingsMap[settingMailFrom],
 		FleetURL:                  settingsMap[settingFleetURL],
 		FleetTokenSet:             settingsMap[settingFleetToken] != "",
 		FleetMacOSMajor:           settingsMap[settingFleetMacOSMajor] == "true",
@@ -181,6 +198,14 @@ type updateSettingsRequest struct {
 
 	UpdateRepo  *string `json:"update_repo"`
 	UpdateToken *string `json:"update_token" api:"writeonly"`
+
+	MailHost     *string `json:"mail_host"`
+	MailPort     *int    `json:"mail_port"`
+	MailSecurity *string `json:"mail_security"`
+	MailUsername *string `json:"mail_username"`
+	// MailPassword: nil leaves it alone, "" removes it.
+	MailPassword *string `json:"mail_password" api:"writeonly"`
+	MailFrom     *string `json:"mail_from"`
 
 	FleetURL        *string `json:"fleet_url"`
 	FleetToken      *string `json:"fleet_token" api:"writeonly"`
@@ -530,6 +555,10 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+
+	if !s.updateMailSettings(w, r, req, u.Username) {
+		return
 	}
 
 	if req.FleetURL != nil {

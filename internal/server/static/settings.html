@@ -187,7 +187,7 @@
         <b>Event streaming</b> sends each alert (a console notification: a failed patch run, a certificate renewal, an
         approval waiting) and, if chosen, each audit event, the moment it happens, to a webhook (signed with HMAC-SHA256 in
         <code>X-Mustra-Signature</code> when a secret is set), Slack, Microsoft Teams (a Workflows webhook), Discord, Splunk
-        (HTTP Event Collector), Grafana Loki or ServiceNow (one incident per event). <b>Prometheus</b> scrapes
+        (HTTP Event Collector), Grafana Loki, email or ServiceNow (one incident per event). <b>Prometheus</b> scrapes
         <code>/metrics</code> with <code>Authorization: Bearer &lt;token&gt;</code> for agents by OS and version, pending
         patches, sensor coverage and certificate expiry, for Grafana. Scheduled exports of answers are in
         <a href="/connect">Connect</a>; syslog forwarding of the audit log in <a href="/logs#settings">Logging</a>.
@@ -197,13 +197,15 @@
         <div class="form-grid">
           <div class="field"><label for="int-kind">Type</label><select id="int-kind"></select></div>
           <div class="field"><label for="int-name">Name</label><input id="int-name" placeholder="#ops channel"></div>
-          <div class="field" data-int-hide="prometheus"><label for="int-url">URL</label><input id="int-url" placeholder="https://"></div>
+          <div class="field" data-int-hide="prometheus email"><label for="int-url">URL</label><input id="int-url" placeholder="https://"></div>
           <div class="field"><label for="int-secret" id="int-secret-label">Secret</label><input id="int-secret" type="password" autocomplete="off"></div>
+          <div class="field" data-int-only="email"><label for="int-recipients">Send to</label><input id="int-recipients" placeholder="you@example.com, team@example.com" autocomplete="off"></div>
           <div class="field" data-int-only="splunk_hec"><label for="int-index">Splunk index (optional)</label><input id="int-index"></div>
           <div class="field" data-int-only="servicenow"><label for="int-group">Assignment group (optional)</label><input id="int-group"></div>
           <div class="field" data-int-hide="prometheus"><label>Send</label>
             <label><input type="checkbox" id="int-ev-alert" checked> Alerts</label> <label><input type="checkbox" id="int-ev-audit"> Audit events</label>
-            <label><input type="checkbox" id="int-ev-expiry"> Certificate &amp; credential expiry</label></div>
+            <label><input type="checkbox" id="int-ev-expiry"> Certificate &amp; credential expiry</label>
+            <label><input type="checkbox" id="int-ev-vulnerability"> New vulnerabilities</label></div>
           <div class="field" id="int-expiry-field" hidden><label for="int-expiry-days">Expiry: only at these thresholds (days)</label>
             <input id="int-expiry-days" placeholder="every threshold, e.g. 60 or 60,7,expired" title="Leave blank for every threshold set under Cert Manager → Alerts. For one ServiceNow incident per item, give just the first, e.g. 60."></div>
           <div class="field" data-int-hide="prometheus"><label for="int-sev">Minimum severity</label>
@@ -393,6 +395,45 @@
           <button id="fleet-test">Test connection</button>
           <button id="fleet-clear">Disconnect</button>
           <span class="save-status" id="fleet-save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-section" id="section-email" hidden>
+      <div class="panel settings-section">
+        <h2>Email</h2>
+        <p class="hint">The account mustra sends through, for <a href="/reports">reports</a> and for
+          <a href="#integrations">integrations</a> of the Email type. Mail carries what it reports on, such as hostnames
+          and vulnerabilities, so send it to addresses you would trust with that. A server on an internal address must be on the
+          <a href="#network-allowlists">internal destinations allowlist</a>.</p>
+        <div class="form-grid">
+          <div class="field"><label for="mail-host">SMTP server</label><input id="mail-host" placeholder="smtp.example.com" autocomplete="off"></div>
+          <div class="field"><label for="mail-security">Security</label><select id="mail-security">
+            <option value="starttls">STARTTLS (port 587)</option>
+            <option value="tls">TLS (port 465)</option>
+            <option value="none">None (internal relay)</option>
+          </select></div>
+          <div class="field"><label for="mail-port">Port</label><input id="mail-port" type="number" min="1" max="65535" value="587"></div>
+          <div class="field"><label for="mail-from">From address</label><input id="mail-from" type="email" placeholder="mustra@example.com" autocomplete="off"></div>
+          <div class="field"><label for="mail-username">Username (optional)</label><input id="mail-username" autocomplete="off"></div>
+          <div class="field"><label for="mail-password">Password</label><input id="mail-password" type="password" autocomplete="new-password"></div>
+        </div>
+        <p class="hint">The server's certificate is always checked, and a password is only sent over an encrypted connection. Changing the server asks for the password again.</p>
+        <div class="save-row">
+          <button class="primary" id="mail-save">Save</button>
+          <button id="mail-remove-password" hidden>Remove password</button>
+          <span class="save-status" id="mail-save-status" role="status"></span>
+        </div>
+      </div>
+      <div class="panel settings-section">
+        <h2>Send a test</h2>
+        <p class="hint">Sends through what was last saved, and shows what the mail server answered.</p>
+        <div class="form-grid">
+          <div class="field"><label for="mail-test-to">Send to</label><input id="mail-test-to" type="text" placeholder="you@example.com" autocomplete="off"></div>
+        </div>
+        <div class="save-row">
+          <button id="mail-test">Send test email</button>
+          <span class="save-status" id="mail-test-status" role="status"></span>
         </div>
       </div>
     </div>
@@ -818,6 +859,14 @@ async function loadSettings() {
 
   renderLogoPreview(s.logo_url);
 
+  document.getElementById("mail-host").value = s.mail_host || "";
+  document.getElementById("mail-security").value = s.mail_security || "starttls";
+  document.getElementById("mail-port").value = s.mail_port || 587;
+  document.getElementById("mail-from").value = s.mail_from || "";
+  document.getElementById("mail-username").value = s.mail_username || "";
+  document.getElementById("mail-password").value = "";
+  document.getElementById("mail-password").placeholder = s.mail_password_set ? "set — enter one to replace it" : "";
+  document.getElementById("mail-remove-password").hidden = !s.mail_password_set;
   document.getElementById("update-repo").value = s.update_repo || "";
   document.getElementById("update-token").value = "";
   if (s.update_token_set) document.getElementById("update-token").placeholder = "a token is set — enter one to replace it";
@@ -1387,6 +1436,39 @@ function renderChangelog() {
     .replace(/`(.+?)`/g, "<code>$1</code>");
   document.getElementById("changelog").innerHTML = /* safe-html: escaped as a whole, then only fixed tags added */ html;
 }
+
+// The usual port follows Security, unless somebody has chosen another.
+document.getElementById("mail-security").addEventListener("change", (e) => {
+  const port = document.getElementById("mail-port");
+  if (["", "25", "465", "587"].includes(port.value)) port.value = { starttls: 587, tls: 465, none: 25 }[e.target.value];
+});
+document.getElementById("mail-save").addEventListener("click", () => {
+  const body = {
+    mail_host: document.getElementById("mail-host").value.trim(),
+    mail_security: document.getElementById("mail-security").value,
+    mail_port: parseInt(document.getElementById("mail-port").value, 10) || 0,
+    mail_from: document.getElementById("mail-from").value.trim(),
+    mail_username: document.getElementById("mail-username").value.trim(),
+  };
+  const password = document.getElementById("mail-password").value;
+  if (password) body.mail_password = password;
+  saveSettings(body, "mail-save-status");
+});
+document.getElementById("mail-remove-password").addEventListener("click", () => {
+  saveSettings({ mail_password: "" }, "mail-save-status");
+});
+document.getElementById("mail-test").addEventListener("click", async (e) => {
+  const st = document.getElementById("mail-test-status");
+  e.target.disabled = true; st.textContent = "sending…";
+  try {
+    const r = await fetch("/api/admin/mail-test", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: document.getElementById("mail-test-to").value }) });
+    st.textContent = r.ok ? "Sent. Check that inbox, and its spam folder." : "Failed: " + await r.text();
+  } catch (err) {
+    st.textContent = "Failed: " + err.message;
+  }
+  e.target.disabled = false;
+});
 
 document.getElementById("update-save").addEventListener("click", () => {
   const body = { update_repo: document.getElementById("update-repo").value.trim() };
@@ -2442,6 +2524,7 @@ const INT_HELP = {
   slack: ["", "A Slack incoming webhook URL (Apps → Incoming Webhooks)."],
   teams: ["", "A Microsoft Teams Workflows webhook: in the channel, Workflows → \"Post to a channel when a webhook request is received\"."],
   discord: ["", "A Discord channel webhook URL (Channel settings → Integrations → Webhooks)."],
+  email: ["", "Sent through the account under Administration → Email. For new vulnerabilities, Minimum severity picks how much: info is everything, warning is high and above, error is only critical and actively exploited ones."],
   splunk_hec: ["HEC token", "Splunk's HTTP Event Collector base URL, e.g. https://splunk.example.com:8088. Events arrive as sourcetype mustra:alert / mustra:audit."],
   loki: ["Credentials (optional: user:password or a bearer token)", "Loki's base URL, e.g. http://loki:3100. Streams carry job=\"mustra\", type and severity labels."],
   servicenow: ["user:password", "Your instance, e.g. https://example.service-now.com. Each event opens an incident (urgency from severity) through the Table API; the account needs the itil role. Expiry incidents carry correlation_id mustra:<item>:<expiry>; take only one threshold (e.g. 60) for one incident per item."],
@@ -2501,7 +2584,7 @@ async function loadIntegrations() {
     card("Exports and logs", [[o.connect > 0, `Connect scheduled exports (${o.connect || 0})`, "/connect"], [o.syslog, "Audit log to syslog / SIEM", "/logs#settings"],
       [kinds.has("splunk_hec"), "Splunk HEC (events)", ""], [kinds.has("loki"), "Grafana Loki (events)", ""]]),
     card("Metrics", [[kinds.has("prometheus"), "Prometheus /metrics (Grafana)", ""]]),
-    card("Alerts and ITSM", [[kinds.has("slack"), "Slack", ""], [kinds.has("teams"), "Microsoft Teams", ""], [kinds.has("discord"), "Discord", ""], [kinds.has("servicenow"), "ServiceNow incidents", ""], [kinds.has("webhook"), "Webhooks", ""]]),
+    card("Alerts and ITSM", [[kinds.has("email"), "Email", "/settings#email"], [kinds.has("slack"), "Slack", ""], [kinds.has("teams"), "Microsoft Teams", ""], [kinds.has("discord"), "Discord", ""], [kinds.has("servicenow"), "ServiceNow incidents", ""], [kinds.has("webhook"), "Webhooks", ""]]),
   ].join("");
   document.getElementById("int-count").innerHTML = `<strong>${escapeHtml(integrations.length)}</strong> integration(s)` + (d.dropped ? ` · ${escapeHtml(d.dropped)} event(s) dropped` : "");
   const body = document.getElementById("int-body");
@@ -2527,7 +2610,7 @@ function safeShort(s) { s = String(s || ""); return s.length > 60 ? s.slice(0, 6
 function intShowFields() {
   const k = document.getElementById("int-kind").value;
   document.querySelectorAll("#int-form [data-int-only]").forEach(el => { el.hidden = el.dataset.intOnly !== k; });
-  document.querySelectorAll("#int-form [data-int-hide]").forEach(el => { el.hidden = el.dataset.intHide === k; });
+  document.querySelectorAll("#int-form [data-int-hide]").forEach(el => { el.hidden = el.dataset.intHide.split(" ").includes(k); });
   const [secretLabel, help] = INT_HELP[k] || ["Secret", ""];
   document.getElementById("int-secret-label").textContent = secretLabel || "Secret (not used)";
   document.getElementById("int-secret").disabled = !secretLabel;
@@ -2540,6 +2623,7 @@ function intOpen(i) {
   document.getElementById("int-kind").disabled = !!i;
   document.getElementById("int-name").value = i ? i.name : "";
   document.getElementById("int-url").value = i ? (i.config.url || "") : "";
+  document.getElementById("int-recipients").value = i ? (i.config.recipients || "") : "";
   document.getElementById("int-index").value = i ? (i.config.index || "") : "";
   document.getElementById("int-group").value = i ? (i.config.assignment_group || "") : "";
   document.getElementById("int-secret").value = "";
@@ -2547,6 +2631,7 @@ function intOpen(i) {
   document.getElementById("int-ev-alert").checked = i ? (i.events || []).includes("alert") : true;
   document.getElementById("int-ev-audit").checked = i ? (i.events || []).includes("audit") : false;
   document.getElementById("int-ev-expiry").checked = i ? (i.events || []).includes("expiry") : false;
+  document.getElementById("int-ev-vulnerability").checked = i ? (i.events || []).includes("vulnerability") : false;
   document.getElementById("int-expiry-days").value = i ? (i.config.expiry_days || "") : "";
   intExpiryField();
   document.getElementById("int-sev").value = i ? i.min_severity : "warning";
@@ -2565,9 +2650,9 @@ document.getElementById("int-save").addEventListener("click", async () => {
   const st = document.getElementById("int-save-status"); st.textContent = "saving…";
   const kind = document.getElementById("int-kind").value;
   const body = { kind, name: document.getElementById("int-name").value, enabled: document.getElementById("int-enabled").checked,
-    config: { url: document.getElementById("int-url").value.trim(), index: document.getElementById("int-index").value.trim(), assignment_group: document.getElementById("int-group").value.trim(),
+    config: { recipients: document.getElementById("int-recipients").value.trim(), url: document.getElementById("int-url").value.trim(), index: document.getElementById("int-index").value.trim(), assignment_group: document.getElementById("int-group").value.trim(),
       expiry_days: document.getElementById("int-expiry-days").value.trim() },
-    events: ["alert", "audit", "expiry"].filter(e => document.getElementById("int-ev-" + e).checked), min_severity: document.getElementById("int-sev").value };
+    events: ["alert", "audit", "expiry", "vulnerability"].filter(e => document.getElementById("int-ev-" + e).checked), min_severity: document.getElementById("int-sev").value };
   const secret = document.getElementById("int-secret").value;
   if (secret) body.secret = secret;
   const r = await fetch(intEditing ? `/api/admin/integrations/${encodeURIComponent(intEditing)}` : "/api/admin/integrations",
@@ -2591,6 +2676,7 @@ document.addEventListener("mustra:user", (e) => {
       { hash: "agent-identity", label: "Agent Identity" },
       { hash: "uninstall-password", label: "Uninstall Password" },
       { hash: "macos-mdm", label: "macOS MDM" },
+      { hash: "email", label: "Email" },
       { hash: "network-allowlists", label: "Network Allowlists" },
       { hash: "message-buffer", label: "Message Buffer" },
       { hash: "telemetry", label: "Telemetry" },

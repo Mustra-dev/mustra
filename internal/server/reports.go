@@ -260,10 +260,7 @@ func (s *Server) renderSection(ctx context.Context, sec reportSection) renderedS
 	default:
 		cols := sec.Columns
 		if len(cols) == 0 {
-			cols = columnsOf(rows)
-			if len(cols) > 6 {
-				cols = cols[:6]
-			}
+			cols = defaultReportColumns(sec.Source, rows)
 		}
 		limit := sectionLimit(sec)
 		shown := rows
@@ -291,6 +288,20 @@ func (s *Server) renderSection(ctx context.Context, sec reportSection) renderedS
 	body.WriteString(`</section>`)
 	out.HTML = body.String()
 	return out
+}
+
+// defaultReportColumns is what a table shows when a section picks nothing:
+// the first few columns alphabetically, except where that would hide what the
+// source is for. For findings it would be agent_id and epss, with no severity.
+func defaultReportColumns(source string, rows []map[string]any) []string {
+	if source == string(sourceFindings) {
+		return []string{"hostname", "vuln_id", "package", "severity", "kev", "epss"}
+	}
+	cols := columnsOf(rows)
+	if len(cols) > 6 {
+		cols = cols[:6]
+	}
+	return cols
 }
 
 func plural(n int) string {
@@ -434,7 +445,8 @@ func (s *Server) runReport(ctx context.Context, rep store.Report, who string, pr
 // deliverReport sends the document where it was asked to go. A webhook
 // receives the text digest: a Discord channel is not a place to paste
 // eight hundred lines of HTML, and the digest is what somebody reads on a
-// phone anyway.
+// phone anyway. An email has room for both: the document, and the digest for
+// a mail client that will not show it.
 func (s *Server) deliverReport(ctx context.Context, rep store.Report, rendered renderedReport) error {
 	cfg := store.ExportConfig{
 		Source: "report", Destination: rep.Destination,
@@ -445,6 +457,13 @@ func (s *Server) deliverReport(ctx context.Context, rep store.Report, rendered r
 		return deliverFileAs(cfg, []byte(reportDocument(rep.Name, rendered.HTML)), "html")
 	case "webhook", "syslog":
 		return s.deliver(ctx, cfg, []byte(rendered.Summary), "text/plain; charset=utf-8")
+	case "email":
+		to, err := parseMailRecipients(rep.Target)
+		if err != nil {
+			return err
+		}
+		return s.sendMail(ctx, mailMessage{To: to, Subject: "[mustra] " + rep.Name,
+			Text: rendered.Summary, HTML: reportDocument(rep.Name, rendered.HTML)})
 	default:
 		return fmt.Errorf("unknown destination %q", rep.Destination)
 	}

@@ -504,7 +504,7 @@ const (
 		"logo_url": "/branding/logo?v=1",
 		"update_repo": "mustra-dev/mustra",
 		"update_token": "",
-		"update_token_set": false,
+		"update_token_set": false, "mail_host": "smtp.example.com", "mail_port": 587, "mail_security": "starttls", "mail_username": "mustra@example.com", "mail_password_set": true, "mail_from": "mustra@example.com",
 		"fleet_url": "",
 		"fleet_token_set": false,
 		"fleet_macos_major": false,
@@ -5340,6 +5340,7 @@ var respExamples = map[string]string{
 	// Who the saved Fleet API token signs in as, and their Fleet role.
 	// With no Fleet URL and token saved (as in the settings above), the
 	// answer is a 400.
+	"POST /api/admin/mail-test":           `{"result": "sent"}`,
 	"POST /api/admin/settings/fleet-test": `{"user": "mustra-api@corp.example.com (admin)"}`,
 
 	// sensors

@@ -25,6 +25,23 @@ Find which endpoints have known vulnerabilities, which of those attackers are ac
 
 Ubuntu findings are graded by Ubuntu's own priority, which reflects how the flaw affects Ubuntu as shipped; *negligible* ones are set aside.
 
+## Be told by email
+
+Mustra can email you new findings as scans find them, and a regular report of all of them.
+
+1. Under **Administration → Email**, enter your SMTP account and choose **Send test email**.
+2. **For new findings:** under **Administration → Integrations**, choose **Add integration**, type **Email**, and tick **New vulnerabilities**. **Minimum severity** picks how much you get:
+
+   | Minimum severity | You get |
+   | --- | --- |
+   | **error** | Critical findings, and anything in CISA's KEV catalogue |
+   | **warning** | High and above |
+   | **notice** | Medium and above, and anything not rated yet |
+   | **info** | Everything |
+
+   Each scan sends at most one digest per severity level, and each finding is announced once per endpoint, and again only if it becomes more severe. The first scan after upgrading takes stock of what is already there without sending anything. An actively exploited vulnerability that [Threat briefings](threats.md) finds in the fleet is sent as well, as critical.
+3. **For a regular list:** under **Reports**, add a section with the **Vulnerabilities** source and set **Deliver to** to **Email**. To keep it to the worst, filter on `severity` containing `critical`, or `kev` containing `true`.
+
 ## Fix them
 
 1. Open **Remediation**. Findings are grouped by the package that fixes them, with the fixed version and the endpoints affected.

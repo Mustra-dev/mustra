@@ -817,8 +817,9 @@ are retained and older ones pruned — a shelf, not an archive.
 
 Delivery reuses Connect's destinations, with one difference that matters: a
 **file** destination gets the full standalone HTML document (styles inlined,
-so it stays readable when it's forwarded on), while a **webhook** gets the
-text digest. Write files to `/var/lib/mustra/output/` — that path is a volume
+so it stays readable when it's forwarded on), an **email** gets that document
+and the digest as its plain-text part, while a **webhook** gets the text
+digest. Write files to `/var/lib/mustra/output/` — that path is a volume
 that survives a redeploy, and anywhere else lives inside the server container
 and is lost the next time it's rebuilt. A Discord channel is not a place to paste eight hundred lines of
 HTML, and the digest — section names, row counts, the top few buckets of each
