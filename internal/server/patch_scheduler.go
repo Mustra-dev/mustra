@@ -293,6 +293,8 @@ func (s *Server) deployPatchesToAgents(ctx context.Context, agents []store.Agent
 		}(a)
 	}
 	wg.Wait()
+	// Every endpoint may have been refused, leaving no result to come back.
+	s.announceRunCompleted(ctx, runID)
 	return started, failed
 }
 

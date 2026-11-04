@@ -708,6 +708,12 @@ func (s *Server) routes() http.Handler {
 	protected.Handle("GET /api/admin/settings", perm(auth.PermSettingsManage, hf(s.handleGetSettings)))
 	protected.Handle("POST /api/admin/settings", perm(auth.PermSettingsManage, hf(s.handleUpdateSettings)))
 	protected.Handle("POST /api/admin/mail-test", perm(auth.PermSettingsManage, hf(s.handleMailTest)))
+	protected.Handle("GET /api/admin/email-templates", perm(auth.PermSettingsManage, hf(s.handleGetEmailTemplates)))
+	protected.Handle("PUT /api/admin/email-templates/{kind}", perm(auth.PermSettingsManage, hf(s.handleSaveEmailTemplate)))
+	protected.Handle("POST /api/admin/email-templates/{kind}/preview", perm(auth.PermSettingsManage, hf(s.handleEmailPreview)))
+	protected.Handle("POST /api/admin/email-templates/{kind}/test", perm(auth.PermSettingsManage, hf(s.handleEmailTemplateTest)))
+	protected.Handle("PUT /api/admin/email-shared", perm(auth.PermSettingsManage, hf(s.handleSaveEmailShared)))
+	protected.Handle("POST /email-preview/{kind}", perm(auth.PermSettingsManage, hf(s.handleEmailPreviewPage)))
 	protected.Handle("POST /api/admin/settings/fleet-test", perm(auth.PermSettingsManage, hf(s.handleTestFleet)))
 	protected.Handle("POST /api/admin/branding", perm(auth.PermSettingsManage, hf(s.handleUpdateBranding)))
 

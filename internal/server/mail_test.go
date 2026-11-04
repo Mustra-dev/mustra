@@ -372,17 +372,6 @@ func TestBuildMailMessage(t *testing.T) {
 	}
 }
 
-func TestEventMailCarriesTheWholeBodyAndTheLink(t *testing.T) {
-	long := strings.Repeat("- CVE line\n", 300) // past eventText's chat limit
-	m := eventMail([]string{"a@example.com"}, integrationEvent{Body: long}, "title", "https://m.example.com/risk")
-	if m.Subject != "[mustra] title" {
-		t.Errorf("subject %q", m.Subject)
-	}
-	if !strings.Contains(m.Text, long[:len(long)-1]) || !strings.Contains(m.Text, "Open in mustra: https://m.example.com/risk") {
-		t.Errorf("text %q", m.Text[len(m.Text)-80:])
-	}
-}
-
 // Through the settings, as a relay that needs no sign-in has no password
 // stored at all, and that must not read as a secret that cannot be opened.
 func TestSendMailThroughTheSettingsWithNoPassword(t *testing.T) {

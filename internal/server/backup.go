@@ -766,9 +766,12 @@ func (s *Server) backupSchedulerLoop(ctx context.Context) {
 			s.logger.Error("the scheduled backup failed", "error", err)
 			s.notify(ctx, "critical", "backup", "The nightly backup failed",
 				err.Error(), "/backup")
+			s.emitCompleted("backup", "The nightly backup failed", "failed", "warning", err.Error(), "nightly", "/backup", nil)
 			continue
 		}
 		s.logger.Info("scheduled backup written", "backup", rec.ID, "bytes", rec.Bytes)
+		s.emitCompleted("backup", "The nightly backup finished", "succeeded", "info",
+			fmt.Sprintf("%d MB written.", rec.Bytes>>20), "nightly", "/backup", map[string]any{"bytes": rec.Bytes, "id": rec.ID})
 		s.pruneBackups(cfg.Keep)
 	}
 }

@@ -634,10 +634,15 @@ var routeDocs = map[string]routeDoc{
 	"GET /api/sessions/{id}": {Resp: store.SessionTranscript{}, Errors: []int{404, 500}},
 
 	// settings
-	"GET /api/admin/settings":             {Resp: settingsView{}},
-	"POST /api/admin/settings":            {Body: updateSettingsRequest{}, Resp: settingsView{}, Errors: []int{400, 403, 409, 500, 503}},
-	"POST /api/admin/mail-test":           {Body: mailTestRequest{}, Resp: mailTestResponse{}, Errors: []int{400, 422}},
-	"POST /api/admin/settings/fleet-test": {NoBody: true, Resp: testFleetResponse{}, Errors: []int{400, 422, 500}},
+	"GET /api/admin/settings":                        {Resp: settingsView{}},
+	"POST /api/admin/settings":                       {Body: updateSettingsRequest{}, Resp: settingsView{}, Errors: []int{400, 403, 409, 500, 503}},
+	"POST /api/admin/mail-test":                      {Body: mailTestRequest{}, Resp: mailTestResponse{}, Errors: []int{400, 422}},
+	"GET /api/admin/email-templates":                 {Resp: emailTemplatesResponse{}},
+	"PUT /api/admin/email-templates/{kind}":          {Body: store.EmailTemplate{}, Resp: emailTemplatesResponse{}, Errors: []int{400, 404, 500}},
+	"POST /api/admin/email-templates/{kind}/preview": {Body: store.EmailTemplate{}, Resp: emailPreviewResponse{}, Errors: []int{400, 404}},
+	"POST /api/admin/email-templates/{kind}/test":    {Body: emailSendTestRequest{}, Resp: mailTestResponse{}, Errors: []int{400, 422}},
+	"PUT /api/admin/email-shared":                    {Body: emailShared{}, Resp: emailTemplatesResponse{}, Errors: []int{400, 500}},
+	"POST /api/admin/settings/fleet-test":            {NoBody: true, Resp: testFleetResponse{}, Errors: []int{400, 422, 500}},
 
 	// shell
 	"GET /api/shell/audit":               {Query: []queryParam{{Name: "session_id", Desc: "only this session"}}, Resp: shellAuditResponse{}, Errors: []int{500}},

@@ -135,6 +135,12 @@ func (s *Server) completeRegistration(ctx context.Context, msg *gonats.Msg, kind
 		s.logger.Info("actions interrupted by an agent restart", "agent_id", agentID, "hostname", info.Hostname, "count", len(lost))
 		s.audit(ctx, auditEvent{Action: "agent.actions_interrupted", Actor: "system", Target: info.Hostname, AgentID: agentID, Severity: "notice",
 			Detail: map[string]any{"actions": kinds}})
+		for _, a := range lost {
+			// Runs also carry notices and surveys, which are not "completed".
+			if a.Kind == "patch_apply" {
+				s.announceRunCompleted(ctx, a.RunID)
+			}
+		}
 	}
 	payload, err := json.Marshal(proto.RegisterResponse{AgentID: agentID})
 	if err != nil {

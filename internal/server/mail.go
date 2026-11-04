@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/mustra-dev/mustra/internal/server/auth"
+	"github.com/mustra-dev/mustra/internal/store"
 )
 
 const (
@@ -363,19 +364,6 @@ func writeMailBase64(b *bytes.Buffer, s string) {
 	b.WriteString(encoded + "\r\n")
 }
 
-// eventMail is an integration event as an email. Plain text only: a
-// notification is a line or two and a link.
-func eventMail(to []string, ev integrationEvent, title, link string) mailMessage {
-	body := ev.Body
-	if body == "" {
-		_, body = eventText(ev)
-	}
-	if link != "" {
-		body = strings.TrimRight(body, "\n") + "\n\nOpen in mustra: " + link
-	}
-	return mailMessage{To: to, Subject: "[mustra] " + title, Text: strings.TrimLeft(body, "\n") + "\n"}
-}
-
 // updateMailSettings applies the email fields of a settings save. It answers
 // false once it has written an error.
 func (s *Server) updateMailSettings(w http.ResponseWriter, r *http.Request, req updateSettingsRequest, who string) bool {
@@ -481,8 +469,7 @@ func (s *Server) handleMailTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	who := auth.CurrentUser(r.Context()).Username
-	err = s.sendMail(r.Context(), mailMessage{To: to, Subject: "[mustra] Test email",
-		Text: "If you can read this, mustra can send email.\n"})
+	err = s.sendMail(r.Context(), s.composeMail(r.Context(), "test", to, store.EmailTemplate{}, nil))
 	s.audit(r.Context(), auditEvent{Action: "settings.mail_test", Actor: who, Target: strings.Join(to, ", "), Severity: "notice",
 		Detail: map[string]any{"sent": err == nil}})
 	if errors.Is(err, errMailNotConfigured) {

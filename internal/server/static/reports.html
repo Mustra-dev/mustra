@@ -114,6 +114,14 @@
             <option value="slack">Slack</option>
           </select></div>
         </div>
+        <details id="f-email-box" class="u-mb-12" hidden><summary class="u-cur-pointer">Customize this report's email</summary>
+          <p class="hint">Blank uses the wording under <a href="/settings#email">Administration → Email</a>, where the variables and functions are listed. <code class="mono">{{.Report.Content}}</code> places the report inside your own layout.</p>
+          <div class="form-grid">
+            <div class="field u-gc-full"><label for="f-email-subject">Subject</label><input id="f-email-subject" class="email-code" spellcheck="false" autocomplete="off" placeholder="[mustra] {{.Report.Name}}"></div>
+            <div class="field u-gc-full"><label for="f-email-text">Plain text</label><textarea id="f-email-text" rows="4" spellcheck="false" placeholder="{{.Report.Summary}}" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+            <div class="field u-gc-full"><label for="f-email-html">HTML</label><textarea id="f-email-html" rows="6" spellcheck="false" placeholder="{{.Report.Document}}" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+          </div>
+        </details>
         <p class="hint" id="f-dest-hint"></p>
         <div class="u-d-flex u-gap-14 u-fw-wrap u-fs-12_5 u-mb-12">
           <label class="u-d-flex u-ai-center u-gap-6"><input type="checkbox" id="f-enabled" checked> Enabled</label>
@@ -349,6 +357,7 @@ function syncDestHint() {
     ? "you@example.com, team@example.com"
     : "/var/lib/mustra/output/ or https://discord.com/api/webhooks/…";
   document.getElementById("f-style").closest(".field").hidden = d === "email";
+  document.getElementById("f-email-box").hidden = d !== "email";
 }
 
 function renderSections() {
@@ -437,6 +446,10 @@ async function editReport(id) {
   document.getElementById("f-destination").value = rep.destination || "";
   document.getElementById("f-target").value = rep.target || "";
   document.getElementById("f-style").value = rep.webhook_style || "";
+  const et = rep.email_template || {};
+  document.getElementById("f-email-subject").value = et.subject || "";
+  document.getElementById("f-email-text").value = et.text || "";
+  document.getElementById("f-email-html").value = et.html || "";
   document.getElementById("f-enabled").checked = !!rep.enabled;
   draft = Array.isArray(rep.sections) ? rep.sections : JSON.parse(rep.sections || "[]");
   syncDestHint();
@@ -448,7 +461,7 @@ function resetEditor() {
   editing = null;
   draft = [];
   document.getElementById("rp-editor-title").textContent = "New report";
-  ["f-name", "f-description", "f-time", "f-target"].forEach(id => { document.getElementById(id).value = ""; });
+  ["f-name", "f-description", "f-time", "f-target", "f-email-subject", "f-email-text", "f-email-html"].forEach(id => { document.getElementById(id).value = ""; });
   document.getElementById("f-schedule").value = "";
   document.getElementById("f-destination").value = "";
   document.getElementById("f-style").value = "";
@@ -473,6 +486,7 @@ async function saveReport() {
     destination: document.getElementById("f-destination").value,
     target: document.getElementById("f-target").value,
     webhook_style: document.getElementById("f-style").value,
+    email_template: { subject: document.getElementById("f-email-subject").value, text: document.getElementById("f-email-text").value, html: document.getElementById("f-email-html").value },
   };
   status.textContent = "saving…";
   try {

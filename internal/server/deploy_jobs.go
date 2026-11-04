@@ -121,6 +121,7 @@ func (s *Server) notifyRunFinished(ctx context.Context, runID string) {
 	if runID == "" {
 		return
 	}
+	s.announceRunCompleted(ctx, runID)
 	run, counts, e := s.store.ClaimFinishedRun(ctx, runID)
 	if e != nil {
 		s.logger.Warn("finished-run notification failed", "run", runID, "error", e)

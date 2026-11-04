@@ -311,6 +311,54 @@ func (s *Store) CancelHeldDeployJobs(ctx context.Context, runID, detail string) 
 // same list as deploy.Terminal, which the store cannot import.
 var deployFinalStatuses = []string{"succeeded", "failed", "timed_out", "cancelled", "interrupted", "expired", "skipped", "unsupported"}
 
+// actionOpenStatuses are the agent action states a run is still waiting on.
+var actionOpenStatuses = []string{"started", "running", "downloading", "installing", "waiting", "pending_restart"}
+
+// ClaimRunCompletion claims announcing that a run has finished, once, when
+// every deploy job and agent action it has is final. A patch run must also have
+// an action per endpoint: its first result can arrive before the rest are
+// recorded, and that is not the run being over. A playbook's steps share its
+// run ID, but it announces itself as one thing when it ends.
+func (s *Store) ClaimRunCompletion(ctx context.Context, runID string) (*PatchJobRun, map[string]int, error) {
+	var r PatchJobRun
+	e := s.pool.QueryRow(ctx, `
+UPDATE patch_job_runs p SET completion_announced_at = now()
+WHERE p.id = $1 AND p.completion_announced_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM playbook_runs WHERE id = $1)
+  AND NOT EXISTS (SELECT 1 FROM deploy_jobs WHERE run_id = $1 AND NOT (status = ANY($2)))
+  AND NOT EXISTS (SELECT 1 FROM agent_actions WHERE run_id = $1 AND status = ANY($3))
+  AND (EXISTS (SELECT 1 FROM deploy_jobs WHERE run_id = $1)
+       OR (SELECT count(*) FROM agent_actions WHERE run_id = $1) >= GREATEST(p.agent_count, 1))
+RETURNING p.id, p.schedule_name, p.target_desc, p.agent_count, p.triggered_by, p.started_at`,
+		runID, deployFinalStatuses, actionOpenStatuses).
+		Scan(&r.ID, &r.ScheduleName, &r.TargetDesc, &r.AgentCount, &r.TriggeredBy, &r.StartedAt)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return nil, nil, nil
+	}
+	if e != nil {
+		return nil, nil, e
+	}
+	counts := map[string]int{}
+	rows, e := s.pool.Query(ctx, `
+SELECT status, count(*) FROM (
+  SELECT status FROM deploy_jobs WHERE run_id = $1
+  UNION ALL SELECT status FROM agent_actions WHERE run_id = $1
+) x GROUP BY status`, runID)
+	if e != nil {
+		return &r, counts, e
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var st string
+		var n int
+		if e := rows.Scan(&st, &n); e != nil {
+			return &r, counts, e
+		}
+		counts[st] = n
+	}
+	return &r, counts, rows.Err()
+}
+
 // ClaimFinishedRun reports, exactly once, that a run which asked to be
 // told has finished: every one of its jobs is in a final state. It returns
 // the run and a count of its jobs by status, or nil when the run did not

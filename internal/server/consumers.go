@@ -333,6 +333,7 @@ func (s *Server) consumeActionResults(ctx context.Context) (jetstream.ConsumeCon
 		}
 		if res.Kind == "patch_apply" {
 			s.afterRemediation(ctx, res.AgentID)
+			s.announceRunCompleted(ctx, res.RunID)
 		}
 		// A run that ends badly goes looking for the operator rather than
 		// waiting to be discovered. Success is deliberately silent: a tray

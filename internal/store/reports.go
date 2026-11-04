@@ -21,6 +21,14 @@ const maxReportKept = 30
 // what the fleet looked like in September.
 const maxPreviewKept = 5
 
+// EmailTemplate is an email's wording: Go templates for each part. A blank
+// field falls through to the next level, and finally the built-in default.
+type EmailTemplate struct {
+	Subject string `json:"subject"`
+	Text    string `json:"text"`
+	HTML    string `json:"html"`
+}
+
 type Report struct {
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
@@ -39,6 +47,9 @@ type Report struct {
 	Destination  string `json:"destination"`
 	Target       string `json:"target"`
 	WebhookStyle string `json:"webhook_style,omitempty"`
+	// EmailTemplate overrides the email this report goes out as. Blank fields
+	// use Administration → Email's.
+	EmailTemplate EmailTemplate `json:"email_template"`
 
 	CreatedAt time.Time `json:"created_at"`
 	CreatedBy string    `json:"created_by"`
@@ -64,20 +75,21 @@ type ReportRun struct {
 }
 
 const reportColumns = `id, name, description, sections, enabled, schedule_kind, time_of_day,
-       weekday, next_run_at, last_run_at, last_error, destination, target, webhook_style,
+       weekday, next_run_at, last_run_at, last_error, destination, target, webhook_style, email_template,
        created_at, created_by, updated_at, updated_by`
 
 func scanReport(scan func(dest ...any) error) (Report, error) {
 	var r Report
-	var sections []byte
+	var sections, emailTemplate []byte
 	err := scan(&r.ID, &r.Name, &r.Description, &sections, &r.Enabled, &r.ScheduleKind,
 		&r.TimeOfDay, &r.Weekday, &r.NextRunAt, &r.LastRunAt, &r.LastError,
-		&r.Destination, &r.Target, &r.WebhookStyle,
+		&r.Destination, &r.Target, &r.WebhookStyle, &emailTemplate,
 		&r.CreatedAt, &r.CreatedBy, &r.UpdatedAt, &r.UpdatedBy)
 	if err != nil {
 		return r, err
 	}
 	r.Sections = sections
+	_ = json.Unmarshal(emailTemplate, &r.EmailTemplate)
 	var parsed []map[string]any
 	_ = json.Unmarshal(sections, &parsed)
 	r.SectionCount = len(parsed)
@@ -122,19 +134,24 @@ func (s *Store) UpsertReport(ctx context.Context, r Report, nextRun *time.Time) 
 	if len(sections) == 0 {
 		sections = []byte("[]")
 	}
-	_, err := s.pool.Exec(ctx, `
+	emailTemplate, err := json.Marshal(r.EmailTemplate)
+	if err != nil {
+		return fmt.Errorf("encode report email template: %w", err)
+	}
+	_, err = s.pool.Exec(ctx, `
 INSERT INTO reports (id, name, description, sections, enabled, schedule_kind, time_of_day,
-                     weekday, next_run_at, destination, target, webhook_style, created_by, updated_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
+                     weekday, next_run_at, destination, target, webhook_style, created_by, updated_by, email_template)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,$14)
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name, description = EXCLUDED.description, sections = EXCLUDED.sections,
   enabled = EXCLUDED.enabled, schedule_kind = EXCLUDED.schedule_kind,
   time_of_day = EXCLUDED.time_of_day, weekday = EXCLUDED.weekday,
   next_run_at = EXCLUDED.next_run_at, destination = EXCLUDED.destination,
   target = EXCLUDED.target, webhook_style = EXCLUDED.webhook_style,
+  email_template = EXCLUDED.email_template,
   updated_at = now(), updated_by = EXCLUDED.updated_by`,
 		r.ID, r.Name, r.Description, sections, r.Enabled, r.ScheduleKind, r.TimeOfDay,
-		r.Weekday, nextRun, r.Destination, r.Target, r.WebhookStyle, r.UpdatedBy)
+		r.Weekday, nextRun, r.Destination, r.Target, r.WebhookStyle, r.UpdatedBy, emailTemplate)
 	if err != nil {
 		return fmt.Errorf("upsert report: %w", err)
 	}

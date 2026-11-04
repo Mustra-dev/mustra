@@ -39,7 +39,7 @@ Mustra can email you new findings as scans find them, and a regular report of al
    | **notice** | Medium and above, and anything not rated yet |
    | **info** | Everything |
 
-   Each scan sends at most one digest per severity level, and each finding is announced once per endpoint, and again only if it becomes more severe. The first scan after upgrading takes stock of what is already there without sending anything. An actively exploited vulnerability that [Threat briefings](threats.md) finds in the fleet is sent as well, as critical.
+   Each scan sends at most one digest per severity level, and each finding is announced once per endpoint, and again only if it becomes more severe. The first scan after upgrading takes stock of what is already there without sending anything. An actively exploited vulnerability that [Threat briefings](threats.md) finds in the fleet is sent as well, as critical. To change the wording, see [Customize your emails](administration.md#customize-your-emails).
 3. **For a regular list:** under **Reports**, add a section with the **Vulnerabilities** source and set **Deliver to** to **Email**. To keep it to the worst, filter on `severity` containing `critical`, or `kev` containing `true`.
 
 ## Fix them

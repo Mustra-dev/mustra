@@ -144,6 +144,8 @@ type reportRequest struct {
 	Destination  string          `json:"destination"`
 	Target       string          `json:"target"`
 	WebhookStyle string          `json:"webhook_style"`
+	// EmailTemplate overrides the email this report goes out as.
+	EmailTemplate store.EmailTemplate `json:"email_template"`
 }
 
 var reportDestinations = map[string]bool{"": true, "webhook": true, "file": true, "syslog": true, "email": true}
@@ -198,6 +200,10 @@ func (s *Server) handleSaveReport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.Target, req.WebhookStyle = strings.Join(to, ", "), ""
+		if err := s.validateEmailTemplate(r.Context(), "report", req.EmailTemplate, s.loadEmailShared(r.Context()).Macros); err != nil {
+			http.Error(w, "this report's email template: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	var next *time.Time
@@ -230,7 +236,7 @@ func (s *Server) handleSaveReport(w http.ResponseWriter, r *http.Request) {
 		ID: req.ID, Name: req.Name, Description: strings.TrimSpace(req.Description),
 		Sections: encoded, Enabled: enabled, ScheduleKind: req.ScheduleKind,
 		TimeOfDay: req.TimeOfDay, Weekday: req.Weekday, Destination: req.Destination,
-		Target: strings.TrimSpace(req.Target), WebhookStyle: req.WebhookStyle, UpdatedBy: who,
+		Target: strings.TrimSpace(req.Target), WebhookStyle: req.WebhookStyle, EmailTemplate: req.EmailTemplate, UpdatedBy: who,
 	}, next); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

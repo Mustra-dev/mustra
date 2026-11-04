@@ -2827,3 +2827,12 @@ CREATE TABLE IF NOT EXISTS vuln_alerts (
     PRIMARY KEY (agent_id, vuln_id)
 );
 CREATE INDEX IF NOT EXISTS idx_vuln_alerts_last_seen ON vuln_alerts (last_seen);
+
+-- A report's own email wording.
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS email_template JSONB NOT NULL DEFAULT '{}';
+
+-- When a deployment or patch run's completion was announced to integrations,
+-- whether or not it asked for a console notification (notified_at). A run that
+-- finished before this column existed is never announced: its last result has
+-- already come in, and only a result triggers the check.
+ALTER TABLE patch_job_runs ADD COLUMN IF NOT EXISTS completion_announced_at TIMESTAMPTZ;

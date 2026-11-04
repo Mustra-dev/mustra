@@ -468,6 +468,7 @@ func (s *Server) renewManagedCert(ctx context.Context, id, by string) error {
 		s.notify(ctx, "warning", "Certificates", "Certificate renewal failed: "+mc.Name, safeTruncate(why, 300), "/certificates#renewal")
 		s.audit(ctx, auditEvent{Action: "certs.renew", Actor: by, Target: mc.Name, AgentID: mc.AgentID, Outcome: "failed", Severity: "warning",
 			Detail: map[string]any{"ca": mc.CA, "path": mc.CertPath, "error": why}})
+		s.emitCompleted("certificate", "Certificate renewal failed: "+mc.Name, "failed", "warning", safeTruncate(why, 300), mc.Name, "/certificates", nil)
 		return errors.New(why)
 	}
 	agent := s.agentByID(ctx, mc.AgentID)
@@ -528,6 +529,8 @@ func (s *Server) renewManagedCert(ctx context.Context, id, by string) error {
 	s.recordIssuance(ctx, *mc, leaf, certPEM, by)
 	s.audit(ctx, auditEvent{Action: "certs.renew", Actor: by, Target: mc.Name, AgentID: mc.AgentID, Severity: "notice",
 		Detail: map[string]any{"ca": mc.CA, "path": mc.CertPath, "expires": expires}})
+	s.emitCompleted("certificate", "Certificate renewed: "+mc.Name, "succeeded", "info",
+		"Valid until "+expires.UTC().Format("2 Jan 2006")+".", mc.Name, "/certificates", map[string]any{"expires": expires})
 	return nil
 }
 
@@ -927,5 +930,7 @@ func (s *Server) renewViaTailscale(ctx context.Context, mc store.ManagedCert, by
 	_ = s.store.SetManagedCertState(ctx, mc.ID, "idle", "Renewed by Tailscale (Let's Encrypt); valid until "+until+".\n"+res.Output, true, expires)
 	s.audit(ctx, auditEvent{Action: "certs.renew", Actor: by, Target: mc.Name, AgentID: mc.AgentID, Severity: "notice",
 		Detail: map[string]any{"ca": mc.CA, "path": mc.CertPath, "expires": expires}})
+	s.emitCompleted("certificate", "Certificate renewed: "+mc.Name, "succeeded", "info",
+		"Valid until "+until+".", mc.Name, "/certificates", map[string]any{"expires": expires})
 	return nil
 }
