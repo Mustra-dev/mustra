@@ -84,6 +84,11 @@ type WatchConfig struct {
 	FollowSymlinks bool     `json:"follow_symlinks,omitempty"`
 }
 
+// NoRemoteCodeRefusal is the error an endpoint in inventory-and-patching mode
+// answers with when asked to run something. The server matches it to tell a
+// refusal, which will never change, from a failure worth retrying.
+const NoRemoteCodeRefusal = "this endpoint runs in inventory-and-patching mode and refuses code from the server"
+
 // AgentSettings are the runtime settings a client configuration profile
 // pushes. Zero values mean "not set": an agent keeps whatever it has.
 type AgentSettings struct {

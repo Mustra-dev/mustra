@@ -199,13 +199,34 @@ func (s *Server) handleShellExec(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	reply.ExitCode = shellExitCode(reply)
 	if logID > 0 {
-		_ = s.store.FinishShellCommand(r.Context(), logID, reply.Output, reply.ExitCode)
+		_ = s.store.FinishShellCommand(r.Context(), logID, shellLogOutput(reply), reply.ExitCode)
 	}
 	if reply.WorkingDir != "" && reply.WorkingDir != sess.WorkingDir {
 		_ = s.store.SetShellWorkingDir(r.Context(), sess.ID, reply.WorkingDir)
 	}
 	writeJSONResponse(w, reply)
+}
+
+// shellExitCode keeps a command the agent would not run from reading as a
+// success in the transcript and the audit log: such a reply has an error and no
+// exit code of its own.
+func shellExitCode(reply proto.ShellReply) int {
+	if reply.Error != "" && reply.ExitCode == 0 {
+		return -1
+	}
+	return reply.ExitCode
+}
+
+func shellLogOutput(reply proto.ShellReply) string {
+	if reply.Error == "" {
+		return reply.Output
+	}
+	if reply.Output == "" {
+		return "error: " + reply.Error
+	}
+	return reply.Output + "\nerror: " + reply.Error
 }
 
 func (s *Server) sendShellCommand(ctx context.Context, agentID string, req proto.ShellRequest) (proto.ShellReply, error) {

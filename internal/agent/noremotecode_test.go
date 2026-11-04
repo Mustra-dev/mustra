@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -189,5 +191,64 @@ func TestNoRemoteCodeStopsCodeWhereItRuns(t *testing.T) {
 	}
 	if res := executeCustomSensor(context.Background(), proto.CustomSensorDef{}); res.Error != errNoRemoteCode.Error() {
 		t.Errorf("custom sensor: %+v", res)
+	}
+}
+
+// A restricted agent answers Self Service itself. restrictedAgent has no store
+// and no connection, so reaching for either to queue the job would panic here.
+func TestNoRemoteCodeSelfServiceInstallRefusesWithoutAsking(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/install", strings.NewReader(`{"item_id":"sw-1"}`))
+	restrictedAgent().handleSelfServiceInstall(w, r)
+	var got struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || got.Error != proto.NoRemoteCodeRefusal {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// A job left in the store would run the moment the mode came off.
+func TestDropDeploysForgetsStoredJobs(t *testing.T) {
+	st, err := OpenStore(filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if n, err := st.dropDeploys(); err != nil || n != 0 {
+		t.Fatalf("empty store: n=%d err=%v", n, err)
+	}
+	job := proto.DeployJob{ID: "job-1", Packages: []proto.DeployPackagePlan{{}}}
+	if err := st.acceptDeploy(job); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := st.dropDeploys(); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	left, err := st.deployStates()
+	if err != nil || len(left) != 0 {
+		t.Fatalf("left=%d err=%v", len(left), err)
+	}
+	if err := st.acceptDeploy(job); err != nil {
+		t.Fatalf("store unusable afterwards: %v", err)
+	}
+}
+
+func TestNoRemoteCodeDoesNotWarnAboutDeploySettings(t *testing.T) {
+	var logs strings.Builder
+	a := restrictedAgent()
+	a.logger = slog.New(slog.NewTextHandler(&logs, nil))
+	for _, cmd := range []string{"deploy_settings", "run_software"} {
+		res := a.handleCommand(context.Background(), []byte(`{"cmd":"`+cmd+`"}`), nil)
+		if res.OK || res.Error != proto.NoRemoteCodeRefusal {
+			t.Fatalf("%s: %+v", cmd, res)
+		}
+	}
+	if strings.Contains(logs.String(), "deploy_settings") || !strings.Contains(logs.String(), "run_software") {
+		t.Fatalf("logs: %s", logs.String())
 	}
 }

@@ -1340,26 +1340,24 @@ echo "To remove mustra from this machine: sudo $INSTALL_DIR/uninstall.sh"
 # cannot list a user's Documents, so a sensor over those paths reports
 # nothing and looks like it passed.
 #
-# Reported here, never prompted here. An installer runs unattended -- from a
-# console update, from a launchd job -- and the first version of this put up
-# a blocking osascript dialog: it waited for a button nobody was necessarily
-# there to press, and every relaunch of the job put up another. The agent
-# raises it once at startup instead, which is right after any install or
-# update, because the installer restarts the agent.
+# Explained here, never checked or prompted here. TCC answers per binary, so
+# reading its database from this script tests this script's access, and said
+# "NOT granted" about an agent that had it. An installer also runs unattended
+# -- from a console update, from a launchd job -- and the first version of this
+# put up a blocking osascript dialog: it waited for a button nobody was
+# necessarily there to press, and every relaunch of the job put up another. The
+# agent checks and raises it once at startup instead, which is right after any
+# install or update, because the installer restarts the agent.
 if [ "$goos" = "darwin" ]; then
-  if /usr/bin/head -c 1 "/Library/Application Support/com.apple.TCC/TCC.db" >/dev/null 2>&1; then
-    echo "Full Disk Access: granted."
-  else
-    echo ""
-    echo "  ! Full Disk Access is NOT granted to the mustra agent."
-    echo "    Without it the agent cannot see Desktop, Documents, Downloads,"
-    echo "    Mail or Photos on this Mac, even though it runs as root."
-    echo ""
-    echo "    System Settings > Privacy & Security > Full Disk Access, then +"
-    echo "    The picker hides /opt, so press Cmd-Shift-G and paste:"
-    echo "        $INSTALL_DIR/mustra-agent"
-    echo ""
-  fi
+  echo ""
+  echo "  The agent needs Full Disk Access to see Desktop, Documents, Downloads,"
+  echo "  Mail or Photos on this Mac, even though it runs as root. If it doesn't"
+  echo "  have it, it posts a notification when it starts."
+  echo ""
+  echo "    System Settings > Privacy & Security > Full Disk Access, then +"
+  echo "    The picker hides /opt, so press Cmd-Shift-G and paste:"
+  echo "        $INSTALL_DIR/mustra-agent"
+  echo ""
 fi
 `
 

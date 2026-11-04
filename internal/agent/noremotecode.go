@@ -25,6 +25,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"unicode"
+
+	"github.com/mustra-dev/mustra/internal/proto"
 )
 
 const noRemoteCodeFile = "no-remote-code"
@@ -38,7 +40,7 @@ const noRemoteCodeFile = "no-remote-code"
 // install anything as root by calling it an update.
 var noRemoteCodeActive atomic.Bool
 
-var errNoRemoteCode = errors.New("this endpoint runs in inventory-and-patching mode and refuses code from the server")
+var errNoRemoteCode = errors.New(proto.NoRemoteCodeRefusal)
 
 // noRemoteCodeCommands are the commands such an endpoint accepts. Each reports
 // or changes only what the agent does itself, or applies updates the operating

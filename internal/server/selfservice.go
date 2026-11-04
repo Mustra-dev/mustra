@@ -297,6 +297,25 @@ func (s *Server) selfServicePlatformsAll(ctx context.Context, pkgs []store.Softw
 	return out
 }
 
+func (s *Server) agentRefusesCode(ctx context.Context, agentID string) bool {
+	agents, err := s.store.ListAgents(ctx, s.staleAfter())
+	if err != nil {
+		return false
+	}
+	for _, a := range agents {
+		if a.AgentID == agentID {
+			return settingsRefuseCode(a.Settings)
+		}
+	}
+	return false
+}
+
+// settingsRefuseCode reads the mode from what an agent last reported.
+func settingsRefuseCode(raw json.RawMessage) bool {
+	var settings proto.AgentSettings
+	return json.Unmarshal(raw, &settings) == nil && settings.NoRemoteCode
+}
+
 // selfServiceInstall authorizes an install and returns the package to run.
 // The device must currently be entitled — an approval that was later
 // revoked, or a group it has since left, stops working immediately.
@@ -317,6 +336,10 @@ func (s *Server) selfServiceInstall(ctx context.Context, agentID string, req pro
 	}
 	if !item.Entitled {
 		return proto.SelfServiceReply{Error: "this device isn't entitled to install " + item.Name}
+	}
+	// A 1.2.0 agent in this mode asks, and stores the job it is given.
+	if s.agentRefusesCode(ctx, agentID) {
+		return proto.SelfServiceReply{Error: proto.NoRemoteCodeRefusal}
 	}
 
 	pkg, err := s.store.GetSoftwarePackage(ctx, item.ID)

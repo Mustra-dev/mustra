@@ -240,8 +240,16 @@ func (a *Agent) Run(ctx context.Context) error {
 	deployDone := make(chan struct{})
 	workerStarted := false
 	startDeploy := func() {
-		// Jobs accepted before this mode was turned on stay unstarted.
+		// Jobs accepted before this mode was turned on are dropped rather
+		// than left waiting: removing the mode later would otherwise run
+		// them, however old they were, at a moment nobody chose. The server
+		// sends them again, is refused, and records them as failed.
 		if a.noRemoteCode {
+			if n, err := a.store.dropDeploys(); err != nil {
+				a.logger.Warn("could not drop stored deployments", "error", err)
+			} else if n > 0 {
+				a.logger.Info("dropped stored deployments: inventory-and-patching mode", "count", n)
+			}
 			return
 		}
 		workerStarted = true
