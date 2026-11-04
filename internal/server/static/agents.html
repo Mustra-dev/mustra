@@ -157,6 +157,8 @@
         <div class="field"><label for="enroll-site">Site</label><input id="enroll-site" placeholder="default"></div>
         <div class="field"><label for="enroll-uses">Uses</label><input id="enroll-uses" type="number" min="1" max="1000" value="1"></div>
         <div class="field"><label for="enroll-hours">Expires after (hours)</label><input id="enroll-hours" type="number" min="1" max="720" value="24"></div>
+        <div class="field u-gc-full"><label><input type="checkbox" id="enroll-no-remote-code"> Inventory and patching only</label>
+          <p class="hint">These endpoints report inventory, compliance and vulnerabilities, and take the updates their package manager offers, but refuse anything else from the server: Direct Connect, deployments, custom sensors, Enforce and agent updates. A compromised server can't run code on them. Only an administrator on the endpoint can undo it, and you update the agent by running the installer there.</p></div>
         <div class="field"><button class="primary" id="enroll-create">Create enrollment token</button></div>
       </div>
       <div class="form-error" id="enroll-error" hidden></div>
@@ -183,6 +185,12 @@
             <p class="install-note">Installs the agent as a LocalSystem service, adds <strong>Mustra Self Service</strong> to the Start Menu and Desktop, and registers an uninstaller.</p>
           </div>
         </div>
+        <p class="install-note">Each command checks the installer's hash before running it, and the installer checks everything it downloads, so nothing is run unless it's what this console built. A command stops working if the server changes, for example after an upgrade: create a new token.</p>
+        <details><summary class="u-cur-pointer">Commands for automation that stores them</summary>
+          <p class="install-note">These keep working across upgrades until the token expires, but they trust the connection instead of checking the installer, so use them only over HTTPS.</p>
+          <pre class="cmd" id="cmd-plain"></pre>
+          <button class="secondary copy" data-target="cmd-plain">Copy</button>
+        </details>
       </div>
       <h3 class="u-fs-12 u-c-text-muted u-tt-upper u-ls-006em u-m-18-0-10">Enrollment tokens</h3>
       <div class="table-scroll">
@@ -531,6 +539,7 @@ document.getElementById("enroll-create").addEventListener("click", async () => {
     site: document.getElementById("enroll-site").value.trim(),
     max_uses: parseInt(document.getElementById("enroll-uses").value, 10) || 1,
     expires_hours: parseFloat(document.getElementById("enroll-hours").value) || 24,
+    no_remote_code: document.getElementById("enroll-no-remote-code").checked,
   };
   const resp = await fetch("/api/enrollment-tokens", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!resp.ok) { err.textContent = await resp.text(); err.hidden = false; return; }
@@ -542,6 +551,7 @@ document.getElementById("enroll-create").addEventListener("click", async () => {
     document.getElementById("cmd-unix").textContent = data.commands.unix;
     document.getElementById("cmd-windows").textContent = data.commands.windows;
     document.getElementById("cmd-alpine").textContent = data.commands.alpine || data.commands.unix;
+    document.getElementById("cmd-plain").textContent = [data.commands.unix_plain, data.commands.alpine_plain, data.commands.windows_plain].filter(Boolean).join("\n\n");
     document.getElementById("enroll-result-uses").textContent = String(data.record.max_uses);
     document.getElementById("enroll-result-expires").textContent = fmtWhen(data.record.expires_at);
     document.getElementById("enroll-result").hidden = false;

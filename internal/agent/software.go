@@ -44,6 +44,9 @@ func runSoftwareCommand(ctx context.Context, command string, timeoutSeconds int)
 // directory, which is how a staged payload becomes reachable: a package can
 // say `msiexec /i setup.msi /qn` and mean the file just placed beside it.
 func runSoftwareCommandIn(ctx context.Context, command string, timeoutSeconds int, workDir string) (string, error) {
+	if noRemoteCodeActive.Load() {
+		return "", errNoRemoteCode
+	}
 	budget := defaultSoftwareTimeout
 	if timeoutSeconds > 0 {
 		budget = time.Duration(timeoutSeconds) * time.Second

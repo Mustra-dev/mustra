@@ -106,35 +106,43 @@ type agentChecksum struct {
 	sum     string
 }
 
+// fileDigest is a file's SHA-256, remembered against its modification time.
+func fileDigest(path string) (string, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if hit, ok := agentChecksums.Load(path); ok {
+		if c := hit.(agentChecksum); c.modTime.Equal(fi.ModTime()) {
+			return c.sum, nil
+		}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	sum := hex.EncodeToString(h.Sum(nil))
+	agentChecksums.Store(path, agentChecksum{modTime: fi.ModTime(), sum: sum})
+	return sum, nil
+}
+
 // serveAgentChecksum answers "<build>.sha256" by hashing the build itself,
 // in the format sha256sum writes: the digest, two spaces, the filename.
 func (s *Server) serveAgentChecksum(w http.ResponseWriter, r *http.Request, path, base string) {
-	fi, err := os.Stat(path)
-	if err != nil {
+	if _, err := os.Stat(path); err != nil {
 		http.Error(w, "no such build: "+base, http.StatusNotFound)
 		return
 	}
-	sum := ""
-	if hit, ok := agentChecksums.Load(path); ok {
-		if c := hit.(agentChecksum); c.modTime.Equal(fi.ModTime()) {
-			sum = c.sum
-		}
-	}
-	if sum == "" {
-		f, err := os.Open(path)
-		if err != nil {
-			http.Error(w, "no such build: "+base, http.StatusNotFound)
-			return
-		}
-		defer f.Close()
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			s.logger.Error("hashing an agent build failed", "path", path, "error", err)
-			http.Error(w, "could not checksum "+base, http.StatusInternalServerError)
-			return
-		}
-		sum = hex.EncodeToString(h.Sum(nil))
-		agentChecksums.Store(path, agentChecksum{modTime: fi.ModTime(), sum: sum})
+	sum, err := fileDigest(path)
+	if err != nil {
+		s.logger.Error("hashing an agent build failed", "path", path, "error", err)
+		http.Error(w, "could not checksum "+base, http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, must-revalidate")
@@ -197,6 +205,15 @@ type installScriptData struct {
 	// MacMenuBar is the JXA menu bar helper, written into the Self Service
 	// bundle by the macOS branch of the install script.
 	MacMenuBar string
+	// NoRemoteCode installs in inventory-and-patching mode: the script leaves
+	// the file the agent looks for beside its binary. It only ever adds that
+	// file, so a later install without it does not turn the mode off.
+	NoRemoteCode bool
+	// Pins are the SHA-256 of everything this script downloads, by file name.
+	// The install command pins this script's own hash (installCommands), so the
+	// chain holds whatever carries the downloads. Only in token-authorized
+	// scripts: the unauthenticated update path checks what it fetches as before.
+	Pins map[string]string
 }
 
 // installError is a refusal the install handlers turn into a plain-text
@@ -229,6 +246,7 @@ func (s *Server) installScriptData(r *http.Request) (installScriptData, error) {
 		return installScriptData{}, &installError{http.StatusBadRequest,
 			"site may contain only letters, digits, '-' and '_' (at most 64 characters)"}
 	}
+	noRemoteCode := r.URL.Query().Get("no_remote_code") == "1"
 	token := requestEnrollToken(r)
 	tokenSite := ""
 	if token != "" {
@@ -246,7 +264,9 @@ func (s *Server) installScriptData(r *http.Request) (installScriptData, error) {
 	if site == "" {
 		site = firstNonEmptyString(tokenSite, defaultSite)
 	}
-	return s.renderInstallData(ctx, site, token)
+	data, err := s.renderInstallData(ctx, site, token)
+	data.NoRemoteCode = noRemoteCode
+	return data, err
 }
 
 // renderInstallData is the part shared with the SSH push, which mints its
@@ -289,7 +309,64 @@ func (s *Server) renderInstallData(ctx context.Context, site, token string) (ins
 		mdmEnrollURL = ""
 	}
 	data.MacMDMEnrollURL = mdmEnrollURL
+	data.Pins = s.installPins()
 	return data, nil
+}
+
+// installPins is the digest of every build an installer can fetch, and of the
+// control plane's CA. A file that can't be read is left out, and its download
+// falls back to the checksum beside it.
+func (s *Server) installPins() map[string]string {
+	pins := map[string]string{}
+	if entries, err := os.ReadDir(s.agentBuildsDir()); err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !(strings.HasPrefix(name, "mustra-agent-") || strings.HasPrefix(name, "mustra-python-") || strings.HasPrefix(name, "mustra-tray-")) ||
+				strings.HasSuffix(name, ".sha256") || strings.HasSuffix(name, ".sig") || strings.HasSuffix(name, ".source") {
+				continue
+			}
+			if sum, err := fileDigest(filepath.Join(s.agentBuildsDir(), name)); err == nil {
+				pins[name] = sum
+			} else {
+				s.logger.Warn("could not hash a build for the installer", "name", name, "error", err)
+			}
+		}
+	}
+	if path := s.cfg.NATSCreds.CAFile; path != "" {
+		if data, err := os.ReadFile(path); err == nil {
+			sum := sha256.Sum256(data)
+			pins["ca.crt"] = hex.EncodeToString(sum[:])
+		}
+	}
+	return pins
+}
+
+// installScriptHashes renders both installers exactly as a request with this
+// token would get them, for the install command to pin.
+func (s *Server) installScriptHashes(ctx context.Context, site, token string, noRemoteCode bool) (sh, ps1 string, err error) {
+	if site == "" {
+		site = defaultSite
+	}
+	data, err := s.renderInstallData(ctx, site, token)
+	if err != nil {
+		return "", "", err
+	}
+	data.NoRemoteCode = noRemoteCode
+	hash := func(t *template.Template) (string, error) {
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, data); err != nil {
+			return "", err
+		}
+		sum := sha256.Sum256(buf.Bytes())
+		return hex.EncodeToString(sum[:]), nil
+	}
+	if sh, err = hash(installShTemplate); err != nil {
+		return "", "", err
+	}
+	if ps1, err = hash(installPs1Template); err != nil {
+		return "", "", err
+	}
+	return sh, ps1, nil
 }
 
 // installScriptDataForPush is what an SSH push installs with: a fresh
@@ -631,6 +708,19 @@ chmod 700 "$DATA_DIR"
 # peer" -- while a 25 MB tarball over the same connection went through, and
 # forcing 1.1 fetched it first try. Whatever inspects that path objects to
 # the payload, not the size, so a size-based guess would have missed it.
+# What each download must hash to, from the script the install command pinned.
+pinned_sha() {
+  case "$1" in
+{{- range $name, $sum := .Pins}}
+    '{{$name}}') echo '{{$sum}}' ;;
+{{- end}}
+    *) ;;
+  esac
+}
+file_sha() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d ' ' -f1; else shasum -a 256 "$1" | cut -d ' ' -f1; fi
+}
+
 fetch() {
   # The first attempt is speculative, so its noise is suppressed: curl
   # reporting "Recv failure" on a transfer that the next line retries and
@@ -653,7 +743,9 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   python_sha=$(shasum -a 256 "$python_stage/runtime.tar.gz" | cut -d ' ' -f1)
 fi
-[ "$python_sha" = "$(tr -d '\r\n' < "$python_stage/expected")" ] || { echo "Python checksum mismatch" >&2; exit 1; }
+python_expected=$(pinned_sha "mustra-python-${python_target}.tar.gz")
+[ -n "$python_expected" ] || python_expected=$(tr -d '\r\n' < "$python_stage/expected")
+[ "$python_sha" = "$python_expected" ] || { echo "Python checksum mismatch" >&2; exit 1; }
 tar -xzf "$python_stage/runtime.tar.gz" -C "$python_stage"
 "$python_stage/python/bin/python3" -I -S -c 'import json,ssl,sqlite3; print("Python runtime ready")'
 
@@ -679,7 +771,8 @@ fi
 # First field only: a .sha256 may hold the bare digest or sha256sum's
 # "<digest>  <name>", and a comparison that keeps the filename never
 # matches a computed digest.
-agent_expected=$(awk '{print $1; exit}' "$python_stage/agent-expected" | tr -d '\r')
+agent_expected=$(pinned_sha "mustra-agent-${goos}-${goarch}")
+[ -n "$agent_expected" ] || agent_expected=$(awk '{print $1; exit}' "$python_stage/agent-expected" | tr -d '\r')
 if [ -z "$agent_expected" ] || [ "$agent_sha" != "$agent_expected" ]; then
   echo "agent checksum mismatch: downloaded $agent_sha, expected ${agent_expected:-nothing}; nothing was changed" >&2
   exit 1
@@ -781,7 +874,14 @@ fi
 NATS_CA_ARGS=""
 case "$NATS_URL" in tls://*) HAS_CA=1 ;; esac
 if [ -n "$HAS_CA" ]; then
-  fetch "${DOWNLOAD_BASE}/ca.crt?v=${AGENT_VERSION}" "$INSTALL_DIR/ca.crt"
+  fetch "${DOWNLOAD_BASE}/ca.crt?v=${AGENT_VERSION}" "$INSTALL_DIR/ca.crt.new"
+  ca_expected=$(pinned_sha ca.crt)
+  if [ -n "$ca_expected" ] && [ "$(file_sha "$INSTALL_DIR/ca.crt.new")" != "$ca_expected" ]; then
+    rm -f "$INSTALL_DIR/ca.crt.new"
+    echo "the control plane's CA does not match this install command; stopping" >&2
+    exit 1
+  fi
+  mv -f "$INSTALL_DIR/ca.crt.new" "$INSTALL_DIR/ca.crt"
   chmod 644 "$INSTALL_DIR/ca.crt"
   NATS_CA_ARGS="--nats-ca $INSTALL_DIR/ca.crt"
 fi
@@ -852,6 +952,13 @@ fi
 
 # Something else supervises the agent (the Home Assistant add-on's run.sh):
 # leave the files in place and tell it how to start them.
+{{- if .NoRemoteCode}}
+# Inventory-and-patching mode: this agent refuses code from the server. Only an
+# administrator on this machine can remove this file.
+touch "$INSTALL_DIR/no-remote-code"
+chmod 644 "$INSTALL_DIR/no-remote-code"
+echo "inventory-and-patching mode: this endpoint will refuse code from the server"
+{{- end}}
 if [ "${MUSTRA_NO_SERVICE:-}" = 1 ]; then
   # Sourced by the supervisor, so quoted; the values are validated
   # server-side and contain no quotes.
@@ -1288,6 +1395,8 @@ if (-not $LockHeld) {
 # code. A site spliced inside double quotes used to run $(...) from the URL.
 $NatsUrl = {{psq .NatsURL}}
 $HasCa = {{if .HasCA}}$true{{else}}$false{{end}}
+# What each download must hash to, from the script the install command pinned.
+$Pins = @{ {{- range $name, $sum := .Pins}} '{{$name}}' = '{{$sum}}'; {{- end}} }
 $Site = {{psq .Site}}
 $DownloadBase = {{psq .DownloadBase}}
 $AgentVersion = {{psq .AgentVersion}}
@@ -1338,6 +1447,12 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { $arch = "arm64" }
 $BinUrl = "$DownloadBase/downloads/mustra-agent-windows-$arch.exe?v=$AgentVersion"
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+{{- if .NoRemoteCode}}
+# Inventory-and-patching mode: this agent refuses code from the server. Only an
+# administrator on this machine can remove this file.
+New-Item -ItemType File -Force -Path "$InstallDir\no-remote-code" | Out-Null
+Write-Host "inventory-and-patching mode: this endpoint will refuse code from the server"
+{{- end}}
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 # The service runs what is in the install directory as LocalSystem, so no
 # one else may write there; the data directory is the agent's alone.
@@ -1355,6 +1470,7 @@ try {
   $ExpectedRaw = (Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/downloads/mustra-python-windows-$arch.zip.sha256?v=$AgentVersion").Content
   if ($ExpectedRaw -is [byte[]]) { $ExpectedRaw = [System.Text.Encoding]::UTF8.GetString($ExpectedRaw) }
   $Expected = $ExpectedRaw.Trim()
+  if ($Pins["mustra-python-windows-$arch.zip"]) { $Expected = $Pins["mustra-python-windows-$arch.zip"] }
   if ((Get-FileHash "$PythonStage\runtime.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected) { throw "Python checksum mismatch" }
   Expand-Archive -Path "$PythonStage\runtime.zip" -DestinationPath $PythonStage
   # No quotes inside the -c argument. Windows PowerShell 5.1 rewrites the
@@ -1383,6 +1499,7 @@ $ExpectedRaw = (Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/downloads
 if ($ExpectedRaw -is [byte[]]) { $ExpectedRaw = [System.Text.Encoding]::UTF8.GetString($ExpectedRaw) }
 # First field only: a .sha256 may be the bare digest or "<digest>  <name>".
 $Expected = ($ExpectedRaw.Trim() -split '\s+')[0].ToLowerInvariant()
+if ($Pins["mustra-agent-windows-$arch.exe"]) { $Expected = $Pins["mustra-agent-windows-$arch.exe"] }
 $Actual = (Get-FileHash $AgentStage -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($Actual -ne $Expected) {
   Remove-Item -Force $AgentStage -ErrorAction SilentlyContinue
@@ -1457,6 +1574,10 @@ if ($EnrollToken) {
 $CaArgs = ""
 if ($HasCa -or $NatsUrl -like "tls://*") {
   Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/ca.crt?v=$AgentVersion" -OutFile "$InstallDir\ca.crt"
+  if ($Pins["ca.crt"] -and (Get-FileHash "$InstallDir\ca.crt" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Pins["ca.crt"]) {
+    Remove-Item -Force "$InstallDir\ca.crt" -ErrorAction SilentlyContinue
+    throw "The control plane's CA does not match this install command. Stopping."
+  }
   $CaArgs = ' --nats-ca "' + $InstallDir + '\ca.crt"'
 }
 
@@ -1555,6 +1676,10 @@ Start-Sleep -Milliseconds 500
 $TrayPath = "$InstallDir\mustra-tray.exe"
 try {
   Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/downloads/mustra-tray-windows-$arch.exe?v=$AgentVersion" -OutFile $TrayPath
+  if ($Pins["mustra-tray-windows-$arch.exe"] -and (Get-FileHash $TrayPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Pins["mustra-tray-windows-$arch.exe"]) {
+    Remove-Item -Force $TrayPath -ErrorAction SilentlyContinue
+    throw "the tray helper does not match this install command"
+  }
   Remove-Item -Force "$TrayPath.new","$TrayPath.old" -ErrorAction SilentlyContinue
 } catch {
   Write-Host "tray helper unavailable; notifications will use the plain fallback"

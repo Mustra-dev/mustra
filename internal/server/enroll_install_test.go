@@ -2,6 +2,8 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -190,16 +192,132 @@ func TestInstallPs1Hardening(t *testing.T) {
 }
 
 func TestInstallCommandsQuoteTheToken(t *testing.T) {
-	c := installCommands("https://console.example.com", "mte_abc", "branch-1")
-	if c["unix"] != "curl -fsSL -H 'Authorization: Bearer mte_abc' 'https://console.example.com/install.sh?site=branch-1' | sudo bash" {
-		t.Errorf("unix one-liner: %s", c["unix"])
+	c := installCommands("https://console.example.com", "mte_abc", "branch-1", false, "shsum", "pssum")
+	if c["unix_plain"] != "curl -fsSL -H 'Authorization: Bearer mte_abc' 'https://console.example.com/install.sh?site=branch-1' | sudo bash" {
+		t.Errorf("unix one-liner: %s", c["unix_plain"])
 	}
-	if !strings.Contains(c["windows"], "@{Authorization='Bearer mte_abc'}") {
-		t.Errorf("windows one-liner: %s", c["windows"])
+	if !strings.Contains(c["windows_plain"], "@{Authorization='Bearer mte_abc'}") {
+		t.Errorf("windows one-liner: %s", c["windows_plain"])
 	}
 	// Alpine: no sudo, and bash and curl added first.
-	if c["alpine"] != "apk add --no-cache bash curl && curl -fsSL -H 'Authorization: Bearer mte_abc' 'https://console.example.com/install.sh?site=branch-1' | bash" {
-		t.Errorf("alpine one-liner: %s", c["alpine"])
+	if !strings.HasPrefix(c["alpine_plain"], "apk add --no-cache bash curl && curl -fsSL -H 'Authorization: Bearer mte_abc' ") || strings.Contains(c["alpine_plain"], "sudo") {
+		t.Errorf("alpine one-liner: %s", c["alpine_plain"])
+	}
+	if !strings.Contains(c["windows"], "@{Authorization='Bearer mte_abc'}") {
+		t.Errorf("pinned windows one-liner: %s", c["windows"])
+	}
+	if strings.Contains(c["alpine"], "sudo") {
+		t.Errorf("pinned alpine one-liner: %s", c["alpine"])
+	}
+}
+
+func TestInstallCommandsRunNothingBeforeCheckingIt(t *testing.T) {
+	c := installCommands("https://console.example.com", "mte_abc", "", true, "shsum", "pssum")
+	for _, key := range []string{"unix", "alpine"} {
+		cmd := c[key]
+		if strings.Contains(cmd, "| sudo bash") || strings.Contains(cmd, "| bash") {
+			t.Errorf("%s pipes into a shell: %s", key, cmd)
+		}
+		if !strings.Contains(cmd, "'shsum'") || strings.Index(cmd, "'shsum'") > strings.Index(cmd, `bash "$f"`) {
+			t.Errorf("%s runs before checking: %s", key, cmd)
+		}
+		if !strings.Contains(cmd, "no_remote_code=1") {
+			t.Errorf("%s dropped the mode: %s", key, cmd)
+		}
+	}
+	w := c["windows"]
+	if !strings.Contains(w, "'pssum'") || strings.Index(w, "'pssum'") > strings.Index(w, "iex $s") || strings.Contains(w, "| iex") {
+		t.Errorf("windows runs before checking: %s", w)
+	}
+	if off := installCommands("https://c", "t", "", false, "a", "b"); strings.Contains(off["unix"], "no_remote_code") {
+		t.Errorf("the mode is on by default: %s", off["unix"])
+	}
+}
+
+// A real shell: the command runs a script whose hash matches, and refuses one
+// that was changed on the way, before running any of it.
+func TestPinnedCommandRefusesATamperedScript(t *testing.T) {
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("needs curl")
+	}
+	dir := t.TempDir()
+	script := []byte("echo RAN > " + filepath.Join(dir, "ran") + "\n")
+	sum := sha256.Sum256(script)
+	served := script
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(served) }))
+	defer ts.Close()
+	cmd := strings.ReplaceAll(installCommands(ts.URL, "t", "", false, hex.EncodeToString(sum[:]), "x")["unix"], "sudo bash", "bash")
+	run := func() (string, error) {
+		out, err := exec.Command("bash", "-c", cmd).CombinedOutput()
+		return string(out), err
+	}
+	if out, err := run(); err != nil {
+		t.Fatalf("the genuine script: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ran")); err != nil {
+		t.Fatal("the genuine script did not run")
+	}
+	_ = os.Remove(filepath.Join(dir, "ran"))
+	served = []byte("echo RAN > " + filepath.Join(dir, "ran") + "\necho evil\n")
+	out, err := run()
+	if err == nil || !strings.Contains(out, "no longer matches") {
+		t.Errorf("a changed script: err=%v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ran")); err == nil {
+		t.Error("a changed script ran")
+	}
+}
+
+// What the command pins must be byte for byte what the server then serves.
+func TestInstallScriptHashMatchesWhatIsServed(t *testing.T) {
+	builds := t.TempDir()
+	for name, body := range map[string]string{
+		"mustra-agent-linux-amd64": "agent", "mustra-agent-linux-amd64.sha256": "skip", "mustra-tray-windows-amd64.exe": "tray",
+		"mustra-python-linux-amd64.tar.gz": "py", "mustra-python-linux-amd64.tar.gz.source": "skip", "other": "skip",
+	} {
+		if err := os.WriteFile(filepath.Join(builds, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := &Server{logger: slog.Default(), cfg: Config{AgentBuildsDir: builds}}
+	pins := s.installPins()
+	want := sha256.Sum256([]byte("agent"))
+	if pins["mustra-agent-linux-amd64"] != hex.EncodeToString(want[:]) || len(pins) != 3 {
+		t.Errorf("pins: %v", pins)
+	}
+	data := installScriptData{NatsURL: "tls://n:4222", HasCA: true, Site: "lab", DownloadBase: "https://c", AgentVersion: "1", MacMenuBar: macMenuBarScript, Pins: pins, NoRemoteCode: true}
+	var sh, ps1 bytes.Buffer
+	if err := installShTemplate.Execute(&sh, data); err != nil {
+		t.Fatal(err)
+	}
+	if err := installPs1Template.Execute(&ps1, data); err != nil {
+		t.Fatal(err)
+	}
+	for _, needle := range []string{"'mustra-agent-linux-amd64') echo '" + pins["mustra-agent-linux-amd64"], `touch "$INSTALL_DIR/no-remote-code"`, `pinned_sha "mustra-agent-${goos}-${goarch}"`, "pinned_sha ca.crt"} {
+		if !strings.Contains(sh.String(), needle) {
+			t.Errorf("install.sh lacks %q", needle)
+		}
+	}
+	for _, needle := range []string{"'mustra-agent-linux-amd64' = '" + pins["mustra-agent-linux-amd64"], `no-remote-code`, `$Pins["ca.crt"]`, `$Pins["mustra-tray-windows-$arch.exe"]`} {
+		if !strings.Contains(ps1.String(), needle) {
+			t.Errorf("install.ps1 lacks %q", needle)
+		}
+	}
+	data.NoRemoteCode, data.Pins = false, nil
+	sh.Reset()
+	if err := installShTemplate.Execute(&sh, data); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(sh.String(), `touch "$INSTALL_DIR/no-remote-code"`) {
+		t.Error("the mode is on by default")
+	}
+	// The plain script must parse with no pins at all.
+	if bash, err := exec.LookPath("bash"); err == nil {
+		c := exec.Command(bash, "-n")
+		c.Stdin = bytes.NewReader(sh.Bytes())
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Errorf("install.sh does not parse: %v\n%s", err, out)
+		}
 	}
 }
 

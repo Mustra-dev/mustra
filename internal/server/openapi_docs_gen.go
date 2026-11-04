@@ -98,6 +98,7 @@ var typeDocs = map[string]typeDoc{
 		Doc: "AgentSettings are the runtime settings a client configuration profile pushes. Zero values mean \"not set\": an agent keeps whatever it has.",
 		Fields: map[string]string{
 			"LogLevel":           "debug | info | warn | error",
+			"NoRemoteCode":       "NoRemoteCode says this endpoint runs in inventory-and-patching mode. Reported, never applied: only a file on the endpoint sets it.",
 			"Profile":            "Profile names the profile these came from, echoed back so drift is judged against the right one.",
 			"RandomDelaySeconds": "RandomDelaySeconds spreads each sensor publish over a random wait up to this long, so a thousand agents sharing an interval do not all report in the same second.",
 		},
@@ -509,6 +510,9 @@ var typeDocs = map[string]typeDoc{
 	},
 	"github.com/mustra-dev/mustra/internal/server.createEnrollTokenRequest": {
 		Doc: "createEnrollTokenRequest is the body of POST /api/enrollment-tokens.",
+		Fields: map[string]string{
+			"NoRemoteCode": "NoRemoteCode installs in inventory-and-patching mode: the endpoint refuses code from the server, and only an administrator on it can undo that.",
+		},
 	},
 	"github.com/mustra-dev/mustra/internal/server.createEnrollTokenResponse": {
 		Doc: "createEnrollTokenResponse is what POST /api/enrollment-tokens answers: the install commands, or why they could not be built.",

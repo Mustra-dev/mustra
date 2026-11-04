@@ -62,23 +62,21 @@ make quickstart
 This generates secrets and certificates, builds the images, and waits
 until the console answers. The first build takes a few minutes.
 
-1. Open `http://<host>:8080/` and create the administrator account. There
-   is no default password, and the setup page closes once the account
-   exists.
-2. Go to **Client Management → Manual Install** and copy the one-line
-   install command for each platform:
-
-   ```sh
-   curl -fsSL http://<host>:8080/install.sh | sudo bash   # Linux, macOS
-   irm http://<host>:8080/install.ps1 | iex                # Windows, elevated
-   ```
+1. Open the one-time setup link it prints and create the administrator
+   account. There is no default password, and the link stops working once the
+   account exists.
+2. Give the console its HTTPS address, which agents install and update from.
+   Follow [deploy/README.md](deploy/README.md#public-access), or enter it under
+   **Administration → Agent Identity**.
+3. Go to **Client Management → Manual Install**, create an enrollment token, and
+   copy the install command for each platform. The command checks everything it
+   runs before running it.
 
    The endpoint appears within seconds. To reach many hosts at once, use
    **Network Scan & Push**.
 
 On macOS, give the agent **Full Disk Access**
 ([why, and how to do it with an MDM](docs/guides/install-agents.md)).
-To serve the console over HTTPS, see [deploy/README.md](deploy/README.md).
 
 **What leaves your network:** nothing goes to the mustra maintainers. By
 default, the server sends package names and versions to
@@ -112,18 +110,26 @@ is exactly what you are trusting.
   another one. Revoking it takes effect within an hour.
 - **Is the connection authenticated both ways?** Yes, though not with client
   certificates. The agent verifies the broker over TLS against your
-  deployment's own CA, and the broker requires the agent's credential. The
-  installer downloads that CA from your console, so install over HTTPS: on
-  plain HTTP, the first install is only as safe as your network.
-- **Can the console run arbitrary commands?** Yes, and that's the point of
-  deployments, custom sensors and Direct Connect. It isn't limited to patching
-  and auditing, and agents have no setting to turn it off. Control sits on the
-  server: only people whose role allows it can run code, each action is in the
-  audit log, and you can require a second person's approval.
-- **What if the server is compromised?** So is the fleet. Only the server may
-  send commands, and commands aren't individually signed, so protect it like
-  you would your SSH keys. Agent updates are signed, against a key each agent
-  pins at enrollment.
+  deployment's own CA, and the broker requires the agent's credential.
+- **How do you know the install is genuine?** The command you copy from the
+  console checks the installer's hash before running it, and the installer checks
+  everything it downloads, including that CA, so a tampered download stops before
+  anything changes.
+- **Can the console run arbitrary commands?** By default, yes: that's the point of
+  deployments, custom sensors and Direct Connect. Only people whose role allows it
+  can run code, each action is in the audit log, and you can require a second
+  person's approval.
+- **Can I turn that off?** Yes, per endpoint. Choose **Inventory and patching
+  only** when you create the enrollment token. Those endpoints keep reporting
+  inventory, vulnerabilities and compliance, and take the updates their package
+  manager offers from the repositories configured on the machine, but refuse
+  everything else from the server. It's a file on the endpoint, so the server can't
+  turn it off: only an administrator on that machine can. The trade-off is that you
+  update those agents by running the installer on the machine.
+- **What if the server is compromised?** So is every endpoint not in that mode. Only
+  the server may send commands, and commands aren't individually signed, so protect
+  it like you would your SSH keys. Agent updates are signed, against a key each
+  agent pins at enrollment.
 - **Compared with Ansible:** Ansible needs no agent, but it needs inbound SSH or
   WinRM on every machine. mustra's agents open no ports and connect out, which
   suits a mix of Macs that change networks, Windows, and Home Assistant OS,

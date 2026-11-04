@@ -64,6 +64,9 @@ func executeCustomSensor(ctx context.Context, def proto.CustomSensorDef) proto.C
 	return executeCustomSensorAs(ctx, def, "", "")
 }
 func executeCustomSensorAs(ctx context.Context, def proto.CustomSensorDef, identity, username string) proto.CustomSensorResult {
+	if noRemoteCodeActive.Load() {
+		return proto.CustomSensorResult{Error: errNoRemoteCode.Error()}
+	}
 	res := proto.CustomSensorResult{Revision: def.Revision}
 	timeout := def.TimeoutSeconds
 	if timeout <= 0 {

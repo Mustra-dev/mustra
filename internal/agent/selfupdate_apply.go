@@ -135,6 +135,9 @@ func acquireUpdateLock(dir string) (release func(), ok bool) {
 // helper. It returns once the helper is running; the outcome is reported
 // by the next agent to start (reportUpdateResult).
 func (a *Agent) startVerifiedUpdate(ctx context.Context, offer *proto.UpdateOffer) (string, error) {
+	if a.noRemoteCode {
+		return "", errNoRemoteCode
+	}
 	if offer == nil {
 		return "", errors.New("the server offered no signed update; it may not hold a signing key, or this platform has no build")
 	}

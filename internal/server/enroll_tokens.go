@@ -83,6 +83,10 @@ type createEnrollTokenRequest struct {
 	Site         string  `json:"site"`
 	MaxUses      int     `json:"max_uses"`
 	ExpiresHours float64 `json:"expires_hours"`
+	// NoRemoteCode installs in inventory-and-patching mode: the endpoint
+	// refuses code from the server, and only an administrator on it can undo
+	// that.
+	NoRemoteCode bool `json:"no_remote_code"`
 }
 
 // createEnrollTokenResponse is what POST /api/enrollment-tokens answers:
@@ -132,34 +136,66 @@ func (s *Server) handleCreateEnrollToken(w http.ResponseWriter, r *http.Request)
 	}
 	s.audit(r.Context(), auditEvent{
 		Action: "agent.enroll_token.create", Actor: who, Target: firstNonEmptyString(req.Label, t.ID), Severity: "notice",
-		Detail: map[string]any{"id": t.ID, "max_uses": t.MaxUses, "expires_at": t.ExpiresAt, "site": t.Site},
+		Detail: map[string]any{"id": t.ID, "max_uses": t.MaxUses, "expires_at": t.ExpiresAt, "site": t.Site, "no_remote_code": req.NoRemoteCode},
 	})
 	resp := createEnrollTokenResponse{Token: token, Record: t}
 	// The one-liners are built here, from the configured public URL, so the
 	// page never has to guess the console's address from its own location.
 	if base, err := s.agentPublicURL(r.Context()); err == nil {
-		resp.Commands = installCommands(base, token, t.Site)
+		if shSum, ps1Sum, err := s.installScriptHashes(r.Context(), t.Site, token, req.NoRemoteCode); err == nil {
+			resp.Commands = installCommands(base, token, t.Site, req.NoRemoteCode, shSum, ps1Sum)
+		} else {
+			resp.CommandsError = err.Error()
+		}
 	} else {
 		resp.CommandsError = err.Error()
 	}
 	writeJSONResponse(w, resp)
 }
 
-// installCommands renders the copy-paste one-liners. The token travels in
-// a header rather than the URL, so it does not land in proxy and CDN
-// access logs; the site, which is not secret, stays in the query.
-func installCommands(base, token, site string) map[string]string {
-	q := ""
+// installCommands renders the copy-paste one-liners. The token travels in a
+// header rather than the URL, so it does not land in proxy and CDN access logs;
+// the site, which is not secret, stays in the query.
+//
+// A command is the one thing an administrator carries from a console they signed
+// in to, so it pins what it runs. It downloads the script to a file and checks
+// its hash before running anything, and the script holds the hash of everything
+// it downloads (installPins), so the whole install is verified whatever sits
+// between the endpoint and the server. A pinned command stops working when the
+// script would change: an upgrade, or a change to the uninstall password. It
+// says so, and fails before touching anything. The "_plain" forms keep working,
+// for automation that stores a command and accepts trusting the connection.
+func installCommands(base, token, site string, noRemoteCode bool, shSum, ps1Sum string) map[string]string {
+	var params []string
 	if site != "" {
-		q = "?site=" + site
+		params = append(params, "site="+site)
 	}
+	if noRemoteCode {
+		params = append(params, "no_remote_code=1")
+	}
+	q := ""
+	if len(params) > 0 {
+		q = "?" + strings.Join(params, "&")
+	}
+	auth := "Authorization: Bearer " + token
+	const stale = "mustra: this install command no longer matches the server: it may be out of date. Create a new enrollment token. Nothing was changed."
+	shPinned := func(run string) string {
+		return `f=$(mktemp) && curl -fsSL -H ` + shQuote(auth) + ` ` + shQuote(base+"/install.sh"+q) + ` -o "$f" && ` +
+			`{ [ "$( (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") | cut -d ' ' -f1)" = ` + shQuote(shSum) + ` ] || { echo ` + shQuote(stale) + ` >&2; false; }; } && ` +
+			run + ` "$f"; s=$?; rm -f "$f"; (exit $s)`
+	}
+	irm := "irm -UseBasicParsing -Headers @{Authorization=" + psQuoteString("Bearer "+token) + "} " + psQuoteString(base+"/install.ps1"+q)
 	return map[string]string{
-		"unix": "curl -fsSL -H " + shQuote("Authorization: Bearer "+token) + " " + shQuote(base+"/install.sh"+q) + " | sudo bash",
+		"unix": shPinned("sudo bash"),
 		// Alpine has neither bash, curl nor sudo out of the box, and is
 		// usually administered as root.
-		"alpine": "apk add --no-cache bash curl && curl -fsSL -H " + shQuote("Authorization: Bearer "+token) + " " + shQuote(base+"/install.sh"+q) + " | bash",
-		"windows": "irm -UseBasicParsing -Headers @{Authorization=" + psQuoteString("Bearer "+token) + "} " +
-			psQuoteString(base+"/install.ps1"+q) + " | iex",
+		"alpine": "apk add --no-cache bash curl && " + shPinned("bash"),
+		"windows": `$f=Join-Path $env:TEMP ('mustra-'+[guid]::NewGuid()+'.ps1'); ` + irm + ` -OutFile $f; ` +
+			`if((Get-FileHash $f -Algorithm SHA256).Hash -ne ` + psQuoteString(ps1Sum) + `){Remove-Item $f; throw ` + psQuoteString(stale) + `}; ` +
+			`$s=[IO.File]::ReadAllText($f); Remove-Item $f; iex $s`,
+		"unix_plain":    "curl -fsSL -H " + shQuote(auth) + " " + shQuote(base+"/install.sh"+q) + " | sudo bash",
+		"alpine_plain":  "apk add --no-cache bash curl && curl -fsSL -H " + shQuote(auth) + " " + shQuote(base+"/install.sh"+q) + " | bash",
+		"windows_plain": irm + " | iex",
 	}
 }
 

@@ -208,6 +208,17 @@ func (a *Agent) handleCommand(ctx context.Context, data []byte, intervalChans ma
 	if err := json.Unmarshal(data, &cmd); err != nil {
 		return proto.AgentCommandResult{OK: false, Error: "malformed command: " + err.Error()}
 	}
+	if a.noRemoteCode {
+		if !noRemoteCodeCommands[cmd.Cmd] {
+			a.logger.Warn("refused a command: inventory-and-patching mode", "command", cmd.Cmd)
+			return proto.AgentCommandResult{OK: false, Error: errNoRemoteCode.Error()}
+		}
+		if err := checkPatchNames(cmd.Patches); err != nil {
+			a.logger.Warn("refused a patch job: inventory-and-patching mode", "error", err)
+			return proto.AgentCommandResult{OK: false, Error: err.Error()}
+		}
+		ctx = withoutCheckCommands(ctx)
+	}
 	switch cmd.Cmd {
 	case "deploy_settings":
 		if cmd.DeploySettings == nil {

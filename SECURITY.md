@@ -110,6 +110,9 @@ that is a vulnerability: please report it.
   publish its own telemetry and results and receive work addressed to it.
   It cannot publish commands, read other agents' traffic or report as
   another agent.
+  An endpoint can also refuse code from the server altogether: see
+  inventory-and-patching mode, set by a file only an administrator on the
+  endpoint can change. A default-deny list decides what it accepts.
 - **NATS.** Agents connect outbound only. The broker requires TLS and a
   credential for every connection, and its permissions separate the server
   role from the agent role. Agents accept no inbound connections. The
@@ -137,6 +140,11 @@ should not be able to read or change traffic, or impersonate any party:
   webhook are exempt: each carries its own secret, which a browser does not
   attach on its own. Every console page is served with a nonce-based
   Content Security Policy that allows no third-party or inline scripts.
+- Install commands verify what they run. A command copied from the console checks
+  the installer's hash before running it, and the installer checks each download,
+  and the CA agents trust, against hashes it carries. This holds over any
+  connection, as long as the command itself came from the real console. The
+  `_plain` commands for automation trust the connection instead.
 - Agent updates are signed. An enrolled agent installs a new binary only if
   its manifest verifies against the deployment key it pinned at enrollment
   (and the binary matches the manifest's size and SHA-256), so control of the
@@ -179,8 +187,14 @@ hour); after that the broker refuses it until it is enrolled again.
 ### Known limits
 
 - Anyone with `deploy.manage` (packages, custom sensors) or Direct Connect
-  can run arbitrary code as root/SYSTEM on targeted endpoints. Grant those
-  permissions accordingly.
+  can run arbitrary code as root/SYSTEM on targeted endpoints, unless an endpoint
+  is in inventory-and-patching mode. Grant those permissions accordingly.
+- Inventory-and-patching mode stops a compromised server running its own code on
+  an endpoint, not everything. It can still read what the endpoint reports, and
+  choose which offered updates are applied and when the machine restarts. Updates
+  come only from the repositories configured on the machine: patch lists that
+  choose repositories are ignored. The mode is not available through Network Scan
+  & Push or the Home Assistant add-on.
 - The break-glass local account bypasses OIDC by design. Keep its password
   in a vault and its use audited.
 - Agents installed before per-agent enrollment keep using the shared legacy
