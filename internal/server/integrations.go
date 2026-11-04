@@ -40,7 +40,7 @@ import (
 )
 
 type integrationEvent struct {
-	Type     string         `json:"type"` // audit, alert, expiry, vulnerability
+	Type     string         `json:"type"` // audit, alert, expiry, vulnerability, completed
 	Time     time.Time      `json:"time"`
 	Title    string         `json:"title"`
 	Action   string         `json:"action,omitempty"`
@@ -121,6 +121,9 @@ func (s *Server) integrationLoop(ctx context.Context) {
 				// Expiry events are already chosen by their thresholds, so
 				// they ignore the severity floor; an integration can narrow
 				// them further to some thresholds (expiryWanted).
+				if ev.Type == "completed" && !completedWanted(in.Config[configCompletedActions], ev) {
+					continue
+				}
 				if ev.Type == "expiry" {
 					if !expiryWanted(in.Config["expiry_days"], ev) {
 						continue
@@ -215,7 +218,12 @@ func (s *Server) deliverEvent(ctx context.Context, in store.Integration, ev inte
 		if err != nil {
 			return err
 		}
-		return s.sendMail(ctx, eventMail(to, ev, title, link))
+		mailBody := ev.Body
+		if mailBody == "" {
+			mailBody = body
+		}
+		kind := ev.Type
+		return s.sendMail(ctx, s.composeMail(ctx, kind, to, integrationEmailTemplate(in), eventEmailData(ev, title, mailBody, link)))
 	case "webhook":
 		if ev.Link != "" {
 			ev.Link = link
@@ -513,8 +521,20 @@ func (s *Server) handleSaveIntegration(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, e := range in.Events {
-		if e != "audit" && e != "alert" && e != "expiry" && e != "vulnerability" {
-			http.Error(w, "events are audit, alert, expiry and/or vulnerability", http.StatusBadRequest)
+		if e != "audit" && e != "alert" && e != "expiry" && e != "vulnerability" && e != "completed" {
+			http.Error(w, "events are audit, alert, expiry, vulnerability and/or completed", http.StatusBadRequest)
+			return
+		}
+	}
+	if filter, err := parseCompletedFilter(in.Config[configCompletedActions]); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	} else if filter != "" {
+		in.Config[configCompletedActions] = filter
+	}
+	if in.Kind == "email" {
+		if err := s.validateIntegrationEmail(r.Context(), in); err != nil {
+			http.Error(w, "this integration's email template: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 	}

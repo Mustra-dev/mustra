@@ -4,7 +4,11 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
-## Unreleased
+## 1.1.0 — 2026-11-04
+
+Server 1.1.0; agent 1.0.0, unchanged: there is nothing to push to endpoints.
+Upgrading adds what it needs on startup, and sends no email until you set up an
+SMTP account and an integration or report that uses it.
 
 ### Added
 - **Email.** Administration → Email holds an SMTP account, with a test send.
@@ -23,6 +27,15 @@ rather than a page that can drift from it.
   sent too. The first scan after upgrading only takes stock, so nothing is sent
   for findings you already have. Each finding is announced once per endpoint,
   and again only if it becomes more severe.
+- **Customizable emails.** Every email's subject, text and HTML can be rewritten
+  under Administration → Email, with variables, conditions, functions and shared
+  macros, a preview, and a test send. A report or Email integration can have its
+  own. HTML values are escaped. A template that fails when sending costs its
+  wording, not the email: the default goes out, with a note saying why.
+- **Completed-action events.** Integrations can opt in to hear when deployments,
+  patch runs, playbooks, nightly backups, certificate renewals, vulnerability
+  scans or reports finish, each chosen separately. Off by default. A minimum
+  severity of `warning` keeps it to the ones that failed.
 - The Vulnerabilities source of reports, dashboards and Connect exports has
   `kev`, `ransomware` and `epss` columns, and lists the worst first. A report's
   default table for it now shows host, vulnerability, package, severity, KEV

@@ -627,7 +627,11 @@ var bodyExamples = map[string]string{
 	"PUT /api/hunt/signals/{id}":              signalExample,
 
 	// integrations
-	"POST /api/admin/mail-test": `{"to": "you@example.com"}`,
+	"POST /api/admin/mail-test":                      `{"to": "you@example.com"}`,
+	"PUT /api/admin/email-templates/{kind}":          `{"subject": "[{{.Vars.company}}] {{.Title}}", "text": "{{.Body}}\n\n{{template \"signature\" .}}", "html": ""}`,
+	"POST /api/admin/email-templates/{kind}/preview": `{"subject": "[{{.Vars.company}}] {{.Title}}", "text": "{{.Body}}", "html": ""}`,
+	"POST /api/admin/email-templates/{kind}/test":    `{"to": "you@example.com", "subject": "[{{.Vars.company}}] {{.Title}}", "text": "{{.Body}}", "html": ""}`,
+	"PUT /api/admin/email-shared":                    `{"vars": {"company": "Example Ltd"}, "macros": "{{define \"signature\"}}The {{.Vars.company}} IT team{{end}}"}`,
 	"POST /api/admin/integrations": `{
 		"kind": "webhook",
 		"name": "SOC webhook",

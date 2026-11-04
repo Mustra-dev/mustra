@@ -439,6 +439,15 @@ func (s *Server) runReport(ctx context.Context, rep store.Report, who string, pr
 	}
 	s.logger.Info("report generated", "report", rep.Name, "sections", rendered.Sections,
 		"rows", rendered.Rows, "delivered", run.Delivered, "by", who)
+	if !preview {
+		outcome, severity := "succeeded", "info"
+		if run.Error != "" {
+			outcome, severity = "failed", "warning"
+		}
+		s.emitCompleted("report", "Report finished: "+rep.Name, outcome, severity,
+			fmt.Sprintf("%d row%s in %d section%s.%s", rendered.Rows, plural(rendered.Rows), rendered.Sections, plural(rendered.Sections), map[bool]string{true: " " + run.Error, false: ""}[run.Error != ""]),
+			rep.Name, "/reports", map[string]any{"rows": rendered.Rows, "sections": rendered.Sections, "delivered": run.Delivered})
+	}
 	return &run, nil
 }
 
@@ -462,8 +471,7 @@ func (s *Server) deliverReport(ctx context.Context, rep store.Report, rendered r
 		if err != nil {
 			return err
 		}
-		return s.sendMail(ctx, mailMessage{To: to, Subject: "[mustra] " + rep.Name,
-			Text: rendered.Summary, HTML: reportDocument(rep.Name, rendered.HTML)})
+		return s.sendMail(ctx, s.composeMail(ctx, "report", to, rep.EmailTemplate, reportEmailData(rep, rendered)))
 	default:
 		return fmt.Errorf("unknown destination %q", rep.Destination)
 	}

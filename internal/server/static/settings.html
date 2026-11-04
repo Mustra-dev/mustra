@@ -205,7 +205,23 @@
           <div class="field" data-int-hide="prometheus"><label>Send</label>
             <label><input type="checkbox" id="int-ev-alert" checked> Alerts</label> <label><input type="checkbox" id="int-ev-audit"> Audit events</label>
             <label><input type="checkbox" id="int-ev-expiry"> Certificate &amp; credential expiry</label>
-            <label><input type="checkbox" id="int-ev-vulnerability"> New vulnerabilities</label></div>
+            <label><input type="checkbox" id="int-ev-vulnerability"> New vulnerabilities</label>
+            <label><input type="checkbox" id="int-ev-completed"> Completed actions</label></div>
+          <div class="field u-gc-full" id="int-completed-field" hidden><label>Tell me when these finish (none ticked means all of them). With a minimum severity of info you hear about every one; with warning, only the ones that failed.</label>
+            <div id="int-completed-actions">
+              <label><input type="checkbox" value="deployment"> Deployments and patch runs</label>
+              <label><input type="checkbox" value="playbook"> Playbooks</label>
+              <label><input type="checkbox" value="backup"> Nightly backups</label>
+              <label><input type="checkbox" value="certificate"> Certificate renewals</label>
+              <label><input type="checkbox" value="vuln_scan"> Vulnerability scans</label>
+              <label><input type="checkbox" value="report"> Reports</label>
+            </div></div>
+          <details class="field u-gc-full" data-int-only="email"><summary class="u-cur-pointer">Customize this integration's emails</summary>
+            <p class="hint">Blank uses the wording under <a href="#email">Administration → Email</a>. Variables and macros work the same way, and this applies to every kind of event this integration takes.</p>
+            <div class="field"><label for="int-email-subject">Subject</label><input id="int-email-subject" class="email-code" spellcheck="false" autocomplete="off"></div>
+            <div class="field"><label for="int-email-text">Plain text</label><textarea id="int-email-text" rows="5" spellcheck="false" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+            <div class="field"><label for="int-email-html">HTML (optional)</label><textarea id="int-email-html" rows="5" spellcheck="false" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+          </details>
           <div class="field" id="int-expiry-field" hidden><label for="int-expiry-days">Expiry: only at these thresholds (days)</label>
             <input id="int-expiry-days" placeholder="every threshold, e.g. 60 or 60,7,expired" title="Leave blank for every threshold set under Cert Manager → Alerts. For one ServiceNow incident per item, give just the first, e.g. 60."></div>
           <div class="field" data-int-hide="prometheus"><label for="int-sev">Minimum severity</label>
@@ -434,6 +450,49 @@
         <div class="save-row">
           <button id="mail-test">Send test email</button>
           <span class="save-status" id="mail-test-status" role="status"></span>
+        </div>
+      </div>
+      <div class="panel settings-section">
+        <h2>Templates</h2>
+        <p class="hint">The wording of each kind of email, with variables, conditions and macros, using <a href="/help#administration">Go template</a> syntax. Leave a field blank to use the default. A report or an integration can have its own, which comes first. If a template ever fails when an email is sent, the default goes out instead, with a note saying why, so an alert is never lost to a typo.</p>
+        <div class="form-grid">
+          <div class="field"><label for="et-kind">Email</label><select id="et-kind"></select></div>
+        </div>
+        <p class="hint" id="et-desc"></p>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="et-subject">Subject</label><input id="et-subject" class="email-code" spellcheck="false" autocomplete="off"></div>
+          <div class="field u-gc-full"><label for="et-text">Plain text</label><textarea id="et-text" rows="7" spellcheck="false" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+          <div class="field u-gc-full"><label for="et-html">HTML (optional; values are escaped for you)</label><textarea id="et-html" rows="9" spellcheck="false" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+        </div>
+        <details class="u-mb-12"><summary class="u-cur-pointer">Variables for this email</summary><div class="table-scroll"><table><thead><tr><th>Use</th><th>What it is</th></tr></thead><tbody id="et-vars"></tbody></table></div></details>
+        <details class="u-mb-12"><summary class="u-cur-pointer">Functions</summary><div class="table-scroll"><table><thead><tr><th>Function</th><th>Example</th><th>What it does</th></tr></thead><tbody id="et-funcs"></tbody></table></div>
+          <p class="hint">Conditions and loops are built in: <code class="mono">{{if .Link}}…{{else}}…{{end}}</code>, <code class="mono">{{range .Detail.items}}{{.id}}{{end}}</code>, and <code class="mono">eq</code>, <code class="mono">lt</code>, <code class="mono">gt</code>, <code class="mono">and</code>, <code class="mono">or</code>, <code class="mono">not</code>.</p></details>
+        <div class="save-row">
+          <button class="primary" id="et-save">Save template</button>
+          <button id="et-start">Start from the default</button>
+          <button id="et-reset">Use the default</button>
+          <button id="et-preview">Preview</button>
+          <button id="et-send">Send test to the address above</button>
+          <span class="save-status" id="et-status" role="status"></span>
+        </div>
+        <div id="et-preview-box" hidden>
+          <p class="u-mt-12"><strong>Subject:</strong> <span id="et-preview-subject"></span></p>
+          <p class="hint">With invented data. Nothing has been sent or saved.</p>
+          <pre id="et-preview-text" class="u-ws-pre"></pre>
+          <form id="et-preview-form" method="post" target="et-frame" hidden><input type="hidden" name="subject"><input type="hidden" name="text"><input type="hidden" name="html"></form>
+          <iframe name="et-frame" id="et-frame" class="email-preview-frame" title="Preview of the HTML email" sandbox></iframe>
+        </div>
+      </div>
+      <div class="panel settings-section">
+        <h2>Variables and macros</h2>
+        <p class="hint">For every email. A variable is a value of yours, such as your company's name, used as <code class="mono">{{.Vars.company}}</code>. Do not put passwords here: anything in a template can end up in an inbox. A macro is a reusable block, such as a signature: define it here, and use it anywhere as <code class="mono">{{template "signature" .}}</code>.</p>
+        <div class="form-grid">
+          <div class="field u-gc-full"><label for="et-vars-input">Variables, one <code class="mono">name=value</code> per line</label><textarea id="et-vars-input" rows="4" spellcheck="false" placeholder="company=Example Ltd" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+          <div class="field u-gc-full"><label for="et-macros">Macros</label><textarea id="et-macros" rows="7" spellcheck="false" placeholder="{{define &quot;signature&quot;}}The {{.Vars.company}} IT team{{end}}" class="email-code u-w-100p u-p-9-11 u-br-radius-md u-b-1-solid-border u-bg-surface-2 u-c-text u-rs-vertical"></textarea></div>
+        </div>
+        <div class="save-row">
+          <button class="primary" id="et-shared-save">Save variables and macros</button>
+          <span class="save-status" id="et-shared-status" role="status"></span>
         </div>
       </div>
     </div>
@@ -1468,6 +1527,110 @@ document.getElementById("mail-test").addEventListener("click", async (e) => {
     st.textContent = "Failed: " + err.message;
   }
   e.target.disabled = false;
+});
+
+// --- Email templates ---
+let emailKindsData = [];
+function emailKindNow() { return emailKindsData.find(k => k.kind === document.getElementById("et-kind").value); }
+function emailFormTemplate() {
+  return { subject: document.getElementById("et-subject").value, text: document.getElementById("et-text").value, html: document.getElementById("et-html").value };
+}
+function emailFormFill(t) {
+  document.getElementById("et-subject").value = t.subject || "";
+  document.getElementById("et-text").value = t.text || "";
+  document.getElementById("et-html").value = t.html || "";
+}
+function emailShowKind() {
+  const k = emailKindNow();
+  if (!k) return;
+  document.getElementById("et-desc").textContent = k.description;
+  emailFormFill(k.custom || {});
+  document.getElementById("et-subject").placeholder = k.default.subject || "";
+  document.getElementById("et-text").placeholder = k.default.text || "";
+  document.getElementById("et-html").placeholder = k.default.html || "No HTML part: the email is plain text.";
+  document.getElementById("et-vars").innerHTML = (k.variables || []).map(v =>
+    `<tr><td><code class="mono">${escapeHtml("{{" + v.name + "}}")}</code></td><td>${escapeHtml(v.desc)}</td></tr>`).join("");
+  document.getElementById("et-preview-box").hidden = true;
+  document.getElementById("et-status").textContent = "";
+}
+function emailLoaded(d) {
+  emailKindsData = d.kinds || [];
+  const sel = document.getElementById("et-kind");
+  const keep = sel.value;
+  sel.innerHTML = emailKindsData.map(k => `<option value="${escapeHtml(k.kind)}">${escapeHtml(k.label)}${k.custom && (k.custom.subject || k.custom.text || k.custom.html) ? " (customized)" : ""}</option>`).join("");
+  if (keep) sel.value = keep;
+  emailShowKind();
+  document.getElementById("et-funcs").innerHTML = (d.functions || []).map(f =>
+    `<tr><td><code class="mono">${escapeHtml(f.name)}</code></td><td><code class="mono">${escapeHtml(f.example)}</code></td><td>${escapeHtml(f.desc)}</td></tr>`).join("");
+  const vars = (d.shared && d.shared.vars) || {};
+  document.getElementById("et-vars-input").value = Object.keys(vars).sort().map(n => n + "=" + vars[n]).join("\n");
+  document.getElementById("et-macros").value = (d.shared && d.shared.macros) || "";
+}
+async function loadEmailTemplates() {
+  const r = await fetch("/api/admin/email-templates");
+  if (r.ok) emailLoaded(await r.json());
+}
+async function emailSaveTemplate(body, message) {
+  const st = document.getElementById("et-status");
+  st.textContent = "saving…";
+  const r = await fetch(`/api/admin/email-templates/${encodeURIComponent(document.getElementById("et-kind").value)}`,
+    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { st.textContent = "Not saved: " + await r.text(); return; }
+  emailLoaded(await r.json());
+  document.getElementById("et-status").textContent = message;
+}
+document.getElementById("et-kind").addEventListener("change", emailShowKind);
+document.getElementById("et-save").addEventListener("click", () => emailSaveTemplate(emailFormTemplate(), "saved"));
+document.getElementById("et-reset").addEventListener("click", () => {
+  if (confirm("Go back to the default wording for this email?")) emailSaveTemplate({ subject: "", text: "", html: "" }, "using the default");
+});
+document.getElementById("et-start").addEventListener("click", () => {
+  const k = emailKindNow();
+  if (k) emailFormFill(k.default);
+});
+document.getElementById("et-preview").addEventListener("click", async () => {
+  const st = document.getElementById("et-status");
+  const kind = document.getElementById("et-kind").value;
+  const t = emailFormTemplate();
+  const r = await fetch(`/api/admin/email-templates/${encodeURIComponent(kind)}/preview`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(t) });
+  if (!r.ok) { st.textContent = "Failed: " + await r.text(); return; }
+  const d = await r.json();
+  document.getElementById("et-preview-box").hidden = !!d.error;
+  st.textContent = d.error ? "This template has a problem: " + d.error : "";
+  if (d.error) return;
+  document.getElementById("et-preview-subject").textContent = d.subject;
+  document.getElementById("et-preview-text").textContent = d.text;
+  document.getElementById("et-frame").hidden = !d.html;
+  if (d.html) {
+    const f = document.getElementById("et-preview-form");
+    f.action = `/email-preview/${encodeURIComponent(kind)}`;
+    f.elements.subject.value = t.subject; f.elements.text.value = t.text; f.elements.html.value = t.html;
+    f.submit();
+  }
+});
+document.getElementById("et-send").addEventListener("click", async () => {
+  const st = document.getElementById("et-status");
+  st.textContent = "sending…";
+  const r = await fetch(`/api/admin/email-templates/${encodeURIComponent(document.getElementById("et-kind").value)}/test`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: document.getElementById("mail-test-to").value, ...emailFormTemplate() }) });
+  st.textContent = r.ok ? "Sent, with invented data." : "Failed: " + await r.text();
+});
+document.getElementById("et-shared-save").addEventListener("click", async () => {
+  const st = document.getElementById("et-shared-status");
+  const vars = {};
+  for (const line of document.getElementById("et-vars-input").value.split("\n")) {
+    const at = line.indexOf("=");
+    if (line.trim() === "") continue;
+    if (at < 1) { st.textContent = `Not saved: "${line}" has no name=value`; return; }
+    vars[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+  }
+  st.textContent = "saving…";
+  const r = await fetch("/api/admin/email-shared", { method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vars, macros: document.getElementById("et-macros").value }) });
+  if (!r.ok) { st.textContent = "Not saved: " + await r.text(); return; }
+  emailLoaded(await r.json());
+  document.getElementById("et-shared-status").textContent = "saved";
 });
 
 document.getElementById("update-save").addEventListener("click", () => {
@@ -2632,6 +2795,13 @@ function intOpen(i) {
   document.getElementById("int-ev-audit").checked = i ? (i.events || []).includes("audit") : false;
   document.getElementById("int-ev-expiry").checked = i ? (i.events || []).includes("expiry") : false;
   document.getElementById("int-ev-vulnerability").checked = i ? (i.events || []).includes("vulnerability") : false;
+  document.getElementById("int-ev-completed").checked = i ? (i.events || []).includes("completed") : false;
+  const chosen = ((i && i.config.completed_actions) || "").split(",");
+  document.querySelectorAll("#int-completed-actions input").forEach(c => { c.checked = chosen.includes(c.value); });
+  intCompletedField();
+  document.getElementById("int-email-subject").value = i ? (i.config.subject_template || "") : "";
+  document.getElementById("int-email-text").value = i ? (i.config.text_template || "") : "";
+  document.getElementById("int-email-html").value = i ? (i.config.html_template || "") : "";
   document.getElementById("int-expiry-days").value = i ? (i.config.expiry_days || "") : "";
   intExpiryField();
   document.getElementById("int-sev").value = i ? i.min_severity : "warning";
@@ -2644,15 +2814,20 @@ document.getElementById("int-kind").addEventListener("change", intShowFields);
 // Expiry events come at Cert Manager's thresholds; an integration can take only some.
 function intExpiryField() { document.getElementById("int-expiry-field").hidden = !document.getElementById("int-ev-expiry").checked; }
 document.getElementById("int-ev-expiry").addEventListener("change", intExpiryField);
+// Completions are opt-in twice over: the event, then which actions.
+function intCompletedField() { document.getElementById("int-completed-field").hidden = !document.getElementById("int-ev-completed").checked; }
+document.getElementById("int-ev-completed").addEventListener("change", intCompletedField);
 document.getElementById("int-new").addEventListener("click", () => intOpen(null));
 document.getElementById("int-cancel").addEventListener("click", () => { document.getElementById("int-form").hidden = true; });
 document.getElementById("int-save").addEventListener("click", async () => {
   const st = document.getElementById("int-save-status"); st.textContent = "saving…";
   const kind = document.getElementById("int-kind").value;
   const body = { kind, name: document.getElementById("int-name").value, enabled: document.getElementById("int-enabled").checked,
-    config: { recipients: document.getElementById("int-recipients").value.trim(), url: document.getElementById("int-url").value.trim(), index: document.getElementById("int-index").value.trim(), assignment_group: document.getElementById("int-group").value.trim(),
+    config: { completed_actions: Array.from(document.querySelectorAll("#int-completed-actions input:checked")).map(c => c.value).join(","),
+      subject_template: document.getElementById("int-email-subject").value, text_template: document.getElementById("int-email-text").value, html_template: document.getElementById("int-email-html").value,
+      recipients: document.getElementById("int-recipients").value.trim(), url: document.getElementById("int-url").value.trim(), index: document.getElementById("int-index").value.trim(), assignment_group: document.getElementById("int-group").value.trim(),
       expiry_days: document.getElementById("int-expiry-days").value.trim() },
-    events: ["alert", "audit", "expiry", "vulnerability"].filter(e => document.getElementById("int-ev-" + e).checked), min_severity: document.getElementById("int-sev").value };
+    events: ["alert", "audit", "expiry", "vulnerability", "completed"].filter(e => document.getElementById("int-ev-" + e).checked), min_severity: document.getElementById("int-sev").value };
   const secret = document.getElementById("int-secret").value;
   if (secret) body.secret = secret;
   const r = await fetch(intEditing ? `/api/admin/integrations/${encodeURIComponent(intEditing)}` : "/api/admin/integrations",
@@ -2690,6 +2865,7 @@ document.addEventListener("mustra:user", (e) => {
     loadIdps();
     loadTokens();
     loadIntegrations();
+    loadEmailTemplates();
     loadAbout();
     syncIdpDefaults();
     renderScimGuide();

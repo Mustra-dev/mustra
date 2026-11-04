@@ -804,6 +804,7 @@ const (
 	weeklyReportDelivery = `"destination": "webhook",
 		"target": "https://hooks.example.com/reports/patching",
 		"webhook_style": "slack",
+		"email_template": {"subject": "", "text": "", "html": ""},
 		"created_at": "2026-09-28T10:14:22Z",
 		"created_by": "jdoe"`
 
@@ -5340,8 +5341,13 @@ var respExamples = map[string]string{
 	// Who the saved Fleet API token signs in as, and their Fleet role.
 	// With no Fleet URL and token saved (as in the settings above), the
 	// answer is a 400.
-	"POST /api/admin/mail-test":           `{"result": "sent"}`,
-	"POST /api/admin/settings/fleet-test": `{"user": "mustra-api@corp.example.com (admin)"}`,
+	"POST /api/admin/mail-test":                      `{"result": "sent"}`,
+	"GET /api/admin/email-templates":                 `{"kinds": [{"kind": "vulnerability", "label": "New vulnerabilities", "description": "New findings after a scan.", "default": {"subject": "[mustra] {{.Title}}", "text": "{{.Body}}", "html": ""}, "variables": [{"name": ".Title", "desc": "The one-line summary"}], "custom": {"subject": "", "text": "", "html": ""}}], "shared": {"vars": {"company": "Example Ltd"}, "macros": ""}, "functions": [{"name": "upper", "example": "{{upper .Severity}}", "desc": "Capitals"}]}`,
+	"PUT /api/admin/email-templates/{kind}":          `{"kinds": [{"kind": "vulnerability", "label": "New vulnerabilities", "description": "New findings after a scan.", "default": {"subject": "[mustra] {{.Title}}", "text": "{{.Body}}", "html": ""}, "variables": [{"name": ".Title", "desc": "The one-line summary"}], "custom": {"subject": "", "text": "", "html": ""}}], "shared": {"vars": {"company": "Example Ltd"}, "macros": ""}, "functions": [{"name": "upper", "example": "{{upper .Severity}}", "desc": "Capitals"}]}`,
+	"PUT /api/admin/email-shared":                    `{"kinds": [{"kind": "vulnerability", "label": "New vulnerabilities", "description": "New findings after a scan.", "default": {"subject": "[mustra] {{.Title}}", "text": "{{.Body}}", "html": ""}, "variables": [{"name": ".Title", "desc": "The one-line summary"}], "custom": {"subject": "", "text": "", "html": ""}}], "shared": {"vars": {"company": "Example Ltd"}, "macros": ""}, "functions": [{"name": "upper", "example": "{{upper .Severity}}", "desc": "Capitals"}]}`,
+	"POST /api/admin/email-templates/{kind}/preview": `{"subject": "[Example Ltd] 2 new critical vulnerabilities", "text": "- CVE-2026-1001 in openssl on db-01", "html": ""}`,
+	"POST /api/admin/email-templates/{kind}/test":    `{"result": "sent"}`,
+	"POST /api/admin/settings/fleet-test":            `{"user": "mustra-api@corp.example.com (admin)"}`,
 
 	// sensors
 	"GET /api/sensors": `{

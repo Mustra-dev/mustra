@@ -352,6 +352,9 @@ func (s *Server) runVulnScan(ctx context.Context) error {
 	if err := s.announceNewVulnerabilities(ctx); err != nil {
 		s.logger.Warn("could not announce new vulnerabilities", "error", err)
 	}
+	s.emitCompleted("vuln_scan", "Vulnerability scan finished", "succeeded", "info",
+		fmt.Sprintf("%d endpoints scanned, %d distinct vulnerabilities.", len(scannable), len(allVulnIDs)), "fleet", "/risk",
+		map[string]any{"endpoints": len(scannable), "vulnerabilities": len(allVulnIDs)})
 	return nil
 }
 

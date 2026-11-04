@@ -36,3 +36,36 @@ Keep at least one local administrator with a strong password and two-step sign-i
 ## Upgrades
 
 **Administration → About** shows the running version and the changelog. Upgrading the server is done where it runs; see [Install the server](install-server.md). After an upgrade, update agents from **Client Management**.
+
+## Customize your emails
+
+Everything mustra emails can be rewritten under **Administration → Email → Templates**: the subject, the plain text and the HTML. Pick the kind of email, edit it, and use **Preview** to see it with invented data, or **Send test** to see it in your inbox. A blank field uses the default.
+
+A **report** or an **Email integration** can have its own wording, which comes first. Each field stands alone, so you can change only a subject.
+
+Templates use [Go template](https://pkg.go.dev/text/template) syntax:
+
+```
+[{{.Vars.company}}] {{upper .Severity}}: {{.Title}}
+
+{{if .Detail.items}}{{range .Detail.items}}- {{.id}} on {{join ", " .hosts}}{{if .kev}} (actively exploited){{end}}
+{{end}}{{else}}{{.Body}}{{end}}
+{{if .Link}}Open in mustra: {{.Link}}{{end}}
+
+{{template "signature" .}}
+```
+
+- **Variables** come from the email itself (`{{.Title}}`, `{{.Severity}}`, `{{.Detail.endpoints}}`), and the page lists what each kind of email has. A variable an email doesn't have prints as nothing.
+- **Your own variables**, set under **Variables and macros**, work everywhere as `{{.Vars.company}}`. Don't put passwords in them.
+- **Macros** are reusable blocks. Define `{{define "signature"}}The {{.Vars.company}} IT team{{end}}` under **Variables and macros**, and use it anywhere as `{{template "signature" .}}`.
+- **Functions** such as `upper`, `join`, `date` and `percent` are listed on the page. `if`, `range`, `eq`, `lt`, `gt`, `and`, `or` and `not` are built in. To compare a count, use `int`: `{{if gt (int .Detail.kev) 0}}`.
+
+In HTML, values are escaped for you, so a strange hostname can't change your layout. For a report, `{{.Report.Document}}` is the whole page and `{{.Report.Content}}` is just its sections, to place inside your own layout.
+
+**If a template fails** when an email is being sent, mustra sends its default wording instead, with a note at the top saying what went wrong. An alert is never lost to a typo. Saving also checks a template, and refuses one that calls itself.
+
+## Get an email when something finishes
+
+This is off until you ask for it. Under **Integrations**, tick **Completed actions** on an integration, then choose which: deployments and patch runs, playbooks, nightly backups, certificate renewals, vulnerability scans or reports. Choosing none means all of them.
+
+**Minimum severity** decides how many you get: **info** tells you about every one, and **warning** only about those that failed or partly failed. Vulnerability scans run every six hours, so choose what you'd really read. This works with any integration, not only email.

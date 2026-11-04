@@ -717,6 +717,31 @@ var typeDocs = map[string]typeDoc{
 			"SeenBy":    "hostnames of agents that know it",
 		},
 	},
+	"github.com/mustra-dev/mustra/internal/server.emailFunction": {
+		Doc: "emailFunction is a function templates can call.",
+	},
+	"github.com/mustra-dev/mustra/internal/server.emailKindView": {
+		Doc: "emailKindView is one kind of email as the settings page shows it.",
+	},
+	"github.com/mustra-dev/mustra/internal/server.emailPreviewResponse": {
+		Doc: "emailPreviewResponse is what POST /api/admin/email-templates/{kind}/preview answers. Error is a template's own mistake, for the form to show.",
+	},
+	"github.com/mustra-dev/mustra/internal/server.emailSendTestRequest": {
+		Doc: "emailSendTestRequest is the body of POST /api/admin/email-templates/{kind}/test.",
+		Fields: map[string]string{
+			"To": "To is who receives it: addresses separated by commas.",
+		},
+	},
+	"github.com/mustra-dev/mustra/internal/server.emailShared": {
+		Doc: "emailShared is what every template can use.",
+		Fields: map[string]string{
+			"Macros": "Macros are {{define \"name\"}}…{{end}} blocks, used as {{template \"name\" .}}.",
+			"Vars":   "Vars are your own values, used as {{.Vars.name}}.",
+		},
+	},
+	"github.com/mustra-dev/mustra/internal/server.emailTemplatesResponse": {
+		Doc: "emailTemplatesResponse is what GET /api/admin/email-templates and its saves answer.",
+	},
 	"github.com/mustra-dev/mustra/internal/server.enforceCompileRequest": {
 		Doc: "enforceCompileRequest is the body of POST /api/enforce/compile.",
 	},
@@ -1424,6 +1449,11 @@ var typeDocs = map[string]typeDoc{
 	},
 	"github.com/mustra-dev/mustra/internal/server.removeUnusedSoftwareResponse": {
 		Doc: "removeUnusedSoftwareResponse is what POST /api/software-inventory/product/{key}/remove-unused answers with dry_run: the endpoints it would remove the package from.",
+	},
+	"github.com/mustra-dev/mustra/internal/server.reportRequest": {
+		Fields: map[string]string{
+			"EmailTemplate": "EmailTemplate overrides the email this report goes out as.",
+		},
 	},
 	"github.com/mustra-dev/mustra/internal/server.reportRunResponse": {
 		Doc: "reportRunResponse is what GET /api/reports/runs/{id} and POST /api/reports/{id}/run answer.",
@@ -2245,6 +2275,9 @@ var typeDocs = map[string]typeDoc{
 			"DeadlineAt": "DeadlineAt is when the message stops being worth showing at all. A notice about Tuesday's maintenance is noise on Wednesday.",
 		},
 	},
+	"github.com/mustra-dev/mustra/internal/store.EmailTemplate": {
+		Doc: "EmailTemplate is an email's wording: Go templates for each part. A blank field falls through to the next level, and finally the built-in default.",
+	},
 	"github.com/mustra-dev/mustra/internal/store.EnforcePolicy": {
 		Fields: map[string]string{
 			"Config":       "Kind is '' for a hand-written policy or an internal/enforcekinds kind; Config is that kind's form, from which Settings was compiled.",
@@ -2422,6 +2455,11 @@ var typeDocs = map[string]typeDoc{
 		Fields: map[string]string{
 			"JITState":    "JITUsername is the temporary account the session signed in with; JITState is \"active\" until the endpoint confirms it removed it.",
 			"JITUsername": "JITUsername is the temporary account the session signed in with; JITState is \"active\" until the endpoint confirms it removed it.",
+		},
+	},
+	"github.com/mustra-dev/mustra/internal/store.Report": {
+		Fields: map[string]string{
+			"EmailTemplate": "EmailTemplate overrides the email this report goes out as. Blank fields use Administration → Email's.",
 		},
 	},
 	"github.com/mustra-dev/mustra/internal/store.ReportRun": {

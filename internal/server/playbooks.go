@@ -274,6 +274,10 @@ func (s *Server) executePlaybook(ctx context.Context, runID, playbookID, name st
 	}
 	s.logger.Info("playbook run finished", "playbook", name, "run_id", runID,
 		"status", status, "succeeded", okCnt, "failed", badCnt)
+	outcome, severity := completedOutcome(okCnt, badCnt)
+	s.emitCompleted("playbook", "Playbook finished: "+name, outcome, severity,
+		fmt.Sprintf("%d of %d endpoints succeeded", okCnt, okCnt+badCnt), name, "/playbooks",
+		map[string]any{"succeeded": okCnt, "failed": badCnt, "total": okCnt + badCnt, "run_id": runID})
 	if badCnt > 0 {
 		s.notify(ctx, "warning", "Playbooks",
 			fmt.Sprintf("%s finished %s", name, status),

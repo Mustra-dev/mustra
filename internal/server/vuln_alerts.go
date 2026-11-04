@@ -152,17 +152,40 @@ func vulnDigest(tier string, byVuln map[string][]vulnFinding) integrationEvent {
 		Type: "vulnerability", Title: title, Severity: tier, Link: "/risk",
 		Body: strings.Join(lines, "\n"),
 		Detail: map[string]any{"kind": "new_findings", "vulnerabilities": len(ids), "endpoints": len(endpoints),
-			"kev": kev, "ids": ids[:min(len(ids), 50)]},
+			"kev": kev, "ids": ids[:min(len(ids), 50)], "items": vulnDigestItems(ids[:min(len(ids), 50)], byVuln)},
 	}
+}
+
+// vulnDigestItems is the same list as data, for an email template.
+func vulnDigestItems(ids []string, byVuln map[string][]vulnFinding) []map[string]any {
+	items := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
+		fs := byVuln[id]
+		var hosts []string
+		for _, f := range fs {
+			if !containsString(hosts, f.Hostname) {
+				hosts = append(hosts, f.Hostname)
+			}
+		}
+		sort.Strings(hosts)
+		items = append(items, map[string]any{"id": vulnDisplayName(id, fs[0]), "package": fs[0].PackageName, "hosts": hosts,
+			"kev": fs[0].KEV, "ransomware": fs[0].Ransomware, "epss": fs[0].EPSS, "fixed": fs[0].FixedVersion})
+	}
+	return items
+}
+
+// vulnDisplayName is the name people search for, not a source's own
+// (DEBIAN-CVE-…).
+func vulnDisplayName(id string, f vulnFinding) string {
+	if len(f.CVEIDs) > 0 {
+		return f.CVEIDs[0]
+	}
+	return firstNonEmpty(cveFromID(id), id)
 }
 
 func vulnDigestLine(id string, fs []vulnFinding) string {
 	first := fs[0]
-	// The name people search for, not a source's own (DEBIAN-CVE-…).
-	name := firstNonEmpty(cveFromID(id), id)
-	if len(first.CVEIDs) > 0 {
-		name = first.CVEIDs[0]
-	}
+	name := vulnDisplayName(id, first)
 	hosts := make([]string, 0, len(fs))
 	for _, f := range fs {
 		if !containsString(hosts, f.Hostname) {
