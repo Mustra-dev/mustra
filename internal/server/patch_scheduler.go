@@ -169,6 +169,19 @@ func (r patchRestart) clean() (patchRestart, error) {
 
 // only, when not nil, narrows each endpoint's job to the packages named
 // for it (patch_only.go); an endpoint it names nothing for is not patched.
+// recordPatchRefusal records an endpoint a run could not start on. Left out, the
+// run's record would say it had one endpoint fewer than it asked for, and it
+// could never add up to finished.
+func (s *Server) recordPatchRefusal(ctx context.Context, action store.AgentAction, why string) {
+	if err := s.store.StartAgentAction(ctx, action); err != nil {
+		s.logger.Warn("record refused patch action failed", "agent_id", action.AgentID, "error", err)
+		return
+	}
+	if err := s.store.FinishAgentAction(ctx, action.AgentID, action.ID, "failed", why); err != nil {
+		s.logger.Warn("finish refused patch action failed", "agent_id", action.AgentID, "error", err)
+	}
+}
+
 func (s *Server) deployPatchesToAgents(ctx context.Context, agents []store.AgentRecord, requestedBy, runID string, overrideWindows bool, restart patchRestart, only map[string][]string) (started []string, failed map[string]string) {
 	failed = map[string]string{}
 	if len(agents) == 0 {
@@ -205,8 +218,10 @@ func (s *Server) deployPatchesToAgents(ctx context.Context, agents []store.Agent
 			if only != nil {
 				pkgs = only[a.AgentID]
 				if len(pkgs) == 0 {
+					why := "no affected package was named for this endpoint"
+					s.recordPatchRefusal(ctx, action, why)
 					mu.Lock()
-					failed[a.AgentID] = "no affected package was named for this endpoint"
+					failed[a.AgentID] = why
 					mu.Unlock()
 					return
 				}
@@ -217,9 +232,11 @@ func (s *Server) deployPatchesToAgents(ctx context.Context, agents []store.Agent
 			// reason, and patchWaitLoop dispatches it when the window
 			// opens (or expires it after a day).
 			if j, busy := open[a.AgentID]; busy {
-				mu.Lock()
-				failed[a.AgentID] = fmt.Sprintf("already patching (%s, began %s ago); wait for that job to finish",
+				why := fmt.Sprintf("already patching (%s, began %s ago); wait for that job to finish",
 					j.Status, shortAgo(j.StartedAt))
+				s.recordPatchRefusal(ctx, action, why)
+				mu.Lock()
+				failed[a.AgentID] = why
 				mu.Unlock()
 				return
 			}

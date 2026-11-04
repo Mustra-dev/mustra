@@ -114,12 +114,12 @@ var emailKinds = []emailKind{
 			emailVariable{".Detail.items", "The list: each has .id .package .hosts .kev .ransomware .epss .fixed (new_findings)"},
 			emailVariable{".Detail.cves", "The CVEs (actively_exploited)"},
 		)},
-	{Kind: "completed", Label: "Completed actions", Description: "An action you opted in to has finished: a deployment, playbook, backup, certificate renewal, scan or report.",
+	{Kind: "completed", Label: "Completed actions", Description: "An action you opted in to has finished: a deployment, playbook, backup, compliance scan, Enforce run, certificate renewal, vulnerability scan or report.",
 		Default: emailEventBodyDefault, Variables: emailKindVars(
 			emailVariable{".Outcome", "succeeded, partial or failed"},
-			emailVariable{".Action", "deployment, playbook, backup, certificate, vuln_scan or report"},
+			emailVariable{".Action", "deployment, playbook, backup, compliance, enforce, certificate, vuln_scan or report"},
 			emailVariable{".Target", "What it acted on"},
-			emailVariable{".Detail", "Depends on the action. Deployments and playbooks have .succeeded .failed .total"},
+			emailVariable{".Detail", "Depends on the action. Deployments, playbooks and compliance scans have .succeeded .failed .total; compliance also .failing_checks; Enforce has .compliant .drifted .remediated .failed .unknown .unreached"},
 		)},
 	{Kind: "expiry", Label: "Expiry", Description: "A certificate or credential crossed an expiry threshold.",
 		Default: emailEventBodyDefault, Variables: emailKindVars(

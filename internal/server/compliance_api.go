@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	bnats "github.com/mustra-dev/mustra/internal/nats"
@@ -189,6 +190,7 @@ func (s *Server) runCompliance(ctx context.Context, policy store.CompliancePolic
 	exceptions := s.loadExceptions(ctx)
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
+	var reported, failing atomic.Int64
 	for _, target := range targets {
 		wg.Add(1)
 		go func(target store.AgentRecord) {
@@ -246,9 +248,18 @@ func (s *Server) runCompliance(ctx context.Context, policy store.CompliancePolic
 			}
 			s.recordScore(ctx, target.AgentID, policy.ID, exceptions)
 			s.notifyComplianceDrift(ctx, target.Hostname, policy.Name, prev, rows, exceptions)
+			reported.Add(1)
+			for _, row := range rows {
+				if row.State == "fail" {
+					failing.Add(1)
+				}
+			}
 		}(target)
 	}
 	wg.Wait()
+	title, outcome, severity, body := complianceCompletion(policy.Name, len(targets), int(reported.Load()), int(failing.Load()))
+	s.emitCompleted("compliance", title, outcome, severity, body, policy.Name, "/compliance",
+		map[string]any{"succeeded": int(reported.Load()), "failed": len(targets) - int(reported.Load()), "total": len(targets), "failing_checks": int(failing.Load())})
 	stored := 0
 	if rows, err := s.store.ListComplianceResults(ctx); err == nil {
 		seen := map[string]bool{}

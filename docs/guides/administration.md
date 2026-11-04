@@ -66,6 +66,6 @@ In HTML, values are escaped for you, so a strange hostname can't change your lay
 
 ## Get an email when something finishes
 
-This is off until you ask for it. Under **Integrations**, tick **Completed actions** on an integration, then choose which: deployments and patch runs, playbooks, nightly backups, certificate renewals, vulnerability scans or reports. Choosing none means all of them.
+This is off until you ask for it. Under **Integrations**, tick **Completed actions** on an integration, then choose which: deployments and patch runs, playbooks, backups, compliance scans, Enforce runs, certificate renewals, vulnerability scans or reports. Choosing none means all of them.
 
-**Minimum severity** decides how many you get: **info** tells you about every one, and **warning** only about those that failed or partly failed. Vulnerability scans run every six hours, so choose what you'd really read. This works with any integration, not only email.
+**Minimum severity** decides how many you get: **info** tells you about every one, and **warning** only about those that failed or partly failed. A compliance scan counts as failed only when an endpoint didn't answer: failing checks are what it's there to find, and they have their own alert. Likewise, drift in report mode isn't an Enforce failure. Vulnerability scans run every six hours, and Enforce runs on each policy's timer, so choose what you'd really read. A daily compliance scan sends one email per benchmark. This works with any integration, not only email.

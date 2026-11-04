@@ -250,3 +250,113 @@ func TestEmailTemplatesAndRunCompletionAgainstTheStore(t *testing.T) {
 		t.Fatalf("announced twice: %+v", evs)
 	}
 }
+
+func TestComplianceCompletionFailsOnlyOnSilence(t *testing.T) {
+	_, outcome, severity, body := complianceCompletion("CIS", 3, 3, 40)
+	if outcome != "succeeded" || severity != "info" || !strings.Contains(body, "40 checks failing") {
+		t.Errorf("failing checks are not a failed scan: %s %s %q", outcome, severity, body)
+	}
+	if _, outcome, severity, _ := complianceCompletion("CIS", 3, 2, 0); outcome != "partial" || severity != "warning" {
+		t.Errorf("one silent: %s %s", outcome, severity)
+	}
+	if _, outcome, _, _ := complianceCompletion("CIS", 3, 0, 0); outcome != "failed" {
+		t.Errorf("all silent: %s", outcome)
+	}
+}
+
+func TestEnforceCompletionTreatsDriftAsNormal(t *testing.T) {
+	if _, outcome, _, _ := enforceCompletion(enforceRunSummary{Policy: "p", Endpoints: 2, Drifted: 2}); outcome != "succeeded" {
+		t.Errorf("drift: %s", outcome)
+	}
+	if _, outcome, severity, _ := enforceCompletion(enforceRunSummary{Policy: "p", Endpoints: 2, Compliant: 1, Failed: 1}); outcome != "partial" || severity != "warning" {
+		t.Errorf("a failure: %s %s", outcome, severity)
+	}
+	if _, outcome, _, _ := enforceCompletion(enforceRunSummary{Policy: "p", Endpoints: 2, Unreached: 2}); outcome != "failed" {
+		t.Errorf("unreached: %s", outcome)
+	}
+}
+
+// Runs end on paths no result reports. The sweep finds them, once, and leaves
+// notices and surveys alone, though they share the table.
+func TestCompletionSweepAgainstTheStore(t *testing.T) {
+	dsn := os.Getenv("MUSTRA_TEST_DEPLOY_DSN")
+	if dsn == "" {
+		t.Skip("set MUSTRA_TEST_DEPLOY_DSN to a disposable Postgres database")
+	}
+	ctx := context.Background()
+	st, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(st.Close)
+	s := &Server{store: st, logger: slog.Default()}
+	drain := func(name string) int {
+		n := 0
+		for {
+			select {
+			case ev := <-s.integrations().queue:
+				if ev.Target == name {
+					n++
+				}
+			default:
+				return n
+			}
+		}
+	}
+	agent := idgen.New("agt-")
+	if err := st.UpsertOnRegister(ctx, agent, proto.AgentInfo{Hostname: agent, OS: "linux", Arch: "amd64", Version: "1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	run := func(name, kind string) (string, string) {
+		id, act := idgen.New("run-"), idgen.New("act-")
+		if err := st.RecordPatchJobRun(ctx, store.PatchJobRun{ID: id, ScheduleName: name, TargetDesc: name, AgentCount: 1, TriggeredBy: "test"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.StartAgentAction(ctx, store.AgentAction{ID: act, AgentID: agent, RunID: id, Kind: kind, Summary: "t", RequestedBy: "test"}); err != nil {
+			t.Fatal(err)
+		}
+		return id, act
+	}
+	patch := "patch-" + agent
+	_, act := run(patch, "patch_apply")
+	notice := "notice-" + agent
+	_, noticeAct := run(notice, "notify_user")
+
+	s.sweepRunCompletions(ctx)
+	if n := drain(patch); n != 0 {
+		t.Fatalf("announced while running: %d", n)
+	}
+	// Ends with nothing telling the server's result handling, as a held job
+	// expiring does.
+	if err := st.FinishAgentAction(ctx, agent, act, "expired", "the window never opened"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.FinishAgentAction(ctx, agent, noticeAct, "succeeded", ""); err != nil {
+		t.Fatal(err)
+	}
+	s.sweepRunCompletions(ctx)
+	evs := 0
+	for done := false; !done; {
+		select {
+		case ev := <-s.integrations().queue:
+			if ev.Target == notice {
+				t.Errorf("a notice was announced: %+v", ev)
+			}
+			if ev.Target == patch {
+				evs++
+				if ev.Outcome != "failed" || ev.Severity != "warning" {
+					t.Errorf("an expired job: %+v", ev)
+				}
+			}
+		default:
+			done = true
+		}
+	}
+	if evs != 1 {
+		t.Fatalf("announcements: %d", evs)
+	}
+	s.sweepRunCompletions(ctx)
+	if n := drain(patch); n != 0 {
+		t.Fatalf("announced twice: %d", n)
+	}
+}
