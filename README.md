@@ -103,11 +103,37 @@ every connection.
 
 ## 🔒 Security
 
-mustra runs commands as root or SYSTEM on every endpoint it manages, so
-report vulnerabilities **privately**: email **security@mustra.dev**, or
-[open a private report](https://github.com/mustra-dev/mustra/security/advisories/new).
-See [SECURITY.md](SECURITY.md). Release images are signed with cosign and
-ship with SHA256SUMS and an SBOM.
+mustra runs commands as root or SYSTEM on every endpoint it manages, so here
+is exactly what you are trusting.
+
+- **How an agent enrolls:** with a token that has limited uses and an expiry.
+  It receives its own credential, and its permissions cover only its own
+  messages, so a compromised endpoint can't command, read or impersonate
+  another one. Revoking it takes effect within an hour.
+- **Is the connection authenticated both ways?** Yes, though not with client
+  certificates. The agent verifies the broker over TLS against your
+  deployment's own CA, and the broker requires the agent's credential. The
+  installer downloads that CA from your console, so install over HTTPS: on
+  plain HTTP, the first install is only as safe as your network.
+- **Can the console run arbitrary commands?** Yes, and that's the point of
+  deployments, custom sensors and Direct Connect. It isn't limited to patching
+  and auditing, and agents have no setting to turn it off. Control sits on the
+  server: only people whose role allows it can run code, each action is in the
+  audit log, and you can require a second person's approval.
+- **What if the server is compromised?** So is the fleet. Only the server may
+  send commands, and commands aren't individually signed, so protect it like
+  you would your SSH keys. Agent updates are signed, against a key each agent
+  pins at enrollment.
+- **Compared with Ansible:** Ansible needs no agent, but it needs inbound SSH or
+  WinRM on every machine. mustra's agents open no ports and connect out, which
+  suits a mix of Macs that change networks, Windows, and Home Assistant OS,
+  where there's no host shell to SSH into.
+
+The full threat model and known limits are in [SECURITY.md](SECURITY.md).
+Release images are signed with cosign and ship with SHA256SUMS and an SBOM.
+
+**Found a vulnerability?** Report it privately: email **security@mustra.dev**,
+or [open a private report](https://github.com/mustra-dev/mustra/security/advisories/new).
 
 ## 📄 License
 
