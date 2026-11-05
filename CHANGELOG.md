@@ -4,7 +4,11 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
-## Unreleased
+## 1.2.3 — 2026-11-05
+
+Server 1.2.3, agent 1.2.3. Update agents to get the corrected macOS update message.
+Install commands copied before the upgrade stop working: create a new enrollment
+token.
 
 ### Fixed
 - A Mac whose macOS update couldn't be downloaded is no longer told it's "ready to
