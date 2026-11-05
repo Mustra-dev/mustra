@@ -4,6 +4,25 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
+## 1.2.2 — 2026-11-04
+
+Security patch; server 1.2.2, agent 1.2.2. The fix is in the agent: update agents to
+correct their compliance results. Update restricted agents by running the installer
+on the machine. Install commands copied before the upgrade stop working: create a
+new enrollment token.
+
+### Security
+- **A compliance check no longer passes on rules it didn't evaluate.** A check that
+  mixed a rule the agent couldn't evaluate with others was judged on the others
+  alone, so one that really failed could report `pass`. Endpoints in
+  inventory-and-patching mode were the most affected, because they skip every
+  command rule. Such a check now reads `unknown`, unless the other rules settle it.
+  Some results will change after the update.
+
+### Fixed
+- Self Service on a restricted endpoint no longer offers installs or agent updates
+  it would refuse. It says apps can't be installed there and to ask IT.
+
 ## 1.2.1 — 2026-11-04
 
 Security patch; server 1.2.1, agent 1.2.1. Upgrade the server if any endpoint runs

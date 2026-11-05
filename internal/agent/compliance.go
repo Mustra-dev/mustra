@@ -77,6 +77,9 @@ func evaluateCheck(ctx context.Context, check proto.ComplianceCheck) proto.Compl
 	if unknown > 0 && passed+len(failedRules) == 0 {
 		result.State = "unknown"
 		result.Detail = "none of this check's rules could be evaluated on this platform"
+		if checkCommandsDisabled(ctx) {
+			result.Detail = "this check needs commands, which this endpoint doesn't run in inventory-and-patching mode"
+		}
 		return result
 	}
 
@@ -84,14 +87,30 @@ func evaluateCheck(ctx context.Context, check proto.ComplianceCheck) proto.Compl
 	if condition == "" {
 		condition = "all"
 	}
-	evaluated := passed + len(failedRules)
+	// A rule that wasn't evaluated could go either way, so the rest decide only
+	// if it can't change the answer: one passing rule settles "any", and one
+	// failing rule settles "all". Judging on the rest alone reported a failing
+	// check as a pass.
+	var settled bool
 	switch condition {
 	case "any":
 		result.Pass = passed > 0
+		settled = result.Pass || unknown == 0
 	case "none":
 		result.Pass = passed == 0
+		settled = !result.Pass || unknown == 0
 	default: // "all"
-		result.Pass = passed == evaluated && evaluated > 0
+		result.Pass = len(failedRules) == 0
+		settled = !result.Pass || unknown == 0
+	}
+	if !settled {
+		result.Pass = false
+		result.State = "unknown"
+		result.Detail = "some of this check's rules could not be evaluated, and they decide the result"
+		if checkCommandsDisabled(ctx) {
+			result.Detail = "this check needs commands, which this endpoint doesn't run in inventory-and-patching mode"
+		}
+		return result
 	}
 
 	result.State = "fail"

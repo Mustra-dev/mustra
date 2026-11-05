@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mustra-dev/mustra/internal/proto"
@@ -290,5 +291,48 @@ func TestSameProcessName(t *testing.T) {
 		if got := sameProcessName(c.running, c.rule); got != c.want {
 			t.Errorf("sameProcessName(%q, %q) = %v, want %v", c.running, c.rule, got, c.want)
 		}
+	}
+}
+
+// A rule that wasn't evaluated could go either way, so the others decide only
+// if it can't change the answer. Each of these read as a pass or a fail before.
+func TestUnevaluatedRuleDecidesUnlessSettled(t *testing.T) {
+	yes := "d:/"
+	no := "f:/definitely/not/here"
+	unsure := "c:true -> r:([unclosed"
+	for _, tc := range []struct {
+		condition string
+		rules     []string
+		want      string
+	}{
+		{"all", []string{yes, unsure}, "unknown"},
+		{"", []string{yes, unsure}, "unknown"},
+		{"all", []string{no, unsure}, "fail"},
+		{"any", []string{yes, unsure}, "pass"},
+		{"any", []string{no, unsure}, "unknown"},
+		{"none", []string{no, unsure}, "unknown"},
+		{"none", []string{yes, unsure}, "fail"},
+		{"all", []string{unsure, unsure}, "unknown"},
+	} {
+		got := evaluateCheck(context.Background(), proto.ComplianceCheck{ID: "c", Condition: tc.condition, Rules: tc.rules})
+		if got.State != tc.want {
+			t.Errorf("condition %q over %v: got %q, want %q", tc.condition, tc.rules, got.State, tc.want)
+		}
+		if got.Pass != (tc.want == "pass") {
+			t.Errorf("condition %q over %v: Pass=%v in state %q", tc.condition, tc.rules, got.Pass, got.State)
+		}
+	}
+}
+
+// What a restricted endpoint does to a real benchmark: its command rules are
+// skipped, and the check must not pass on the rules that are left.
+func TestSkippedCommandRuleCannotMakeACheckPass(t *testing.T) {
+	check := proto.ComplianceCheck{ID: "c", Rules: []string{"c:false", "d:/"}}
+	got := evaluateCheck(withoutCheckCommands(context.Background()), check)
+	if got.State != "unknown" || got.Pass {
+		t.Fatalf("got %+v", got)
+	}
+	if !strings.Contains(got.Detail, "inventory-and-patching") {
+		t.Errorf("detail: %q", got.Detail)
 	}
 }
