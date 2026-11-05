@@ -18,6 +18,12 @@ working: create a new enrollment token.
   add-on.** Push has a tick box. The add-on takes a verified install command, and
   then runs only that installer, by hash.
 
+### Fixed
+- Code scanning findings: an audit line sent to syslog stays valid JSON if its detail
+  can't be encoded, an out-of-range user or group ID is refused rather than wrapped
+  when a deployment switches user, and a crafted query or page link can't hang or
+  misdirect a console page.
+
 ### Changed
 - **The add-on is checked before it's installed.** The installer now holds the add-on's
   files to a hash like everything else it downloads.
