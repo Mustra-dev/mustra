@@ -11,6 +11,11 @@ rather than a page that can drift from it.
   install". macOS can refuse the download without a password, and the patch job and
   the notification now say the update is available and that Software Update fetches it.
 
+### Documentation
+- The install guide says how much of a compliance benchmark reads `unknown` in
+  inventory-and-patching mode: most of CIS macOS 26, and about a tenth of CIS Windows
+  Server 2025.
+
 ## 1.2.2 — 2026-11-04
 
 Security patch; server 1.2.2, agent 1.2.2. The fix is in the agent: update agents to

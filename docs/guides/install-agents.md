@@ -83,6 +83,7 @@ For machines you want visibility into, without giving mustra the ability to run 
 
 These endpoints still report inventory, vulnerabilities and compliance, and take the updates their package manager offers. They refuse everything else from the server: Direct Connect, deployments and Self Service installs, custom sensors, Enforce, end-user notices, and agent updates. A compliance rule that would run a command reads **unknown**, and updates come only from the repositories configured on the machine, so patch lists that choose repositories don't apply. The endpoint's page shows the mode.
 
+- **Compliance results are thinner, and how much depends on the benchmark.** A check that needs a command reads `unknown`, unless its other rules settle the result. In our testing that was about 60 of 66 checks in CIS macOS 26, and about 42 of 398 in CIS Windows Server 2025. Benchmarks that lean on commands tell you little in this mode, so check yours before relying on it.
 - **It can't be turned off from the console.** It's a file beside the agent, `no-remote-code`, that only an administrator on the endpoint can change. To leave the mode, delete that file and restart the agent.
 - **Updating the agent:** run a new install command on the machine. It keeps the mode.
 - **Not available yet:** Network Scan & Push and the Home Assistant add-on.
