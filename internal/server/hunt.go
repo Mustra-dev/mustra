@@ -46,9 +46,17 @@ func (s *Server) huntLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.runHunt(ctx)
+			// Every 15 minutes, so only a sweep with something to say announces.
+			if found := s.runHunt(ctx); found > 0 {
+				s.announceHunt(found)
+			}
 		}
 	}
+}
+
+func (s *Server) announceHunt(found int) {
+	title, outcome, severity, body := huntCompletion(found)
+	s.emitCompleted("hunt", title, outcome, severity, body, "fleet", "/hunt#findings", map[string]any{"new_findings": found})
 }
 
 // runHunt evaluates every enabled indicator and records what it finds.

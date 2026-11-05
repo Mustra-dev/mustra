@@ -221,6 +221,7 @@ func (s *Server) handleRunRevealRule(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	s.announceRevealScan(r.Context(), *rule, sent, skipped)
 	s.audit(r.Context(), auditEvent{Action: "reveal.scan", Actor: who, Target: rule.ID, Severity: "notice",
 		Detail: map[string]any{"name": rule.Name, "dispatched": sent, "skipped": skipped, "endpoints": req.AgentIDs}})
 	writeJSONResponse(w, runRevealRuleResponse{Dispatched: sent, Skipped: skipped})
@@ -303,6 +304,7 @@ func (s *Server) handleRevealSearch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	s.announceRevealScan(r.Context(), rule, sent, skipped)
 	s.audit(r.Context(), auditEvent{Action: "reveal.search", Actor: who, Target: rule.ID, Severity: "notice",
 		Detail: map[string]any{"query": req.Query, "regex": req.Regex, "dispatched": sent}})
 	writeJSONResponse(w, revealSearchResponse{RuleID: rule.ID, Dispatched: sent, Skipped: skipped})
@@ -651,7 +653,8 @@ func (s *Server) revealSchedulerLoop(ctx context.Context) {
 			if rule.Kind != "rule" || !rule.Enabled {
 				continue
 			}
-			if sent, _, err := s.dispatchRevealRule(ctx, rule, nil, false); errors.Is(err, errRevealAuthorGone) {
+			sent, skipped, err := s.dispatchRevealRule(ctx, rule, nil, false)
+			if errors.Is(err, errRevealAuthorGone) {
 				// Paused rather than warned about every minute: it runs
 				// again once somebody with an account saves it.
 				off := rule
@@ -667,6 +670,7 @@ func (s *Server) revealSchedulerLoop(ctx context.Context) {
 				s.logger.Warn("reveal: scheduled dispatch failed", "rule", rule.Name, "error", err)
 			} else if sent > 0 {
 				s.logger.Info("reveal: scheduled scans dispatched", "rule", rule.Name, "endpoints", sent)
+				s.announceRevealScan(ctx, rule, sent, skipped)
 			}
 		}
 		if time.Since(lastPurge) > time.Hour {

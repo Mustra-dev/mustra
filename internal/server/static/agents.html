@@ -313,6 +313,7 @@
         <button class="primary" id="scan-btn">Scan for SSH hosts</button>
         <button class="secondary u-w-auto" id="autoscan-btn">Auto scan</button>
         <select class="select" id="scan-site" aria-label="Site for discovered hosts"><option value="default">site: default</option></select>
+        <label class="u-fs-12 u-d-flex u-ai-center u-gap-6"><input type="checkbox" id="scan-no-remote-code"> Inventory and patching only</label>
         <span class="scan-status" id="scan-status"></span>
         <button class="tiny" id="scan-select-missing" type="button" hidden>Select hosts without an agent</button>
       </div>
@@ -879,6 +880,7 @@ async function pushToHost(ip, idx, btn, hostKeyFingerprint) {
   try {
     const body = { target: ip, credential_id, site, hostname: host.hostname || "" };
     if (hostKeyFingerprint) body.host_key_fingerprint = hostKeyFingerprint;
+    if (document.getElementById("scan-no-remote-code").checked) body.no_remote_code = true;
     const resp = await fetch("/api/deploy/push", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

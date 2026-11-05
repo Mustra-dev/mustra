@@ -210,6 +210,9 @@ type pushRequest struct {
 	// (SHA256:…) as the operator verified it, for a target whose key is not
 	// yet stored. See sshdeploy.go.
 	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
+	// NoRemoteCode installs in inventory-and-patching mode: the endpoint refuses
+	// code from the server, and only an administrator on it can undo that.
+	NoRemoteCode bool `json:"no_remote_code,omitempty"`
 }
 
 type pushResponse struct {
@@ -308,7 +311,7 @@ func (s *Server) handleDeployPush(w http.ResponseWriter, r *http.Request) {
 	// unknown authority" while the push reported success.
 	// A push installs with a fresh single-use enrollment token of its own
 	// (installScriptDataForPush), never a shared bus password.
-	data, err := s.installScriptDataForPush(ctx, site, u.Username, req.Target)
+	data, err := s.installScriptDataForPush(ctx, site, u.Username, req.Target, req.NoRemoteCode)
 	var output string
 	if err == nil {
 		output, err = pushAgentViaSSH(ctx, req.Target, cred, data, hostKey)

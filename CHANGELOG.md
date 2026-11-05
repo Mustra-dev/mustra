@@ -4,6 +4,29 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
+## Unreleased
+
+Removes `init.sh --insecure-http`. Install commands copied before the upgrade stop
+working: create a new enrollment token.
+
+### Added
+- **Know when a hunt or sensitive-data scan finishes.** Integrations can opt in to
+  completed IOC hunts and sensitive-data scans, alongside the other actions. A hunt
+  you start always announces; the one that runs every 15 minutes does only when it
+  finds something. The terms of a quick search aren't included.
+- **Inventory-and-patching mode from Network Scan & Push and the Home Assistant
+  add-on.** Push has a tick box. The add-on takes a verified install command, and
+  then runs only that installer, by hash.
+
+### Changed
+- **The add-on is checked before it's installed.** The installer now holds the add-on's
+  files to a hash like everything else it downloads.
+
+### Removed
+- **`init.sh --insecure-http`.** Sign-ins and enrollment tokens would cross the network
+  in the clear. Put HTTPS in front with `--public-hostname`, or use an SSH tunnel.
+  Existing installs keep working, and the settings in `.env` are unchanged.
+
 ## 1.2.3 — 2026-11-05
 
 Server 1.2.3, agent 1.2.3. Update agents to get the corrected macOS update message.
