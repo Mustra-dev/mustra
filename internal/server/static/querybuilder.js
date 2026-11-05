@@ -51,13 +51,38 @@
     const i = entry.indexOf("[");
     const field = (i < 0 ? entry : entry.slice(0, i)).trim();
     const filters = [];
-    const re = /\[\s*(\S+)\s*((?:"[^"]*"|[^\]])*)\]/g;
-    let m;
-    while (i >= 0 && (m = re.exec(entry.slice(i)))) {
-      const op = OP_ALIAS[m[1]] || m[1];
-      filters.push({ field, op, value: m[2].trim().replace(/^"(.*)"$/, "$1") });
+    // Scanned by hand: a regular expression that lets a quote be either the start
+    // of a string or an ordinary character backtracks exponentially on "[!""""…".
+    let pos = i;
+    while (pos >= 0 && pos < entry.length) {
+      const open = entry.indexOf("[", pos);
+      if (open < 0) break;
+      const filter = readFilter(entry, open + 1);
+      if (!filter) { pos = open + 1; continue; }
+      const op = OP_ALIAS[filter.op] || filter.op;
+      filters.push({ field, op, value: filter.value.trim().replace(/^"(.*)"$/, "$1") });
+      pos = filter.end;
     }
     return { field, filters };
+  }
+  // readFilter reads "op value]" from position p. A "]" inside quotes is part of
+  // the value, and a quote with no partner is an ordinary character.
+  function readFilter(s, p) {
+    while (p < s.length && /\s/.test(s[p])) p++;
+    const opStart = p;
+    while (p < s.length && !/\s/.test(s[p]) && s[p] !== "]") p++;
+    const op = s.slice(opStart, p);
+    if (!op) return null;
+    while (p < s.length && /\s/.test(s[p])) p++;
+    let value = "";
+    while (p < s.length) {
+      if (s[p] === "]") return { op, value, end: p + 1 };
+      const close = s[p] === '"' ? s.indexOf('"', p + 1) : -1;
+      const next = close > 0 ? close + 1 : p + 1;
+      value += s.slice(p, next);
+      p = next;
+    }
+    return null;
   }
   const OP_ALIAS = { greater_than: "gt", less_than: "lt", matches_regex: "regex" };
 

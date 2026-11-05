@@ -577,8 +577,9 @@ const SECTION_LOADERS = {
   templates: () => loadTemplates(),
 };
 window.addEventListener("hashchange", () => {
-  const load = SECTION_LOADERS[location.hash.replace("#", "").split("?")[0]];
-  if (load) Promise.resolve(load()).catch(() => {});
+  const section = location.hash.replace("#", "").split("?")[0];
+  // Own keys only: "#constructor" is a property of every object.
+  if (Object.hasOwn(SECTION_LOADERS, section)) Promise.resolve(SECTION_LOADERS[section]()).catch(() => {});
 });
 
 function renderCommandBlocks() {
