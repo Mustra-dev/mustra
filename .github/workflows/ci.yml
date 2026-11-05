@@ -151,12 +151,15 @@ jobs:
         # Ask over TCP: while creating POSTGRES_DB the image's entrypoint
         # runs a socket-only server and then stops it, and a socket check
         # passes against that one, so the next step met "the database
-        # system is shutting down".
+        # system is shutting down". The start period is for a machine that is
+        # also building images: first start has taken over 90 seconds there,
+        # and the job failed seconds before the database came up.
         options: >-
           --health-cmd "pg_isready -U postgres -h 127.0.0.1"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 30
+          --health-start-period 180s
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
