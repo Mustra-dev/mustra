@@ -48,14 +48,17 @@ func configureDeployUser(ctx context.Context, cmd *exec.Cmd, wanted, dir string)
 	if e != nil {
 		return e
 	}
-	uid, e := strconv.Atoi(u.Uid)
+	// Parsed to the size they are used at. Converting a wider value would wrap
+	// it, and an ID that wraps to 0 runs the command as root.
+	uid64, e := strconv.ParseUint(u.Uid, 10, 32)
 	if e != nil {
 		return e
 	}
-	gid, e := strconv.Atoi(u.Gid)
+	gid64, e := strconv.ParseUint(u.Gid, 10, 32)
 	if e != nil {
 		return e
 	}
+	uid, gid := int(uid64), int(gid64)
 	if os.Geteuid() != 0 && os.Geteuid() != uid {
 		return fmt.Errorf("agent cannot switch to user %s", name)
 	}
@@ -82,7 +85,7 @@ func configureDeployUser(ctx context.Context, cmd *exec.Cmd, wanted, dir string)
 		}
 		groupIDs = append(groupIDs, uint32(n))
 	}
-	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid), Groups: groupIDs}
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid64), Gid: uint32(gid64), Groups: groupIDs}
 	cmd.Env = append(cmd.Env, "HOME="+u.HomeDir, "USER="+name, "LOGNAME="+name)
 	return nil
 }

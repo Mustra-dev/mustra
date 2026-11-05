@@ -361,7 +361,8 @@ func syslogLine(format string, ev auditEvent, detail string) string {
 			"severity": ev.Severity, "detail": ev.Detail,
 		})
 		if err != nil {
-			body = []byte(`{"action":"` + ev.Action + `"}`)
+			// Detail couldn't be encoded. The action still has to be valid JSON.
+			body, _ = json.Marshal(map[string]string{"action": ev.Action})
 		}
 		line = fmt.Sprintf("<%d>1 %s %s mustra - %s - %s",
 			pri, time.Now().UTC().Format(time.RFC3339), host, ev.Action, body)

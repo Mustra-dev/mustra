@@ -504,3 +504,12 @@ func startForwarding(t *testing.T, s *Server, target string) {
 	}
 	s.syslog.apply(ch)
 }
+
+// A detail that can't be encoded must not break the line's JSON either.
+func TestSyslogFallbackStaysValidJSON(t *testing.T) {
+	line := syslogLine("rfc5424", auditEvent{Action: `a"b`, Detail: map[string]any{"bad": make(chan int)}}, "")
+	i := strings.Index(line, "{")
+	if i < 0 || !json.Valid([]byte(line[i:])) {
+		t.Fatalf("not valid JSON: %q", line)
+	}
+}
