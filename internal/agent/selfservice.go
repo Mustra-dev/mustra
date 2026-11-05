@@ -81,6 +81,7 @@ func (a *Agent) runSelfService(ctx context.Context, addr string) {
 			"os_name":        osName(),
 			"site":           a.info.Site,
 			"user":           windowUser(),
+			"no_remote_code": a.noRemoteCode,
 			"reply":          reply,
 		})
 	})

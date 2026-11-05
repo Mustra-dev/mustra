@@ -204,6 +204,7 @@
   .state.ok{background:color-mix(in oklab,var(--ok) 13%,transparent);color:var(--ok)}
   .card .out pre{margin:0}
   .card .out:empty{display:none}
+  .restricted-note{margin-bottom:16px}
 
   /* ---- notices and surveys ---- */
   .eun{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
@@ -637,8 +638,8 @@ function badgeCounts(){
   const reply = state.reply || {};
   const items = reply.items || [];
   return {
-    catalog: items.filter(i => i.entitled && !i.installed).length,
-    updates: (isNewer(state.latest_version, state.agent_version) ? 1 : 0) + running().filter(a => opOf(a) === 'Update').length,
+    catalog: state.no_remote_code ? 0 : items.filter(i => i.entitled && !i.installed).length,
+    updates: (isNewer(state.latest_version, state.agent_version) && !state.no_remote_code ? 1 : 0) + running().filter(a => opOf(a) === 'Update').length,
     activity: running().length + (state.notification ? 1 : 0) + (state.survey ? 1 : 0),
   };
 }
@@ -790,6 +791,7 @@ function render(){
   const connected = state.connected && !reply.error;
   $('#dot').className = 'dot ' + (connected ? 'on' : 'off');
   $('#greet').textContent = greeting(state.user);
+  if (!branding.welcome && state.no_remote_code) $('#welcome').textContent = 'See what has happened on this computer.';
   $('#host').hidden = !state.hostname;
   $('#host-name').textContent = state.hostname || '';
   $('#host-dot').className = 'dot ' + (connected ? 'on' : 'off');
@@ -811,8 +813,10 @@ function render(){
   // differs from everything and used to prompt every endpoint at once.
   const latest = state.latest_version || '';
   const behind = isNewer(latest, state.agent_version);
-  $('#update-row').hidden = !behind;
-  if (behind) {
+  // An endpoint that refuses code from the server can't update from here.
+  const canUpdate = behind && !state.no_remote_code;
+  $('#update-row').hidden = !canUpdate;
+  if (canUpdate) {
     $('#update-text').textContent =
       `This machine is running agent ${state.agent_version}. Version ${latest} is available.`;
   }
@@ -865,6 +869,9 @@ function renderCatalog(){
     ? `<div class="panel"><div class="empty">Nothing has been published to this computer's catalog yet.</div></div>`
     : !shown.length ? `<div class="panel"><div class="empty">Nothing matches that search.</div></div>`
     : `<div class="grid">${shown.map(card).join('')}</div>`;
+  if (state.no_remote_code && items.length) {
+    $('#catalog').insertAdjacentHTML('afterbegin', `<div class="panel restricted-note"><div class="empty">Apps can't be installed from here. This computer is set up for inventory and system updates only. If you need something, ask your IT team.</div></div>`);
+  }
 }
 
 function itemIcon(it){
@@ -878,6 +885,7 @@ const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 function card(it){
   let action;
   if (it.installed)        action = `<span class="state ok">${CHECK} Installed</span>`;
+  else if (state.no_remote_code) action = `<span class="state">Not available</span>`;
   else if (it.entitled)    action = `<button class="btn primary" type="button" data-install="${esc(it.id)}">Install</button>`;
   else if (it.pending)     action = `<span class="state">Awaiting approval</span>`;
   else if (it.can_request) action = `<button class="btn" type="button" data-request="${esc(it.id)}">Request</button>`;
@@ -971,7 +979,8 @@ function renderUpdates(behind){
   const upToDate = behind ? '' : `<div class="panel"><div class="empty-big"><span class="orb ok">${CHECK}</span>
       <div class="t">This computer is up to date</div>
       <div class="s">Agent ${esc(state.agent_version || '')}</div></div></div>`;
-  $('#updates').innerHTML = upToDate + (ups.length ? `<h3 class="sub-h">Recent updates</h3>${historyTable(ups)}` : '');
+  const byIT = behind && state.no_remote_code ? `<div class="panel"><div class="empty">Version ${esc(state.latest_version)} of the agent is available. Your IT team installs it on this computer.</div></div>` : '';
+  $('#updates').innerHTML = upToDate + byIT + (ups.length ? `<h3 class="sub-h">Recent updates</h3>${historyTable(ups)}` : '');
 }
 
 // ---- actions ------------------------------------------------------------
