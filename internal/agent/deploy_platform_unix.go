@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"os/user"
@@ -36,6 +37,21 @@ func deployUser(wanted string) (string, error) {
 	}
 	return "", fmt.Errorf("no logged-in user")
 }
+
+// parseDeployID refuses an ID that would not survive the conversions it goes
+// through: one that wraps to 0 would run the command as root. The bound is
+// what fits an int on every platform, so the result is the same on any build.
+func parseDeployID(s string) (int, error) {
+	n, e := strconv.ParseUint(s, 10, 32)
+	if e != nil {
+		return 0, e
+	}
+	if n > math.MaxInt32 {
+		return 0, fmt.Errorf("user or group ID %s is out of range", s)
+	}
+	return int(n), nil
+}
+
 func configureDeployUser(ctx context.Context, cmd *exec.Cmd, wanted, dir string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -48,17 +64,14 @@ func configureDeployUser(ctx context.Context, cmd *exec.Cmd, wanted, dir string)
 	if e != nil {
 		return e
 	}
-	// Parsed to the size they are used at. Converting a wider value would wrap
-	// it, and an ID that wraps to 0 runs the command as root.
-	uid64, e := strconv.ParseUint(u.Uid, 10, 32)
+	uid, e := parseDeployID(u.Uid)
 	if e != nil {
 		return e
 	}
-	gid64, e := strconv.ParseUint(u.Gid, 10, 32)
+	gid, e := parseDeployID(u.Gid)
 	if e != nil {
 		return e
 	}
-	uid, gid := int(uid64), int(gid64)
 	if os.Geteuid() != 0 && os.Geteuid() != uid {
 		return fmt.Errorf("agent cannot switch to user %s", name)
 	}
@@ -85,7 +98,7 @@ func configureDeployUser(ctx context.Context, cmd *exec.Cmd, wanted, dir string)
 		}
 		groupIDs = append(groupIDs, uint32(n))
 	}
-	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid64), Gid: uint32(gid64), Groups: groupIDs}
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid), Groups: groupIDs}
 	cmd.Env = append(cmd.Env, "HOME="+u.HomeDir, "USER="+name, "LOGNAME="+name)
 	return nil
 }
