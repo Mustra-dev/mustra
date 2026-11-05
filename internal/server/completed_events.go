@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/mustra-dev/mustra/internal/store"
 )
 
 var completedActions = map[string]string{
@@ -24,6 +26,8 @@ var completedActions = map[string]string{
 	"enforce":     "Enforce runs",
 	"certificate": "Certificate renewals",
 	"vuln_scan":   "Vulnerability scans",
+	"hunt":        "IOC hunts",
+	"reveal":      "Sensitive-data scans",
 	"report":      "Reports",
 }
 
@@ -120,6 +124,86 @@ func enforceCompletion(sum enforceRunSummary) (title, outcome, severity, body st
 	body = fmt.Sprintf("%d endpoint%s, %d unreached. Settings: %d compliant, %d drifted, %d remediated, %d failed, %d unknown.",
 		sum.Endpoints, plural(sum.Endpoints), sum.Unreached, sum.Compliant, sum.Drifted, sum.Remediated, sum.Failed, sum.Unknown)
 	return "Enforce run finished: " + sum.Policy, outcome, severity, body
+}
+
+// huntCompletion describes a finished IOC hunt. A match is what a hunt is for,
+// and it has its own alert, so finding something does not make the hunt a failure.
+func huntCompletion(found int) (title, outcome, severity, body string) {
+	return "IOC hunt finished", "succeeded", "info", fmt.Sprintf("%d new finding%s.", found, plural(found))
+}
+
+// revealCompletion describes a finished sensitive-data scan from the rows of the
+// endpoints it was sent to. Matching files are what it looks for; an endpoint
+// that failed or never finished is what makes the scan incomplete. The terms of a
+// quick search stay out of it: they can be the very thing being looked for.
+func revealCompletion(rule store.RevealRule, rows []store.RevealScan, total int) (title, outcome, severity, body string, detail map[string]any) {
+	done, matched := 0, 0
+	for _, r := range rows {
+		if r.FinishedAt != nil && r.Error == "" {
+			done++
+			matched += r.FilesMatched
+		}
+	}
+	name := rule.Name
+	title = "Sensitive-data scan finished: " + name
+	if rule.Kind == "quick" {
+		name = "Quick search"
+		title = "Sensitive-data search finished"
+	}
+	outcome, severity = completedOutcome(done, total-done)
+	body = fmt.Sprintf("%d of %d endpoints finished. %d file%s matched.", done, total, matched, plural(matched))
+	return title, outcome, severity, body, map[string]any{"succeeded": done, "failed": total - done, "total": total,
+		"files_matched": matched, "name": name}
+}
+
+// revealCompletionTimeout outlasts the 15 minutes a scan may run on an endpoint.
+const revealCompletionTimeout = 20 * time.Minute
+
+// announceRevealScan waits for the endpoints a scan went to, then announces it.
+// Scans report per endpoint with no run to close, so this watches for them. A
+// server restart loses the watch and that one announcement.
+func (s *Server) announceRevealScan(ctx context.Context, rule store.RevealRule, sent, skipped int) {
+	total := sent + skipped
+	if total == 0 {
+		return
+	}
+	if _, busy := s.revealWatches.LoadOrStore(rule.ID, true); busy {
+		return
+	}
+	since := time.Now().Add(-5 * time.Second)
+	go func() {
+		defer s.revealWatches.Delete(rule.ID)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revealCompletionTimeout)
+		defer cancel()
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		var rows []store.RevealScan
+		for {
+			if all, err := s.store.ListRevealScans(ctx, rule.ID); err == nil {
+				rows = rows[:0]
+				finished := 0
+				for _, r := range all {
+					if r.DispatchedAt.After(since) {
+						rows = append(rows, r)
+						if r.FinishedAt != nil {
+							finished++
+						}
+					}
+				}
+				if finished >= total {
+					break
+				}
+			}
+			select {
+			case <-ctx.Done():
+			case <-ticker.C:
+				continue
+			}
+			break
+		}
+		title, outcome, severity, body, detail := revealCompletion(rule, rows, total)
+		s.emitCompleted("reveal", title, outcome, severity, body, detail["name"].(string), "/reveal", detail)
+	}()
 }
 
 // announceRunCompleted announces a deployment or patch run once its last job

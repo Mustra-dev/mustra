@@ -129,6 +129,8 @@ type Server struct {
 	entraOverride func(tenant, client, secret string) *graphClient
 	// updateSent: agent ID → when it was last asked to update (agent_update_api.go).
 	updateSent sync.Map
+	// revealWatches holds the rules with a finished-scan announcement pending.
+	revealWatches sync.Map
 	// vulnKick asks vulnScanLoop for a scan soon; remediated holds the
 	// agents a patch or software run just changed (vulnscan_after.go).
 	vulnKick   chan struct{}

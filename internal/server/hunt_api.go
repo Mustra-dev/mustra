@@ -177,6 +177,7 @@ type runHuntResponse struct {
 // "is it here already".
 func (s *Server) handleRunHunt(w http.ResponseWriter, r *http.Request) {
 	found := s.runHunt(context.WithoutCancel(r.Context()))
+	s.announceHunt(found)
 	s.audit(r.Context(), auditEvent{
 		Action: "hunt.run", Actor: auth.CurrentUser(r.Context()).Username,
 		Target: "fleet", Severity: "notice", Detail: map[string]any{"new_findings": found},

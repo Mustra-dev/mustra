@@ -338,6 +338,10 @@ func (s *Server) installPins() map[string]string {
 			pins["ca.crt"] = hex.EncodeToString(sum[:])
 		}
 	}
+	if data, err := haosAddonTarball(); err == nil {
+		sum := sha256.Sum256(data)
+		pins["mustra-haos-addon.tar.gz"] = hex.EncodeToString(sum[:])
+	}
 	return pins
 }
 
@@ -371,7 +375,7 @@ func (s *Server) installScriptHashes(ctx context.Context, site, token string, no
 
 // installScriptDataForPush is what an SSH push installs with: a fresh
 // single-use token, short-lived, attributed to whoever started the push.
-func (s *Server) installScriptDataForPush(ctx context.Context, site, actor, target string) (installScriptData, error) {
+func (s *Server) installScriptDataForPush(ctx context.Context, site, actor, target string, noRemoteCode bool) (installScriptData, error) {
 	if site == "" {
 		site = defaultSite
 	}
@@ -382,7 +386,9 @@ func (s *Server) installScriptDataForPush(ctx context.Context, site, actor, targ
 	if err != nil {
 		return installScriptData{}, err
 	}
-	return s.renderInstallData(ctx, site, token)
+	data, err := s.renderInstallData(ctx, site, token)
+	data.NoRemoteCode = noRemoteCode
+	return data, err
 }
 
 var installTemplateFuncs = template.FuncMap{"sq": shQuote, "psq": psQuoteString}
@@ -617,6 +623,18 @@ if [ -z "$ENROLL_TOKEN" ] && ! already_enrolled; then
   exit 1
 fi
 
+pinned_sha() {
+  case "$1" in
+{{- range $name, $sum := .Pins}}
+    '{{$name}}') echo '{{$sum}}' ;;
+{{- end}}
+    *) ;;
+  esac
+}
+file_sha() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d ' ' -f1; else shasum -a 256 "$1" | cut -d ' ' -f1; fi
+}
+
 # The Linux install is a systemd unit. Check before downloading or touching
 # anything: without systemd the install used to get as far as the unit file
 # and die with nothing on stderr. The common case is an SSH session that
@@ -629,14 +647,42 @@ fi
 # there, install that instead of refusing.
 install_haos_addon() {
   local token="$1" slug=local_mustra_agent dir=/addons/mustra_agent info state
+  local no_remote_code=false install_sha256=""
+{{- if .NoRemoteCode}}
+  # The add-on runs this installer again once it starts, so it is told this
+  # script's hash and runs nothing else. A script piped into bash has no file to
+  # hash, and that promise can't be made for it.
+  no_remote_code=true
+  if [ ! -f "$0" ]; then
+    echo "Inventory and patching only needs the verified install command on Home Assistant, not the plain one. Nothing was changed." >&2
+    return 1
+  fi
+  install_sha256=$(file_sha "$0")
+{{- end}}
   sup() { curl -fsS -H "Authorization: Bearer $token" -H "Content-Type: application/json" "$@"; }
   echo "Installing the mustra agent as a Home Assistant add-on."
   rm -rf "$dir.new" && mkdir -p "$dir.new"
-  if ! curl -fsSL --retry 3 --retry-all-errors "${DOWNLOAD_BASE}/downloads/mustra-haos-addon.tar.gz" | tar -xz -C "$dir.new"; then
-    rm -rf "$dir.new"
+  local tarball addon_expected
+  tarball=$(mktemp)
+  if ! curl -fsSL --retry 3 --retry-all-errors "${DOWNLOAD_BASE}/downloads/mustra-haos-addon.tar.gz" -o "$tarball"; then
+    rm -rf "$dir.new" "$tarball"
     echo "could not download the add-on from ${DOWNLOAD_BASE}" >&2
     return 1
   fi
+  # This becomes a script that runs as root on every start, so it is held to
+  # the same hash as everything else this installer downloads.
+  addon_expected=$(pinned_sha mustra-haos-addon.tar.gz)
+  if [ -n "$addon_expected" ] && [ "$(file_sha "$tarball")" != "$addon_expected" ]; then
+    rm -rf "$dir.new" "$tarball"
+    echo "the add-on from ${DOWNLOAD_BASE} does not match this installer's checksum; nothing was changed" >&2
+    return 1
+  fi
+  if ! tar -xz -C "$dir.new" -f "$tarball"; then
+    rm -rf "$dir.new" "$tarball"
+    echo "could not unpack the add-on from ${DOWNLOAD_BASE}" >&2
+    return 1
+  fi
+  rm -f "$tarball"
   rm -rf "$dir" && mv "$dir.new" "$dir"
   sup -X POST http://supervisor/store/reload >/dev/null || { echo "the Supervisor would not reload its add-on store" >&2; return 1; }
   info=$(sup "http://supervisor/addons/$slug/info") || { echo "the Supervisor does not list $slug after a reload" >&2; return 1; }
@@ -651,7 +697,7 @@ install_haos_addon() {
     sup -X POST --max-time 900 "http://supervisor/addons/$slug/rebuild" >/dev/null || { echo "the Supervisor could not rebuild the add-on" >&2; return 1; }
   fi
   sup -X POST "http://supervisor/addons/$slug/options" \
-    -d "$(jq -n --arg u "$DOWNLOAD_BASE" --arg s "$SITE" --arg t "$ENROLL_TOKEN" '{options: {server_url: $u, site: $s, log_level: "info", enroll_token: $t}, boot: "auto"}')" >/dev/null \
+    -d "$(jq -n --arg u "$DOWNLOAD_BASE" --arg s "$SITE" --arg t "$ENROLL_TOKEN" --argjson nrc "$no_remote_code" --arg sum "$install_sha256" '{options: {server_url: $u, site: $s, log_level: "info", enroll_token: $t, no_remote_code: $nrc, install_sha256: $sum}, boot: "auto"}')" >/dev/null \
     || { echo "the Supervisor rejected the add-on's options" >&2; return 1; }
   state=$(sup "http://supervisor/addons/$slug/info" | jq -r '.data.state')
   if [ "$state" = started ]; then
@@ -709,17 +755,6 @@ chmod 700 "$DATA_DIR"
 # forcing 1.1 fetched it first try. Whatever inspects that path objects to
 # the payload, not the size, so a size-based guess would have missed it.
 # What each download must hash to, from the script the install command pinned.
-pinned_sha() {
-  case "$1" in
-{{- range $name, $sum := .Pins}}
-    '{{$name}}') echo '{{$sum}}' ;;
-{{- end}}
-    *) ;;
-  esac
-}
-file_sha() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d ' ' -f1; else shasum -a 256 "$1" | cut -d ' ' -f1; fi
-}
 
 fetch() {
   # The first attempt is speculative, so its noise is suppressed: curl

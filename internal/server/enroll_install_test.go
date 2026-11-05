@@ -282,7 +282,7 @@ func TestInstallScriptHashMatchesWhatIsServed(t *testing.T) {
 	s := &Server{logger: slog.Default(), cfg: Config{AgentBuildsDir: builds}}
 	pins := s.installPins()
 	want := sha256.Sum256([]byte("agent"))
-	if pins["mustra-agent-linux-amd64"] != hex.EncodeToString(want[:]) || len(pins) != 3 {
+	if pins["mustra-agent-linux-amd64"] != hex.EncodeToString(want[:]) || pins["mustra-haos-addon.tar.gz"] == "" || len(pins) != 4 {
 		t.Errorf("pins: %v", pins)
 	}
 	data := installScriptData{NatsURL: "tls://n:4222", HasCA: true, Site: "lab", DownloadBase: "https://c", AgentVersion: "1", MacMenuBar: macMenuBarScript, Pins: pins, NoRemoteCode: true}

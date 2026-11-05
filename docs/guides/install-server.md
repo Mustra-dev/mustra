@@ -44,7 +44,7 @@ The console should be reached over HTTPS: sign-in cookies are marked secure and 
 - **Your own reverse proxy** (nginx, Caddy, Traefik): forward `https://mustra.example.com` to `http://<server>:8080`, and run `./init.sh --public-hostname mustra.example.com`.
 - **Cloudflare Tunnel**: set your tunnel's credentials in `deploy/cloudflared/` and start the stack with `docker compose --profile tunnel up -d`.
 
-For a test on a trusted network only, `./init.sh --insecure-http --start` serves plain HTTP on the LAN address.
+To try it without either, run `./init.sh --start` and reach the console over an SSH tunnel: `ssh -L 8080:localhost:8080 <server>`, then open `http://localhost:8080`.
 
 Agents connect to port 4222 directly, with TLS, whatever you choose for the console.
 

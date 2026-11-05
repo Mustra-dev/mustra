@@ -86,7 +86,8 @@ These endpoints still report inventory, vulnerabilities and compliance, and take
 - **Compliance results are thinner, and how much depends on the benchmark.** A check that needs a command reads `unknown`, unless its other rules settle the result. In our testing that was about 60 of 66 checks in CIS macOS 26, and about 42 of 398 in CIS Windows Server 2025. Benchmarks that lean on commands tell you little in this mode, so check yours before relying on it.
 - **It can't be turned off from the console.** It's a file beside the agent, `no-remote-code`, that only an administrator on the endpoint can change. To leave the mode, delete that file and restart the agent.
 - **Updating the agent:** run a new install command on the machine. It keeps the mode.
-- **Not available yet:** Network Scan & Push and the Home Assistant add-on.
+- **Network Scan & Push:** tick **Inventory and patching only** beside the scan. It applies to every host you push to while it's ticked.
+- **Home Assistant add-on:** use the verified install command, not the plain one. The add-on then runs only that installer, by hash. If the add-on is rebuilt or updated, run a new install command. Its **no_remote_code** option is the switch here, and only a Home Assistant administrator can change it.
 
 ## How install commands protect you
 

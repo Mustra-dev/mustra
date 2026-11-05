@@ -10,9 +10,6 @@
 #   ./init.sh --public-hostname mustra.example.com
 #                                   # console will sit behind HTTPS: public
 #                                   # URL and OIDC redirect filled in
-#   ./init.sh --insecure-http       # LAN/dev only: console on plain
-#                                   # http://<LAN address>:8080, cookies not
-#                                   # Secure. Enrollment tokens cross it.
 #   MUSTRA_CONSOLE_PORT=18080 MUSTRA_NATS_PORT=14222 ./init.sh --start
 #                                   # publish on other host ports (first run
 #                                   # records them in .env)
@@ -28,13 +25,15 @@ cd "$(dirname "$0")"
 IP=""
 PUBLIC_HOSTNAME=""
 START=false
-INSECURE_HTTP=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --ip) IP="$2"; shift 2 ;;
     --public-hostname) PUBLIC_HOSTNAME="$2"; shift 2 ;;
     --start) START=true; shift ;;
-    --insecure-http) INSECURE_HTTP=true; shift ;;
+    --insecure-http)
+      echo "error: --insecure-http was removed: enrollment tokens and sign-ins would cross the network in the clear." >&2
+      echo "Use --public-hostname <name> with HTTPS in front, or reach the console over an SSH tunnel." >&2
+      exit 2 ;;
     -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -198,20 +197,13 @@ if [ -f .env ]; then
     echo "      or re-run with --public-hostname <name>; install and update links are not served until it is." >&2
   fi
 else
-  # Secure cookies unless the operator explicitly asks for a plain-http LAN
-  # install. Without a public hostname the console is still reachable for
-  # setup over an SSH tunnel (http://localhost:8080 counts as secure to a
-  # browser), and the public URL is then entered in Settings.
+  # Without a public hostname the console is still reachable for setup over
+  # an SSH tunnel (http://localhost:8080 counts as secure to a browser), and
+  # the public URL is then entered in Settings.
   cookie_secure=true
   oidc_redirect=""
   if [ -n "$PUBLIC_HOSTNAME" ]; then
     oidc_redirect="https://$PUBLIC_HOSTNAME/auth/callback"
-  elif [ "$INSECURE_HTTP" = true ]; then
-    # Reached over plain http on port 8080: an explicit LAN/development
-    # choice, recorded as such.
-    PUBLIC_URL="http://$IP:$CONSOLE_PORT"
-    ALLOW_HTTP=true
-    cookie_secure=false
   fi
   gen_callout
   # A fresh install has no agents holding the old shared password, so it
@@ -238,8 +230,8 @@ else
   chmod 600 .env
   echo "wrote .env with generated secrets"
   if [ -z "$PUBLIC_URL" ]; then
-    echo "note: no public URL yet. Re-run with --public-hostname <name> (HTTPS in front), or --insecure-http for a" >&2
-    echo "      plain-http LAN install, or enter it under Settings -> Agent identity after signing in." >&2
+    echo "note: no public URL yet. Re-run with --public-hostname <name> (HTTPS in front), or enter it under" >&2
+    echo "      Settings -> Agent identity after signing in." >&2
   fi
 fi
 

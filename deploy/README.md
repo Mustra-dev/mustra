@@ -57,9 +57,7 @@ no default credential.
 
 The console's **public URL** (`MUSTRA_PUBLIC_URL`) is what every agent-facing
 link is built from. `init.sh --public-hostname <name>` sets it to
-`https://<name>`; `--insecure-http` sets `http://<LAN address>:8080` for a
-trusted LAN or development (cookies then not Secure); with neither, set it
-under **Settings → Agent identity**. The server never derives it from a
+`https://<name>`; without it, set it under **Settings → Agent identity**. The server never derives it from a
 request's `Host` header, and install scripts are not served until it is set.
 
 ### When it does not come up

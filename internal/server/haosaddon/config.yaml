@@ -5,7 +5,7 @@
 # run.sh installs it from the server once after each install or rebuild of
 # the add-on; updates are the agent's own signed, verified builds.
 name: mustra agent
-version: "1.1.0"
+version: "1.2.0"
 slug: mustra_agent
 description: mustra endpoint agent for this Home Assistant OS host
 url: https://github.com/mustra-dev/mustra
@@ -27,8 +27,12 @@ options:
   site: default
   log_level: info
   enroll_token: ""
+  no_remote_code: false
+  install_sha256: ""
 schema:
   server_url: url
   site: str
   log_level: list(debug|info|warn|error)
   enroll_token: password?
+  no_remote_code: bool
+  install_sha256: str?

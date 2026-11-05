@@ -1393,6 +1393,7 @@ var typeDocs = map[string]typeDoc{
 		Fields: map[string]string{
 			"HostKeyFingerprint": "HostKeyFingerprint is the target's SSH host key fingerprint (SHA256:…) as the operator verified it, for a target whose key is not yet stored. See sshdeploy.go.",
 			"Hostname":           "what the scan resolved, for the deployment history",
+			"NoRemoteCode":       "NoRemoteCode installs in inventory-and-patching mode: the endpoint refuses code from the server, and only an administrator on it can undo that.",
 		},
 	},
 	"github.com/mustra-dev/mustra/internal/server.putAgentTrustRequest": {

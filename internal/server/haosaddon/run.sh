@@ -25,6 +25,13 @@ site=$(jq -r '.site // "default"' "$opts")
 # has its own credential: after that the token is spent, and the console
 # serves enrolled endpoints a token-free update script.
 token=$(jq -r '.enroll_token // ""' "$opts")
+# Inventory-and-patching mode. On this one machine the switch is the add-on's
+# configuration, which only a Home Assistant administrator can change.
+no_remote_code=$(jq -r '.no_remote_code // false' "$opts")
+# The installer that was approved, by hash: in this mode nothing else is run.
+install_sha256=$(jq -r '.install_sha256 // ""' "$opts")
+install_query=""
+[ "$no_remote_code" = true ] && install_query="?no_remote_code=1"
 log_level=$(jq -r '.log_level // "info"' "$opts")
 mkdir -p /data/agent /data/state
 
@@ -43,7 +50,7 @@ while true; do
   if [ -n "$token" ] && [ ! -s /var/lib/mustra-agent/agent-credential.json ]; then
     auth=(-H "Authorization: Bearer $token")
   fi
-  if [ -f "$agent.verified" ]; then
+  if [ "$no_remote_code" != true ] && [ -f "$agent.verified" ]; then
     # Verified by the agent against the signed manifest before it exited.
     # Same directory, so the rename is atomic.
     chmod 0755 "$agent.verified"
@@ -54,10 +61,12 @@ while true; do
   elif [ ! -x "$agent" ] || [ ! -f /opt/mustra-agent/service.env ] || [ "$(cat "$build_marker" 2>/dev/null)" != "$build_id" ]; then
     if [ -z "$server" ]; then
       echo "[mustra] set server_url in the add-on's configuration" >&2
-    elif curl -fsSL --retry 3 --retry-all-errors "${auth[@]}" "$server/install.sh" -o /tmp/install.sh; then
+    elif curl -fsSL --retry 3 --retry-all-errors "${auth[@]}" "$server/install.sh$install_query" -o /tmp/install.sh; then
       # A failed install leaves the previous agent in place (the installer
       # stages and verifies before replacing), so carry on and start it.
-      if MUSTRA_NO_SERVICE=1 bash /tmp/install.sh; then
+      if [ "$no_remote_code" = true ] && [ "$(sha256sum /tmp/install.sh | cut -d ' ' -f1)" != "$install_sha256" ]; then
+        echo "[mustra] inventory and patching only: the installer from $server is not the one you approved, so it was not run. Run a new install command from the console." >&2
+      elif MUSTRA_NO_SERVICE=1 bash /tmp/install.sh; then
         echo "$build_id" > "$build_marker"
       else
         echo "[mustra] install failed; starting the installed agent" >&2
@@ -71,6 +80,12 @@ while true; do
     echo "[mustra] no agent installed yet; retrying in 60s" >&2
     sleep 60 & wait $!
     continue
+  fi
+
+  if [ "$no_remote_code" = true ]; then
+    touch /opt/mustra-agent/no-remote-code
+  else
+    rm -f /opt/mustra-agent/no-remote-code
   fi
 
   set -a
