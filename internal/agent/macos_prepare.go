@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"os/exec"
 	"strings"
 	"sync"
@@ -13,11 +12,11 @@ import (
 
 // On Apple Silicon macOS installs only with the password of a user who owns
 // the disk. Without an MDM that can install it (Fleet's software update
-// declarations need Fleet Premium), the agent does the part that needs no
-// password, downloading the update, and then asks the person at the Mac to
-// install it: a notification whose Install button opens Software Update,
-// where the download is already there and installing takes their password
-// and a restart.
+// declarations need Fleet Premium), the agent tries to download the update and
+// then asks the person at the Mac to install it: a notification whose Install
+// button opens Software Update, where installing takes their password and a
+// restart. The download can want that password too (macOS 27 answered "Failed
+// to authenticate"), so the notification says which of the two happened.
 
 // actionOpenSoftwareUpdate is the notification answer that opens Software
 // Update for the person at the Mac.
@@ -43,20 +42,20 @@ func (a *Agent) prepareMacOSUpdate(ctx context.Context, runID, actionID string, 
 	start := time.Now()
 	out, err := exec.CommandContext(dctx, "softwareupdate", "--download", u.Label).CombinedOutput()
 	cancel()
-	body := title + " has been downloaded. Install it from Software Update: it asks for your password, and the Mac restarts to finish, so save your work first."
-	if err != nil {
+	downloaded := err == nil
+	if downloaded {
+		a.logger.Info("macOS update downloaded for the user to install", "update", title, "took", time.Since(start).Round(time.Second))
+	} else {
 		// Software Update downloads it itself when asked to install, so the
 		// person is still asked; only the wait is longer.
 		a.logger.Warn("macOS update download failed; asking the user to install it anyway",
 			"update", title, "error", err, "output", lastLine(string(out), err))
-		body = title + " is available. Install it from Software Update: it downloads the update, asks for your password, and restarts the Mac to finish."
-	} else {
-		a.logger.Info("macOS update downloaded for the user to install", "update", title, "took", time.Since(start).Round(time.Second))
 	}
+	heading, body := macOSUpdateMessage(title, downloaded)
 	a.showNotification(ctx, &proto.EndUserNotification{
 		ID:    "macos-update-" + strings.ReplaceAll(u.Label, " ", "-"),
 		Kind:  proto.EUNKindNotice,
-		Title: fmt.Sprintf("%s is ready to install", title),
+		Title: heading,
 		Body:  body,
 		Buttons: []proto.EUNButton{
 			{Label: "Install…", Action: actionOpenSoftwareUpdate, Primary: true},
@@ -67,4 +66,14 @@ func (a *Agent) prepareMacOSUpdate(ctx context.Context, runID, actionID string, 
 		RunID:           runID,
 		ActionID:        actionID,
 	})
+}
+
+// macOSUpdateMessage says it is ready only when the download worked.
+func macOSUpdateMessage(title string, downloaded bool) (heading, body string) {
+	if downloaded {
+		return title + " is ready to install",
+			title + " has been downloaded. Install it from Software Update: it asks for your password, and the Mac restarts to finish, so save your work first."
+	}
+	return title + " is available",
+		title + " is available. Install it from Software Update: it downloads the update, asks for your password, and restarts the Mac to finish."
 }

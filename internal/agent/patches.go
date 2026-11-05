@@ -691,7 +691,7 @@ func applyPatchesDarwin(ctx context.Context, names []string, viaMDM bool, report
 			}
 			res.PrepareForUser = append(res.PrepareForUser, macUpdate{Label: l, PatchInfo: proto.PatchInfo{Name: titles[l]}})
 			res.Notes = append(res.Notes, "Left "+titles[l]+" to the person at the Mac: on Apple Silicon macOS installs only with the password of a user who owns the disk, "+
-				"which the agent does not have. The agent downloads it now and then asks them to install it.")
+				"which the agent does not have. The agent tries to download it first, then asks them to install it.")
 			return true
 		})
 	}
