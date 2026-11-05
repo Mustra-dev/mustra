@@ -4,6 +4,13 @@ What has actually shipped, newest first. The console renders this file on
 Administration → About, so the running build always shows its own history
 rather than a page that can drift from it.
 
+## Unreleased
+
+### Fixed
+- A Mac whose macOS update couldn't be downloaded is no longer told it's "ready to
+  install". macOS can refuse the download without a password, and the patch job and
+  the notification now say the update is available and that Software Update fetches it.
+
 ## 1.2.2 — 2026-11-04
 
 Security patch; server 1.2.2, agent 1.2.2. The fix is in the agent: update agents to
