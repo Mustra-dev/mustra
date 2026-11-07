@@ -177,6 +177,9 @@ var routeDocs = map[string]routeDoc{
 	// cert-authorities
 	"POST /api/admin/cert-authorities": {Body: saveCertAuthoritiesRequest{}, Resp: listManagedCertsResponse{}, Errors: []int{400, 403, 500}},
 
+	// containers
+	"GET /api/containers": {Query: []queryParam{{Name: "agent_id", Desc: "only this endpoint"}, {Name: "update", Enum: []string{proto.ContainerUpdateAvailable, proto.ContainerUpToDate, proto.ContainerNotChecked, proto.ContainerCheckFailed}, Desc: "only containers with this update status"}}, Resp: containersResponse{}, Errors: []int{400, 500}},
+
 	// certificates
 	"GET /api/certificates":                                {Resp: certificatesResponse{}, Errors: []int{500}},
 	"GET /api/certificates/alerts":                         {Resp: getExpiryAlertsResponse{}},

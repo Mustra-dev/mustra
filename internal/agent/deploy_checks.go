@@ -242,6 +242,8 @@ func (a *Agent) deploySensorRows(ctx context.Context, kind string, lookback int)
 		data, e = collectDirectory(cctx)
 	case proto.SensorBackups:
 		data, e = collectBackups(cctx)
+	case proto.SensorContainers:
+		data, e = a.containers.collect(cctx)
 	case proto.SensorSecurityPosture:
 		data, e = collectSecurityPosture(cctx)
 	default:

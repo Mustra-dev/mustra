@@ -36,6 +36,9 @@ and keep a record of what was done.
   behind an approver.
 - 📜 **Inventory:** software usage and cost, certificates fleet-wide,
   hardware, users, and devices on the network that mustra doesn't manage.
+- 🐳 **Containers:** every Docker and Podman container across the fleet,
+  and which images have an update. It only reports, so nothing is pulled
+  or restarted.
 - 🔐 **Access control and audit:** OIDC SSO, SCIM, RBAC, two-person
   approvals, and one audit log you can stream to your SIEM.
 - 🪟 **For the people at the keyboard:** a Self Service app, notices,

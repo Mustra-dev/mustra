@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Containers — mustra</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/app-icon-256.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  .hint { font-size: 12px; color: var(--text-muted); margin: -6px 0 12px; line-height: 1.55; }
+  .muted { color: var(--text-muted); font-size: var(--fs-meta); }
+  .mono { font-family: var(--mono); font-size: var(--fs-meta); }
+  .ct-sub { display: block; margin-top: 2px; overflow-wrap: anywhere; }
+  .pill { font-size: var(--fs-meta); padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .pill.up_to_date { background: var(--ok-bg); color: var(--ok); }
+  .pill.update_available { background: color-mix(in srgb, var(--viz-warning) 22%, transparent); color: var(--warn); }
+  .pill.check_failed { background: var(--off-bg); color: var(--off); }
+  .pill.not_checked { background: var(--surface-2); color: var(--text-muted); }
+  .ct-filter { font-size: 12.5px; margin: 0 0 8px; display: inline-flex; gap: 6px; align-items: center; }
+  .ct-tags b { font-weight: 600; }
+  .stat-tile-value.warn { color: var(--warn); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar-rail" id="sidebar-rail"></aside>
+    <aside class="sidebar-flyout" id="sidebar-flyout"></aside>
+    <main>
+      <div id="containers-page-head"></div>
+      <div class="stat-tiles" id="ct-tiles"></div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Containers</h2><span class="scan-status" id="ct-status"></span></div>
+        <p class="hint">
+          Each endpoint's agent reads its Docker or Podman engine and asks the registry each image came from whether
+          the tag has moved and, for a version tag like <code>16.4</code>, whether a newer version exists. Nothing is
+          pulled or restarted. <b>Could not check</b> and <b>Not checked</b> never mean up to date: hover a row's
+          status, or read the line under it, for the reason.
+        </p>
+        <label class="ct-filter"><input type="checkbox" id="ct-only-updates"> Only containers with an update</label>
+        <div class="table-scroll rows-10">
+          <table class="table-compact">
+            <thead><tr><th>Container</th><th>Endpoint</th><th>Image</th><th>Update</th><th>State</th><th>Last checked</th></tr></thead>
+            <tbody id="ct-body"><tr><td class="empty" colspan="6">loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/app.js"></script>
+<script>
+let rows = [];
+const updateLabel = { update_available: "Update available", up_to_date: "Up to date", check_failed: "Could not check", not_checked: "Not checked" };
+const updateRank = { update_available: 0, check_failed: 1, not_checked: 2, up_to_date: 3 };
+const onlyUpdates = document.getElementById("ct-only-updates");
+
+document.addEventListener("mustra:user", () => {
+  renderPageHead("containers-page-head", "/containers", { title: "Containers" });
+  load();
+});
+onlyUpdates.addEventListener("change", render);
+
+async function load() {
+  const r = await fetch("/api/containers");
+  if (r.status === 401) { window.location.href = "/login"; return; }
+  if (!r.ok) {
+    document.getElementById("ct-body").innerHTML = `<tr><td class="empty" colspan="6">could not load containers: ${escapeHtml(await r.text())}</td></tr>`;
+    return;
+  }
+  const data = await r.json();
+  rows = data.containers || [];
+  const c = data.counts || {};
+  document.getElementById("ct-tiles").innerHTML = [
+    { label: "Containers", value: rows.length },
+    { label: "Update available", value: c.update_available || 0, cls: c.update_available ? "warn" : "ok" },
+    { label: "Could not check", value: c.check_failed || 0, cls: c.check_failed ? "off" : "" },
+    { label: "Not checked", value: c.not_checked || 0 },
+    { label: "Up to date", value: c.up_to_date || 0, cls: c.up_to_date ? "ok" : "" },
+  ].map(t => `<div class="stat-tile"><div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value ${escapeHtml(t.cls || "")}">${escapeHtml(t.value)}</div></div>`).join("");
+  document.getElementById("ct-status").textContent = `${rows.length} ${rows.length === 1 ? "container" : "containers"} on ${data.hosts || 0} ${data.hosts === 1 ? "endpoint" : "endpoints"}`;
+  render();
+}
+
+// What the container would move to, in the words a person would use.
+function targetHTML(c) {
+  const parts = [];
+  if (c.newer_tag_in_major) parts.push(`<b>${escapeHtml(c.newer_tag_in_major)}</b> in this major version`);
+  if (c.newer_tag) parts.push(`<b>${escapeHtml(c.newer_tag)}</b> newest`);
+  if (parts.length) return `<span class="muted ct-sub ct-tags">${/* safe-html: built above from escaped tags */ parts.join(" · ")}</span>`;
+  return c.update_detail ? `<span class="muted ct-sub">${escapeHtml(c.update_detail)}</span>` : "";
+}
+
+function render() {
+  const body = document.getElementById("ct-body");
+  const shown = onlyUpdates.checked ? rows.filter(c => c.update === "update_available") : rows;
+  if (!shown.length) {
+    body.innerHTML = `<tr><td class="empty" colspan="6">${rows.length
+      ? "no container has an update"
+      : "no endpoint has reported containers yet: agents report them from Docker or Podman on Linux, once upgraded to a version with this sensor"}</td></tr>`;
+    return;
+  }
+  body.innerHTML = shown.map(c => {
+    const compose = c.compose_project ? `${c.compose_project} / ${c.compose_service || "—"}` : "";
+    return `<tr>
+      <td><strong>${escapeHtml(c.name)}</strong>${compose ? `<span class="muted ct-sub" title="${escapeHtml(c.compose_file || "")}">${escapeHtml(compose)}</span>` : ""}</td>
+      <td><a href="/endpoint/${escapeHtml(c.agent_id)}">${escapeHtml(c.hostname)}</a>${c.online ? "" : ' <span class="muted">offline</span>'}</td>
+      <td class="mono">${escapeHtml(c.image)}</td>
+      <td data-sort="${escapeHtml(updateRank[c.update] ?? 9)}" title="${escapeHtml(c.update_detail || "")}">
+        <span class="pill ${escapeHtml(c.update)}">${escapeHtml(updateLabel[c.update] || c.update)}</span>${targetHTML(c)}</td>
+      <td data-sort="${escapeHtml(c.state)}" title="${escapeHtml(c.status || "")}">${escapeHtml(c.state || "—")}</td>
+      <td data-sort="${escapeHtml(c.checked_at || "")}" title="${escapeHtml(c.checked_at || "")}">${c.checked_at ? fmtAgo(c.checked_at) : "—"}</td>
+    </tr>`;
+  }).join("");
+  const dt = initDataTable(body.closest("table"), { storageKey: "containers" });
+  if (dt) dt.refresh();
+}
+</script>
+</body>
+</html>

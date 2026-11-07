@@ -55,7 +55,7 @@ func (s *Server) devicesForMatching(ctx context.Context) ([]groups.Device, map[s
 		proto.SensorInstalledApps, proto.SensorServices, proto.SensorProcesses, proto.SensorPatches,
 		proto.SensorDisks, proto.SensorNetwork, proto.SensorUsers, proto.SensorHardware,
 		proto.SensorPrivileges, proto.SensorNeighbors, proto.SensorCertificates,
-		proto.SensorPerformance, proto.SensorLocalAdmins, proto.SensorSecurityPosture,
+		proto.SensorPerformance, proto.SensorLocalAdmins, proto.SensorSecurityPosture, proto.SensorContainers,
 	} {
 		rows, err := s.store.ListSensorDataForSensor(ctx, string(kind))
 		if err != nil {

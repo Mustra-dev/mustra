@@ -517,6 +517,9 @@ const NAV_TREE = [
   { label: "Discover", href: "/discover", icon: "discover", group: "modules",
     desc: "Everything on the network, and which of it mustra doesn't manage yet." },
 
+  { label: "Containers", href: "/containers", icon: "box", group: "modules",
+    desc: "Docker and Podman containers across the fleet, and which images have an update." },
+
   { label: "Backup Status", href: "/backup-status", icon: "database", group: "modules",
     desc: "Every virtual machine's last backup from Proxmox, which are overdue, and which no job covers." },
 
@@ -3910,7 +3913,7 @@ function subnavIconFor(label) {
 // Module colours for the Home tiles: each module its own, like apps on a
 // home screen.
 const MODULE_HUES = {
-  "/access": "#dcdcaa", "/settings": "#a0a7b4", "/backup": "#4ec9b0", "/backup-status": "#73c991", "/threats": "#f14c4c", "/certificates": "#d7ba7d", "/agents": "#3794ff",
+  "/access": "#dcdcaa", "/settings": "#a0a7b4", "/backup": "#4ec9b0", "/backup-status": "#73c991", "/containers": "#4fc1ff", "/threats": "#f14c4c", "/certificates": "#d7ba7d", "/agents": "#3794ff",
   "/compliance": "#73c991", "/connect": "#4ec9b0", "/dashboards": "#b180d7", "/deploy": "#e5813b", "/shell": "#89d185",
   "/discover": "#4ec9b0", "/enforce": "#f14c4c", "/engage": "#c586c0", "/guide": "#cca700", "/impact": "#f48771",
   "/integrity": "#73c991", "/interact": "#75beff", "/eun": "#cca700", "/patches": "#4daafc", "/performance": "#f472b6",

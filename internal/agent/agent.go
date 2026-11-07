@@ -43,6 +43,9 @@ type Config struct {
 	// runtime via a mustra.cmd.<id> "set_sensor_interval" command — see
 	// internal/agent/sensor_loop.go.
 	SensorInterval time.Duration
+	// NoContainerUpdateChecks keeps this agent from contacting container
+	// registries. It still reports which containers run.
+	NoContainerUpdateChecks bool
 	// SelfServiceAddr is where the local Self Service window listens. It is
 	// a loopback address on purpose — the window is for the person sitting
 	// at this machine, and it holds no authorization of its own (the server
@@ -70,6 +73,7 @@ var ErrRestart = errors.New("agent restart requested")
 
 // Agent is one running instance of the mustra endpoint agent.
 type Agent struct {
+	containers *containerCollector
 	// noRemoteCode is inventory-and-patching mode; see noremotecode.go. Read
 	// once at start, from a file only an administrator on the endpoint can
 	// change.
@@ -170,7 +174,7 @@ func New(cfg Config) *Agent {
 	if cfg.SensorInterval <= 0 {
 		cfg.SensorInterval = 15 * time.Minute
 	}
-	a := &Agent{cfg: cfg, logger: cfg.Logger, noRemoteCode: detectNoRemoteCode()}
+	a := &Agent{cfg: cfg, logger: cfg.Logger, noRemoteCode: detectNoRemoteCode(), containers: newContainerCollector(!cfg.NoContainerUpdateChecks, cfg.Logger)}
 	if a.noRemoteCode {
 		a.logger.Info("inventory-and-patching mode: this endpoint refuses code from the server")
 		noRemoteCodeActive.Store(true)
@@ -362,6 +366,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		proto.SensorPerformance:     make(chan time.Duration),
 		proto.SensorIntegrity:       make(chan time.Duration),
 		proto.SensorLocalAdmins:     make(chan time.Duration),
+		proto.SensorContainers:      make(chan time.Duration),
 		proto.SensorDirectory:       make(chan time.Duration),
 		proto.SensorBackups:         make(chan time.Duration),
 		proto.SensorSecurityPosture: make(chan time.Duration),
@@ -445,6 +450,11 @@ func (a *Agent) Run(ctx context.Context) error {
 	goRun(func() {
 		a.runSensorLoop(ctx, proto.SensorCertificates, a.cfg.SensorInterval, intervalChans[proto.SensorCertificates], func(ctx context.Context) (any, error) {
 			return collectCertificates(ctx)
+		})
+	})
+	goRun(func() {
+		a.runSensorLoop(ctx, proto.SensorContainers, a.cfg.SensorInterval, intervalChans[proto.SensorContainers], func(ctx context.Context) (any, error) {
+			return a.containers.collect(ctx)
 		})
 	})
 	goRun(func() {

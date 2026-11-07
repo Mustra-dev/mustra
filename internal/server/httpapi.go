@@ -473,6 +473,8 @@ func (s *Server) routes() http.Handler {
 	protected.HandleFunc("GET /api/openapi.json", s.handleOpenAPI)
 	protected.HandleFunc("GET /api/openapi.yaml", s.handleOpenAPIYAML)
 	protected.Handle("GET /api-docs", staticPageHandler("static/api-docs.html"))
+	protected.HandleFunc("GET /api/containers", s.handleContainers)
+	protected.Handle("GET /containers", staticPageHandler("static/containers.html"))
 	protected.HandleFunc("GET /api/backup-status", s.handleBackups)
 	protected.HandleFunc("GET /api/entra/devices", s.handleEntraDevices)
 	protected.Handle("GET /api/admin/entra", perm(auth.PermSettingsManage, hf(s.handleEntraConfig)))

@@ -1,0 +1,22 @@
+{
+  "notes": "Standalone example: what Docker runs on this host, as text, using the docker command. The built-in sensor reads the engine's API instead, so it needs no CLI, and also asks each image's registry whether an update exists.",
+  "commands": {
+    "linux": "# Standalone example: this host's containers, as text.\ncommand -v docker >/dev/null || { echo 'docker is not installed'; exit 0; }\ndocker ps --all --format '{{.Names}} {{.Image}} {{.State}}'\n",
+    "darwin": "# Standalone example: this host's containers, as text.\ncommand -v docker >/dev/null || { echo 'docker is not installed'; exit 0; }\ndocker ps --all --format '{{.Names}} {{.Image}} {{.State}}'\n",
+    "windows": "# Standalone example: this host's containers, as text. The built-in sensor reports nothing on Windows.\nif (-not (Get-Command docker -ErrorAction SilentlyContinue)) { 'docker is not installed'; exit 0 }\ndocker ps --all --format '{{.Names}} {{.Image}} {{.State}}'\n"
+  },
+  "interval_seconds": 900,
+  "timeout_seconds": 30,
+  "enabled": false,
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    }
+  ],
+  "platforms": {
+    "linux": { "language": "shell", "output": { "format": "text" } },
+    "darwin": { "language": "shell", "output": { "format": "text" } },
+    "windows": { "language": "powershell", "output": { "format": "text" } }
+  }
+}

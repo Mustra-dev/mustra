@@ -1492,6 +1492,38 @@ except managed endpoints and randomized (private) MACs, which phones rotate.
 Container- and VM-internal networks behind a host (Docker, CNI, Podman,
 libvirt, LXC, Home Assistant's `hassio`) are not the network and are skipped.
 
+## Containers — what's behind, and nothing changed for you
+
+The Containers sensor reads the host's Docker or Podman API over its local
+socket, with GET requests only. It takes each container's name, image, state
+and Compose labels. It never reads environment variables, commands or mounts,
+because that is where containers keep their secrets.
+
+For each image in use, the endpoint then asks the image's registry two
+questions, anonymously, about every six hours:
+
+- **Has this tag moved?** The running image's digest against the tag's current
+  one. For `latest` that is the whole question.
+- **Is there a newer version?** Asked only of tags that read as versions, and
+  only against tags of the same shape: `16.4-alpine` compares with
+  `16.5-alpine`, not `17` or `16.5`. A newer major version is shown separately
+  from the newest in the current one, since a major upgrade is often a
+  migration.
+
+Each container ends up **Update available**, **Up to date**, **Could not check**
+(the registry refused or did not answer, or the image is private) or **Not
+checked** (built locally, pinned by digest, or checks turned off). Only a check
+that succeeded says up to date.
+
+The endpoint asks rather than the server because it can already reach the
+registries its images came from. It is the one built-in sensor that contacts a
+third party; `--no-container-update-checks` stops that and keeps the inventory.
+
+mustra does not pull images or recreate containers here. Unattended image
+updates are how a working service breaks overnight, so this answers what is
+outstanding and leaves the decision with whoever reads it. To act on the list,
+read `GET /api/containers?update=update_available`.
+
 ## Backup status
 
 On a Proxmox VE node the Backups sensor reads, with `pvesh` as root, each

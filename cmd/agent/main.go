@@ -33,6 +33,7 @@ func main() {
 		hbEvery         = flag.Duration("heartbeat-interval", 10*time.Second, "heartbeat interval")
 		factsEvry       = flag.Duration("facts-interval", 60*time.Second, "facts publish interval")
 		sensorEvry      = flag.Duration("sensor-interval", 15*time.Minute, "processes/services/installed-apps sensor publish interval (default: 15m)")
+		noImageChecks   = flag.Bool("no-container-update-checks", envOr("MUSTRA_NO_CONTAINER_UPDATE_CHECKS", "") != "", "report containers without asking their registries whether images have updates")
 		ssAddr          = flag.String("self-service-addr", envOr("MUSTRA_SELF_SERVICE_ADDR", "127.0.0.1:8137"), "loopback address for the Self Service window; empty to disable")
 		natsCA          = flag.String("nats-ca", envOr("MUSTRA_NATS_CA", ""), "CA certificate that signed the NATS server's certificate")
 		natsUser        = flag.String("nats-user", envOr("MUSTRA_NATS_USER", ""), "legacy shared NATS username (enrolled agents use their own credential)")
@@ -122,19 +123,20 @@ func main() {
 	slog.SetDefault(logger)
 
 	cfg := agent.Config{
-		NATSURL:           *natsURL,
-		Site:              *site,
-		DataDir:           *dataDir + "/mustra-agent.db",
-		AgentVersion:      version,
-		HeartbeatInterval: *hbEvery,
-		FactsInterval:     *factsEvry,
-		SensorInterval:    *sensorEvry,
-		SelfServiceAddr:   *ssAddr,
-		NATSCreds:         bnats.Creds{CAFile: *natsCA, User: *natsUser, Password: *natsPass},
-		EnrollToken:       *enrollToken,
-		UpdatePubKey:      *updatePubKey,
-		Logger:            logger,
-		LogLevel:          levelVar,
+		NATSURL:                 *natsURL,
+		Site:                    *site,
+		DataDir:                 *dataDir + "/mustra-agent.db",
+		AgentVersion:            version,
+		HeartbeatInterval:       *hbEvery,
+		FactsInterval:           *factsEvry,
+		SensorInterval:          *sensorEvry,
+		NoContainerUpdateChecks: *noImageChecks,
+		SelfServiceAddr:         *ssAddr,
+		NATSCreds:               bnats.Creds{CAFile: *natsCA, User: *natsUser, Password: *natsPass},
+		EnrollToken:             *enrollToken,
+		UpdatePubKey:            *updatePubKey,
+		Logger:                  logger,
+		LogLevel:                levelVar,
 	}
 
 	run := func(ctx context.Context) error {

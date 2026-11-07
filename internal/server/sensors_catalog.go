@@ -225,6 +225,22 @@ func sensorCatalog() []sensorDoc {
 			Caveat:   "Pool-based backup jobs are not expanded, so their guests show as not covered. Backups made outside Proxmox VE (inside the guest, or another tool) are not seen.",
 		},
 		{
+			Kind:    string(proto.SensorContainers),
+			Name:    "Containers",
+			Summary: "What the host's Docker or Podman engine runs, and which images have an update.",
+			Answers: "Which containers are behind, on which hosts, and what would they move to. It reports and never pulls or recreates anything.",
+			Returns: "id, name, image, image_digest, state, status, compose_project, compose_service, compose_file, update, update_detail, latest_digest, newer_tag, newer_tag_in_major, checked_at",
+			Mechanism: []sensorMechanism{
+				{OS: "linux", How: "GET requests to the engine's API on /var/run/docker.sock, then /run/podman/podman.sock: the container list and each image's digests. For each image in use, a HEAD request to its registry for the tag's current digest and, for a version tag such as 16.4, the repository's tag list. Environment variables, commands and mounts are never read."},
+				{OS: "darwin", How: "The same, where /var/run/docker.sock exists. Docker Desktop only creates it with its default-socket setting on; a per-user socket is not read."},
+				{OS: "windows", How: "Not collected (reports nothing): Docker on Windows has no socket at these paths."},
+			},
+			Interval: "the agent's sensor interval (15 minutes by default); each registry is asked about an image every 6 to 7 hours",
+			Timeout:  "2.5 minutes; images the time did not reach are checked on the next run",
+			Cost:     "A few local API calls, plus one or two HTTPS requests per image when its check is due. This is the only built-in sensor that contacts a third party: the registries the host's images came from. Run the agent with --no-container-update-checks to stop that.",
+			Caveat:   "Registry checks are anonymous, so private images report check_failed rather than up to date. Plain-http registries and registries with a private certificate authority fail the same way. Rootless engines are not read. A locally built image named like a public one is compared with the public one. Version tags are compared only with tags of the same shape.",
+		},
+		{
 			Kind:    string(proto.SensorLocalAdmins),
 			Name:    "Local administrators",
 			Summary: "Every principal that can administer the endpoint.",
@@ -385,6 +401,8 @@ func sensorSourceFiles(kind string) []string {
 		return []string{"directory.go"}
 	case proto.SensorBackups:
 		return []string{"backups.go"}
+	case proto.SensorContainers:
+		return []string{"containers.go", "container_updates.go"}
 	case proto.SensorSecurityPosture:
 		return []string{"posture.go", "posture_windows.go", "posture_linux.go", "posture_darwin.go"}
 	}
