@@ -1522,7 +1522,12 @@ third party; `--no-container-update-checks` stops that and keeps the inventory.
 mustra does not pull images or recreate containers here. Unattended image
 updates are how a working service breaks overnight, so this answers what is
 outstanding and leaves the decision with whoever reads it. To act on the list,
-read `GET /api/containers?update=update_available`.
+read `GET /api/containers?update=update_available`, or point an AI agent at the
+read-only MCP endpoint, `/api/mcp`. It serves one tool, `list_containers`, and
+authenticates like the rest of the API. A token with only **See the fleet** can
+read and nothing more, and the endpoint has no tool that changes anything, so
+the agent acts with its own access. What the tool returns is reported by
+endpoints: an agent should treat it as data, not instructions.
 
 ## Backup status
 

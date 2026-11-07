@@ -180,6 +180,9 @@ var routeDocs = map[string]routeDoc{
 	// containers
 	"GET /api/containers": {Query: []queryParam{{Name: "agent_id", Desc: "only this endpoint"}, {Name: "update", Enum: []string{proto.ContainerUpdateAvailable, proto.ContainerUpToDate, proto.ContainerNotChecked, proto.ContainerCheckFailed}, Desc: "only containers with this update status"}}, Resp: containersResponse{}, Errors: []int{400, 500}},
 
+	"GET /api/mcp":  {Errors: []int{405}},
+	"POST /api/mcp": {Body: mcpRequest{}, Resp: mcpResponse{}, Also: []int{202}, Errors: []int{400, 413}},
+
 	// certificates
 	"GET /api/certificates":                                {Resp: certificatesResponse{}, Errors: []int{500}},
 	"GET /api/certificates/alerts":                         {Resp: getExpiryAlertsResponse{}},

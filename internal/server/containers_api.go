@@ -2,9 +2,11 @@ package server
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/mustra-dev/mustra/internal/proto"
@@ -40,31 +42,50 @@ var containerUpdateRank = map[string]int{
 }
 
 func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
-	update := r.URL.Query().Get("update")
-	if _, known := containerUpdateRank[update]; update != "" && !known {
+	filter := containerFilter{AgentID: r.URL.Query().Get("agent_id"), Update: r.URL.Query().Get("update")}
+	if !filter.valid() {
 		http.Error(w, "unknown update status", http.StatusBadRequest)
 		return
 	}
-	rows, err := s.store.ListSensorDataForSensor(r.Context(), string(proto.SensorContainers))
+	resp, err := s.listContainers(r.Context(), filter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	agents, err := s.store.ListAgents(r.Context(), s.staleAfter())
+	writeJSONResponse(w, resp)
+}
+
+// containerFilter narrows the fleet's containers; empty fields match all.
+type containerFilter struct {
+	AgentID  string
+	Hostname string // any case
+	Update   string
+}
+
+func (f containerFilter) valid() bool {
+	_, known := containerUpdateRank[f.Update]
+	return f.Update == "" || known
+}
+
+func (s *Server) listContainers(ctx context.Context, filter containerFilter) (containersResponse, error) {
+	resp := containersResponse{Containers: []containerRow{}, Counts: map[string]int{}}
+	rows, err := s.store.ListSensorDataForSensor(ctx, string(proto.SensorContainers))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return resp, err
+	}
+	agents, err := s.store.ListAgents(ctx, s.staleAfter())
+	if err != nil {
+		return resp, err
 	}
 	hostnames, online := map[string]string{}, map[string]bool{}
 	for _, a := range agents {
 		hostnames[a.AgentID], online[a.AgentID] = a.Hostname, a.Online
 	}
-	only := r.URL.Query().Get("agent_id")
-	resp := containersResponse{Containers: []containerRow{}, Counts: map[string]int{}}
 	hosts := map[string]bool{}
 	for _, row := range rows {
 		hostname, enrolled := hostnames[row.AgentID]
-		if !enrolled || (only != "" && row.AgentID != only) {
+		if !enrolled || (filter.AgentID != "" && row.AgentID != filter.AgentID) ||
+			(filter.Hostname != "" && !strings.EqualFold(hostname, filter.Hostname)) {
 			continue
 		}
 		var list []proto.ContainerInfo
@@ -77,7 +98,7 @@ func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 			if _, known := containerUpdateRank[c.Update]; !known {
 				c.Update = proto.ContainerNotChecked
 			}
-			if update != "" && c.Update != update {
+			if filter.Update != "" && c.Update != filter.Update {
 				continue
 			}
 			resp.Counts[c.Update]++
@@ -96,5 +117,5 @@ func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 			cmp.Compare(a.Name, b.Name),
 		)
 	})
-	writeJSONResponse(w, resp)
+	return resp, nil
 }

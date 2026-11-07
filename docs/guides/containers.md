@@ -27,9 +27,25 @@ See every Docker and Podman container across your endpoints, and which images ha
 
 ## Use the data elsewhere
 
-- **API:** `GET /api/containers?update=update_available` returns the same list, for a script or an agent to act on.
+- **API:** `GET /api/containers?update=update_available` returns the same list, for a script to act on.
+- **AI agents:** see below.
 - **Computer groups and Interact:** use the fields such as `containers.update` and `containers.image`.
 
 ## Stop registry checks
 
 Start the agent with `--no-container-update-checks`, or set `MUSTRA_NO_CONTAINER_UPDATE_CHECKS=1`, to keep the inventory without contacting registries. Its containers then show **Not checked**.
+
+## Connect an AI agent
+
+mustra has a read-only MCP endpoint, so an AI agent can ask what has updates outstanding and act with its own tools. mustra itself changes nothing.
+
+1. Create an API token with only **See the fleet** (`fleet.read`). See [Automate with the API](api.md).
+2. Add the endpoint to your agent as a remote MCP server, using Streamable HTTP. For example, in Claude Code:
+
+   ```
+   claude mcp add --transport http mustra https://mustra.example.com/api/mcp --header "Authorization: Bearer $MUSTRA_TOKEN"
+   ```
+
+3. Ask it something like "which containers have updates outstanding?"
+
+It has one tool, `list_containers`, which filters by update status, hostname or endpoint.

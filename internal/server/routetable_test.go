@@ -35,6 +35,7 @@ var openMutatingRoutes = map[string]string{
 	"POST /api/query":         "fixed read-only query kinds",
 	"POST /api/interact/ask":  "read-only question; answered from inventory or the fixed query kinds",
 	"POST /api/guide/refresh": "recomputes the tray; hides nothing",
+	"POST /api/mcp":           "JSON-RPC, so a POST; every tool it offers only reads",
 }
 
 // TestMutatingRoutesRequirePermission fails when a state-changing route is

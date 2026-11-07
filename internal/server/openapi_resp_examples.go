@@ -1709,6 +1709,15 @@ var respExamples = map[string]string{
 		"hosts": 1
 	}`,
 
+	"POST /api/mcp": `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"result": {
+			"content": [{"type": "text", "text": "{\"containers\":[],\"counts\":{},\"hosts\":0,\"total\":0,\"truncated\":false}"}],
+			"structuredContent": {"containers": [], "counts": {}, "hosts": 0, "total": 0, "truncated": false}
+		}
+	}`,
+
 	// backup-status
 	// web-01 is a VM on the Proxmox node pve-01, matched to its endpoint
 	// by MAC; the container no backup job covers is listed first. The
