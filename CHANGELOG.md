@@ -19,6 +19,9 @@ working: create a new enrollment token.
   an agent upgrade. Upgraded agents on hosts with containers contact the registries
   their images came from, anonymously, about every six hours; start the agent with
   `--no-container-update-checks` to stop that.
+- **Ask mustra from an AI agent.** The server now has a read-only MCP endpoint at
+  `/api/mcp`, so an agent can ask which containers have updates outstanding and act
+  with its own tools. Sign in with an API token that has **See the fleet**.
 - **Know when a hunt or sensitive-data scan finishes.** Integrations can opt in to
   completed IOC hunts and sensitive-data scans, alongside the other actions. A hunt
   you start always announces; the one that runs every 15 minutes does only when it

@@ -1240,6 +1240,12 @@ var typeDocs = map[string]typeDoc{
 	"github.com/mustra-dev/mustra/internal/server.maintenanceWindowView": {
 		Doc: "maintenanceWindowView is an entry of what GET /api/maintenance-windows answers.",
 	},
+	"github.com/mustra-dev/mustra/internal/server.mcpRequest": {
+		Doc: "mcpRequest is a JSON-RPC 2.0 request or notification; a notification has no id. The methods are initialize, ping, tools/list and tools/call.",
+	},
+	"github.com/mustra-dev/mustra/internal/server.mcpResponse": {
+		Doc: "mcpResponse is a JSON-RPC 2.0 response: a result or an error.",
+	},
 	"github.com/mustra-dev/mustra/internal/server.meResponse": {
 		Fields: map[string]string{
 			"Email":                  "Email and Persona back the profile menu. Persona is the name for the named permission set someone is acting under; here it is the user's roles, or \"Administrator\" for an admin, because knowing what you are currently able to do is worth being able to see at a glance in a console that can act on a whole fleet.",

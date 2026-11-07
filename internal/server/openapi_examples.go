@@ -329,6 +329,7 @@ const (
 // sets, and puts a <placeholder> where a secret goes.
 var bodyExamples = map[string]string{
 	// action-groups
+	"POST /api/mcp":           `{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_containers", "arguments": {"update": "update_available", "hostname": "docker-01"}}}`,
 	"POST /api/action-groups": `{"module": "deploy", "group_ids": ["cgrp-1c8e4a2f6b9d43e7a5c0f2b8d6e4a1c3"], "enabled": true}`,
 
 	// agents

@@ -474,6 +474,9 @@ func (s *Server) routes() http.Handler {
 	protected.HandleFunc("GET /api/openapi.yaml", s.handleOpenAPIYAML)
 	protected.Handle("GET /api-docs", staticPageHandler("static/api-docs.html"))
 	protected.HandleFunc("GET /api/containers", s.handleContainers)
+	// A POST only because MCP is JSON-RPC: every tool it offers reads.
+	protected.HandleFunc("POST /api/mcp", s.handleMCP)
+	protected.HandleFunc("GET /api/mcp", s.handleMCPNoStream)
 	protected.Handle("GET /containers", staticPageHandler("static/containers.html"))
 	protected.HandleFunc("GET /api/backup-status", s.handleBackups)
 	protected.HandleFunc("GET /api/entra/devices", s.handleEntraDevices)
