@@ -1680,6 +1680,35 @@ var respExamples = map[string]string{
 		"private_ca_ready": true
 	}`,
 
+	// containers
+	"GET /api/containers": `{
+		"containers": [
+			{
+				"id": "4f1d2c8a9b3e",
+				"name": "db",
+				"image": "postgres:16.4",
+				"image_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				"state": "running",
+				"status": "Up 3 days",
+				"compose_project": "billing",
+				"compose_service": "db",
+				"compose_file": "/srv/billing/compose.yml",
+				"update": "update_available",
+				"update_detail": "A newer version tag exists.",
+				"latest_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				"newer_tag": "17.2",
+				"newer_tag_in_major": "16.6",
+				"checked_at": "2026-11-05T22:10:00Z",
+				"agent_id": "agent-7f3a",
+				"hostname": "docker-01",
+				"online": true,
+				"collected_at": "2026-11-06T08:15:00Z"
+			}
+		],
+		"counts": {"update_available": 1},
+		"hosts": 1
+	}`,
+
 	// backup-status
 	// web-01 is a VM on the Proxmox node pve-01, matched to its endpoint
 	// by MAC; the container no backup job covers is listed first. The

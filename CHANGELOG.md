@@ -10,6 +10,15 @@ Removes `init.sh --insecure-http`. Install commands copied before the upgrade st
 working: create a new enrollment token.
 
 ### Added
+- **See which containers have image updates.** The new **Containers** page lists the
+  Docker and Podman containers on your Linux endpoints (and Macs with Docker's default
+  socket) with which images have an update: the tag has moved, or a newer version tag
+  exists, such as `16.5` or `17.1` for `postgres:16.4`. It reports only; nothing is
+  pulled or restarted. Images that cannot be checked say why and never count as up to
+  date. Also available from `GET /api/containers`, Interact and computer groups. Needs
+  an agent upgrade. Upgraded agents on hosts with containers contact the registries
+  their images came from, anonymously, about every six hours; start the agent with
+  `--no-container-update-checks` to stop that.
 - **Know when a hunt or sensitive-data scan finishes.** Integrations can opt in to
   completed IOC hunts and sensitive-data scans, alongside the other actions. A hunt
   you start always announces; the one that runs every 15 minutes does only when it

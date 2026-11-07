@@ -89,6 +89,7 @@ var knownSensors = map[string]bool{
 	"privileges":       true,
 	"neighbors":        true,
 	"certificates":     true,
+	"containers":       true,
 	"performance":      true,
 	"local_admins":     true,
 	"security_posture": true,
@@ -205,6 +206,13 @@ func Fields() []FieldSpec {
 		{Field: "certificates.self_signed", Label: "Self-signed certificate", Kind: "bool", Ops: boolOps},
 		{Field: "certificates.path", Label: "Certificate path", Kind: "string", Ops: stringOps},
 		{Field: "certificates.count", Label: "Certificate count", Kind: "number", Ops: numberOps},
+
+		{Field: "containers.name", Label: "Container name", Kind: "string", Ops: stringOps},
+		{Field: "containers.image", Label: "Container image", Kind: "string", Ops: stringOps, Hint: "as configured, e.g. postgres:16.4"},
+		{Field: "containers.state", Label: "Container state", Kind: "string", Ops: stringOps, Hint: "running, exited, …"},
+		{Field: "containers.update", Label: "Container update status", Kind: "string", Ops: stringOps, Hint: "update_available, up_to_date, not_checked, check_failed"},
+		{Field: "containers.compose_project", Label: "Compose project", Kind: "string", Ops: stringOps},
+		{Field: "containers.count", Label: "Container count", Kind: "number", Ops: numberOps},
 
 		{Field: "directory.kind", Label: "Directory join", Kind: "string", Ops: stringOps, Hint: "ad, entra, hybrid, workgroup"},
 		{Field: "directory.domain", Label: "AD domain", Kind: "string", Ops: stringOps},

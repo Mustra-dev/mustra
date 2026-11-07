@@ -294,7 +294,48 @@ const (
 	// updates (PatchStatus). A failed check publishes no patches snapshot,
 	// so without it "nothing pending" and "could not look" read the same.
 	SensorPatchStatus SensorKind = "patch_status"
+	// SensorContainers is what the host's container engine is running, and
+	// whether each container's image has an update (ContainerInfo). Servers
+	// before it refuse the unknown kind and drop it.
+	SensorContainers SensorKind = "containers"
 )
+
+// What a container's update check concluded. Only ContainerUpToDate says
+// nothing newer exists: a check that could not be made is never reported
+// as up to date.
+const (
+	ContainerUpToDate        = "up_to_date"
+	ContainerUpdateAvailable = "update_available"
+	ContainerNotChecked      = "not_checked"  // nothing to compare: built locally, pinned by digest, checks off
+	ContainerCheckFailed     = "check_failed" // the registry did not answer the question
+)
+
+// ContainerInfo is one container on the endpoint and what its image's
+// registry says about it. It deliberately has no environment, command or
+// mounts: those are where containers keep their secrets.
+type ContainerInfo struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Image          string `json:"image"`                  // as configured: postgres:16.4
+	ImageDigest    string `json:"image_digest,omitempty"` // the running image's digest at the registry
+	State          string `json:"state"`                  // running, exited, ...
+	Status         string `json:"status,omitempty"`       // the engine's words: "Up 3 days"
+	ComposeProject string `json:"compose_project,omitempty"`
+	ComposeService string `json:"compose_service,omitempty"`
+	ComposeFile    string `json:"compose_file,omitempty"`
+	// Update is one of the Container* values above.
+	Update       string `json:"update"`
+	UpdateDetail string `json:"update_detail,omitempty"`
+	// LatestDigest is what the tag points to now, when the registry said.
+	LatestDigest string `json:"latest_digest,omitempty"`
+	// NewerTag is the highest version tag of the same shape as Image's
+	// (16.4-alpine to 17.1-alpine); NewerTagInMajor is the highest with the
+	// same first number, when that is a different tag. A major upgrade is
+	// often a migration, so the two are worth telling apart.
+	NewerTag        string `json:"newer_tag,omitempty"`
+	NewerTagInMajor string `json:"newer_tag_in_major,omitempty"`
+	CheckedAt       string `json:"checked_at,omitempty"` // RFC 3339, when the registry last answered
+}
 
 // PatchStatus is published after every check for pending updates. Servers
 // before it refuse the unknown kind and drop it, so the patches snapshot

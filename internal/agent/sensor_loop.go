@@ -41,6 +41,9 @@ func sensorTimeout(kind proto.SensorKind) time.Duration {
 	if kind == proto.SensorBackups {
 		return 3 * time.Minute // a remote PBS storage can take a while to list
 	}
+	if kind == proto.SensorContainers {
+		return containerCheckBudget + 30*time.Second // the registries, then the engine
+	}
 	return 30 * time.Second
 }
 
@@ -103,6 +106,7 @@ func (a *Agent) runSensorLoop(ctx context.Context, kind proto.SensorKind, initia
 var sensorPhases = []proto.SensorKind{
 	proto.SensorInstalledApps, proto.SensorPatches, proto.SensorSecurityPosture, proto.SensorDirectory,
 	proto.SensorCertificates, proto.SensorLocalAdmins, proto.SensorServices, proto.SensorIntegrity,
+	proto.SensorContainers,
 }
 
 const sensorPhaseStep = 15 * time.Second

@@ -107,6 +107,8 @@ func normalizeSnapshotData(kind proto.SensorKind, raw json.RawMessage) (json.Raw
 		return normalizeTyped[[]proto.DirectoryInfo](raw)
 	case proto.SensorBackups:
 		return normalizeTyped[[]proto.BackupGuest](raw)
+	case proto.SensorContainers:
+		return normalizeTyped[[]proto.ContainerInfo](raw)
 	case proto.SensorPatchStatus:
 		return normalizeTyped[proto.PatchStatus](raw)
 	case proto.SensorSecurityPosture:

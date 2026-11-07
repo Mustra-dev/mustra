@@ -126,6 +126,19 @@ var typeDocs = map[string]typeDoc{
 			"State": "pass | fail | unknown",
 		},
 	},
+	"github.com/mustra-dev/mustra/internal/proto.ContainerInfo": {
+		Fields: map[string]string{
+			"CheckedAt":       "RFC 3339, when the registry last answered",
+			"Image":           "as configured: postgres:16.4",
+			"ImageDigest":     "the running image's digest at the registry",
+			"LatestDigest":    "LatestDigest is what the tag points to now, when the registry said.",
+			"NewerTag":        "NewerTag is the highest version tag of the same shape as Image's (16.4-alpine to 17.1-alpine); NewerTagInMajor is the highest with the same first number, when that is a different tag. A major upgrade is often a migration, so the two are worth telling apart.",
+			"NewerTagInMajor": "NewerTag is the highest version tag of the same shape as Image's (16.4-alpine to 17.1-alpine); NewerTagInMajor is the highest with the same first number, when that is a different tag. A major upgrade is often a migration, so the two are worth telling apart.",
+			"State":           "running, exited, ...",
+			"Status":          "the engine's words: \"Up 3 days\"",
+			"Update":          "Update is one of the Container* values above.",
+		},
+	},
 	"github.com/mustra-dev/mustra/internal/proto.CustomSensorDef": {
 		Doc: "CustomSensorDef is one custom sensor as it applies to ONE agent: the server has already resolved the per-OS command down to the single command this endpoint should run, so the agent never has to know the others exist.",
 		Fields: map[string]string{
@@ -479,6 +492,12 @@ var typeDocs = map[string]typeDoc{
 	},
 	"github.com/mustra-dev/mustra/internal/server.confidenceResponse": {
 		Doc: "confidenceResponse is what GET /api/confidence answers.",
+	},
+	"github.com/mustra-dev/mustra/internal/server.containerRow": {
+		Doc: "containerRow is a container and the endpoint it runs on.",
+	},
+	"github.com/mustra-dev/mustra/internal/server.containersResponse": {
+		Doc: "containersResponse is what GET /api/containers answers. Counts and Hosts cover the rows answered, so a filtered request counts only its filter.",
 	},
 	"github.com/mustra-dev/mustra/internal/server.controlCheck": {
 		Doc: "controlCheck is one benchmark check that provides evidence for a control, with its results across the fleet.",

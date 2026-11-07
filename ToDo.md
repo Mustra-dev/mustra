@@ -9,6 +9,14 @@ Open work, kept here so it can be picked up. Add to it when deferring something,
 - [ ] Review the open CodeQL alerts in code scanning, fix what is real and dismiss the rest with a reason.
 - [ ] Run inventory-and-patching mode on a real Home Assistant host. The add-on has been tested with a stand-in Supervisor only.
 
+## Containers
+
+- [ ] Read-only MCP server over the container update data, so an external agent can ask what is outstanding (#20).
+- [ ] Check private registries using registry logins the operator provides; checks are anonymous today.
+- [ ] Turn registry checks off from a client profile; today it is an agent flag per host.
+- [ ] Read Docker on Windows through its named pipe, and rootless engines' per-user sockets.
+- [ ] Show an endpoint's containers on its endpoint page.
+
 ## Custom sensors
 
 - [ ] Managed, version-pinned third-party Python dependencies.
