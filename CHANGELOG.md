@@ -6,6 +6,10 @@ rather than a page that can drift from it.
 
 ## Unreleased
 
+## 1.3.0 — 2026-11-06
+
+Server 1.3.0, agent 1.3.0. Update agents to report containers: upgraded agents on
+hosts with containers contact the registries their images came from (see below).
 Removes `init.sh --insecure-http`. Install commands copied before the upgrade stop
 working: create a new enrollment token.
 
